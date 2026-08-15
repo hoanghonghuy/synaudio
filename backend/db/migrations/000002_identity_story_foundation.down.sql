@@ -1,0 +1,18 @@
+DROP TABLE IF EXISTS story_workflow_settings;
+DROP TABLE IF EXISTS story_generation_policies;
+ALTER TABLE stories DROP CONSTRAINT IF EXISTS fk_stories_cover_asset;
+DROP TABLE IF EXISTS story_assets;
+DROP TABLE IF EXISTS story_genres;
+DROP TABLE IF EXISTS stories;
+DROP TABLE IF EXISTS genres;
+DROP TABLE IF EXISTS account_deletion_requests;
+DROP TABLE IF EXISTS password_reset_tokens;
+DROP TABLE IF EXISTS email_verification_tokens;
+DROP TABLE IF EXISTS user_mfa_recovery_codes;
+DROP TABLE IF EXISTS user_mfa_methods;
+DROP TABLE IF EXISTS user_sessions;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS role_permissions;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;

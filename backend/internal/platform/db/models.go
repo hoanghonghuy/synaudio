@@ -8,7 +8,176 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccountDeletionRequest struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	RequestedAt pgtype.Timestamptz `json:"requested_at"`
+	PurgeAfter  pgtype.Timestamptz `json:"purge_after"`
+	CancelledAt pgtype.Timestamptz `json:"cancelled_at"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
+}
+
+type EmailVerificationToken struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Genre struct {
+	ID   pgtype.UUID `json:"id"`
+	Slug string      `json:"slug"`
+	Name string      `json:"name"`
+}
+
+type PasswordResetToken struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Permission struct {
+	ID   pgtype.UUID `json:"id"`
+	Code string      `json:"code"`
+}
+
+type Role struct {
+	ID   pgtype.UUID `json:"id"`
+	Code string      `json:"code"`
+}
+
+type RolePermission struct {
+	RoleID       pgtype.UUID `json:"role_id"`
+	PermissionID pgtype.UUID `json:"permission_id"`
+}
+
 type SchemaBootstrap struct {
 	ID        bool               `json:"id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Story struct {
+	ID                             pgtype.UUID        `json:"id"`
+	Slug                           string             `json:"slug"`
+	Title                          string             `json:"title"`
+	Description                    pgtype.Text        `json:"description"`
+	Status                         string             `json:"status"`
+	Visibility                     string             `json:"visibility"`
+	PlanningMode                   string             `json:"planning_mode"`
+	PlanningPhase                  string             `json:"planning_phase"`
+	PublicRating                   pgtype.Text        `json:"public_rating"`
+	PublicWarnings                 []string           `json:"public_warnings"`
+	CoverAssetID                   pgtype.UUID        `json:"cover_asset_id"`
+	CurrentStoryBibleVersionID     pgtype.UUID        `json:"current_story_bible_version_id"`
+	CurrentEndingPlanVersionID     pgtype.UUID        `json:"current_ending_plan_version_id"`
+	CurrentContentProfileVersionID pgtype.UUID        `json:"current_content_profile_version_id"`
+	CurrentOfficialCanonVersionID  pgtype.UUID        `json:"current_official_canon_version_id"`
+	PublicSince                    pgtype.Timestamptz `json:"public_since"`
+	LastPublishedAt                pgtype.Timestamptz `json:"last_published_at"`
+	StatusBeforeArchive            pgtype.Text        `json:"status_before_archive"`
+	CreatedBy                      pgtype.UUID        `json:"created_by"`
+	CreatedAt                      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                      pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt                     pgtype.Timestamptz `json:"archived_at"`
+}
+
+type StoryAsset struct {
+	ID           pgtype.UUID        `json:"id"`
+	StoryID      pgtype.UUID        `json:"story_id"`
+	Type         string             `json:"type"`
+	StorageKey   string             `json:"storage_key"`
+	MimeType     pgtype.Text        `json:"mime_type"`
+	SizeBytes    pgtype.Int8        `json:"size_bytes"`
+	Checksum     pgtype.Text        `json:"checksum"`
+	RightsStatus pgtype.Text        `json:"rights_status"`
+	Status       string             `json:"status"`
+	CreatedBy    pgtype.UUID        `json:"created_by"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type StoryGenerationPolicy struct {
+	StoryID                 pgtype.UUID        `json:"story_id"`
+	MinimumAudioDurationSec int32              `json:"minimum_audio_duration_sec"`
+	TargetAudioDurationSec  int32              `json:"target_audio_duration_sec"`
+	ContentOrigin           string             `json:"content_origin"`
+	Language                string             `json:"language"`
+	NarrationLanguage       string             `json:"narration_language"`
+	PolicyVersion           int32              `json:"policy_version"`
+	CreatedBy               pgtype.UUID        `json:"created_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+}
+
+type StoryGenre struct {
+	StoryID pgtype.UUID `json:"story_id"`
+	GenreID pgtype.UUID `json:"genre_id"`
+}
+
+type StoryWorkflowSetting struct {
+	StoryID               pgtype.UUID        `json:"story_id"`
+	BatchGenerationSize   pgtype.Int4        `json:"batch_generation_size"`
+	CreativeAutonomy      pgtype.Text        `json:"creative_autonomy"`
+	PreferredTextProvider pgtype.Text        `json:"preferred_text_provider"`
+	PreferredTextModel    pgtype.Text        `json:"preferred_text_model"`
+	PreferredTtsProvider  pgtype.Text        `json:"preferred_tts_provider"`
+	PreferredVoiceID      pgtype.Text        `json:"preferred_voice_id"`
+	PauseBeforeTts        bool               `json:"pause_before_tts"`
+	AutoAiReview          bool               `json:"auto_ai_review"`
+	PlanningHorizon       pgtype.Int4        `json:"planning_horizon"`
+	FallbackPolicy        []byte             `json:"fallback_policy"`
+	UpdatedBy             pgtype.UUID        `json:"updated_by"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type User struct {
+	ID              pgtype.UUID        `json:"id"`
+	Email           string             `json:"email"`
+	PasswordHash    pgtype.Text        `json:"password_hash"`
+	DisplayName     pgtype.Text        `json:"display_name"`
+	Status          string             `json:"status"`
+	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeactivatedAt   pgtype.Timestamptz `json:"deactivated_at"`
+}
+
+type UserMfaMethod struct {
+	ID              pgtype.UUID        `json:"id"`
+	UserID          pgtype.UUID        `json:"user_id"`
+	Type            string             `json:"type"`
+	EncryptedSecret string             `json:"encrypted_secret"`
+	ConfirmedAt     pgtype.Timestamptz `json:"confirmed_at"`
+	DisabledAt      pgtype.Timestamptz `json:"disabled_at"`
+}
+
+type UserMfaRecoveryCode struct {
+	ID       pgtype.UUID        `json:"id"`
+	UserID   pgtype.UUID        `json:"user_id"`
+	CodeHash string             `json:"code_hash"`
+	UsedAt   pgtype.Timestamptz `json:"used_at"`
+}
+
+type UserRole struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	RoleID    pgtype.UUID        `json:"role_id"`
+	GrantedBy pgtype.UUID        `json:"granted_by"`
+	GrantedAt pgtype.Timestamptz `json:"granted_at"`
+}
+
+type UserSession struct {
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	RefreshTokenHash string             `json:"refresh_token_hash"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt       pgtype.Timestamptz `json:"last_used_at"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt        pgtype.Timestamptz `json:"revoked_at"`
+	MfaVerifiedAt    pgtype.Timestamptz `json:"mfa_verified_at"`
+	RecentAuthAt     pgtype.Timestamptz `json:"recent_auth_at"`
+	UserAgentSummary pgtype.Text        `json:"user_agent_summary"`
+	SafeIpMetadata   pgtype.Text        `json:"safe_ip_metadata"`
 }
