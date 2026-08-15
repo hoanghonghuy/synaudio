@@ -1,0 +1,114 @@
+package identity
+
+import (
+	"context"
+	"errors"
+	"time"
+)
+
+const (
+	StatusActive     = "ACTIVE"
+	StatusSuspended  = "SUSPENDED"
+	StatusDeactivated = "DEACTIVATED"
+)
+
+var (
+	ErrEmailTaken         = errors.New("email already taken")
+	ErrUserNotFound       = errors.New("user not found")
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrAccountSuspended   = errors.New("account suspended")
+)
+
+type User struct {
+	ID           string
+	Email        string
+	PasswordHash string
+	DisplayName  string
+	Status       string
+}
+
+type Session struct {
+	ID               string
+	UserID           string
+	RefreshToken     string
+	RefreshTokenHash string
+	ExpiresAt        time.Time
+}
+
+// Store is the persistence boundary for the auth service.
+type Store interface {
+	CreateUser(ctx context.Context, u User) (User, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
+	CreateSession(ctx context.Context, s Session) error
+}
+
+type AuthService struct {
+	store Store
+}
+
+func NewAuthService(store Store) *AuthService {
+	return &AuthService{store: store}
+}
+
+// Register creates a normal ACTIVE user with a hashed password.
+func (s *AuthService) Register(ctx context.Context, email, password string) (User, error) {
+	normalized, err := NormalizeEmailChecked(email)
+	if err != nil {
+		return User{}, err
+	}
+
+	hash, err := HashPassword(password)
+	if err != nil {
+		return User{}, err
+	}
+
+	u := User{
+		Email:        normalized,
+		PasswordHash: hash,
+		Status:       StatusActive,
+	}
+
+	return s.store.CreateUser(ctx, u)
+}
+
+// Login verifies credentials and creates a new refresh session.
+func (s *AuthService) Login(ctx context.Context, email, password string) (Session, error) {
+	normalized, err := NormalizeEmailChecked(email)
+	if err != nil {
+		return Session{}, ErrInvalidCredentials
+	}
+
+	u, err := s.store.GetUserByEmail(ctx, normalized)
+	if err != nil {
+		return Session{}, ErrInvalidCredentials
+	}
+
+	if u.Status == StatusSuspended {
+		return Session{}, ErrAccountSuspended
+	}
+	if u.Status != StatusActive {
+		return Session{}, ErrInvalidCredentials
+	}
+
+	if !VerifyPassword(u.PasswordHash, password) {
+		return Session{}, ErrInvalidCredentials
+	}
+
+	raw, err := NewRefreshToken()
+	if err != nil {
+		return Session{}, err
+	}
+
+	sess := Session{
+		UserID:           u.ID,
+		RefreshToken:     raw,
+		RefreshTokenHash: HashToken(raw),
+		ExpiresAt:        time.Now().Add(30 * 24 * time.Hour),
+	}
+
+	if err := s.store.CreateSession(ctx, sess); err != nil {
+		return Session{}, err
+	}
+
+	return sess, nil
+}
