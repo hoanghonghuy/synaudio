@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS story_summaries;
+DROP TABLE IF EXISTS chapter_summaries;
+DROP TABLE IF EXISTS content_classifications;
+DROP TABLE IF EXISTS chapter_reviews;
+DROP TABLE IF EXISTS content_approvals;
+DROP TABLE IF EXISTS chapter_content_revisions;
+DROP TABLE IF EXISTS generation_job_attempts;
+DROP TABLE IF EXISTS generation_job_dependencies;
+DROP TABLE IF EXISTS generation_jobs;
+DROP TABLE IF EXISTS generation_runs;

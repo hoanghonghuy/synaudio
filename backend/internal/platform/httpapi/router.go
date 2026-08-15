@@ -12,10 +12,11 @@ import (
 var ErrDependencyUnavailable = errors.New("dependency unavailable")
 
 type Dependencies struct {
-	ReadyCheck      func() error
-	AuthHandler     http.Handler
-	StoryHandler    http.Handler
-	PlanningHandler http.Handler
+	ReadyCheck       func() error
+	AuthHandler      http.Handler
+	StoryHandler     http.Handler
+	PlanningHandler  http.Handler
+	GenerationHandler http.Handler
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -49,6 +50,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	if deps.PlanningHandler != nil {
 		r.Mount("/api/v1", deps.PlanningHandler)
+	}
+	if deps.GenerationHandler != nil {
+		r.Mount("/api/v1", deps.GenerationHandler)
 	}
 
 	return r

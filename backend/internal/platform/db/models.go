@@ -71,6 +71,22 @@ type Chapter struct {
 	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ChapterContentRevision struct {
+	ID                 pgtype.UUID        `json:"id"`
+	ChapterID          pgtype.UUID        `json:"chapter_id"`
+	RevisionNo         int32              `json:"revision_no"`
+	ContentText        string             `json:"content_text"`
+	SourceType         string             `json:"source_type"`
+	BasedOnRevisionID  pgtype.UUID        `json:"based_on_revision_id"`
+	PlanRevisionID     pgtype.UUID        `json:"plan_revision_id"`
+	BaseCanonVersionID pgtype.UUID        `json:"base_canon_version_id"`
+	GenerationRunID    pgtype.UUID        `json:"generation_run_id"`
+	RetconRequestID    pgtype.UUID        `json:"retcon_request_id"`
+	Status             string             `json:"status"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type ChapterPlanRevision struct {
 	ID                 pgtype.UUID        `json:"id"`
 	ChapterID          pgtype.UUID        `json:"chapter_id"`
@@ -82,6 +98,28 @@ type ChapterPlanRevision struct {
 	GenerationRunID    pgtype.UUID        `json:"generation_run_id"`
 	CreatedBy          pgtype.UUID        `json:"created_by"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type ChapterReview struct {
+	ID                pgtype.UUID        `json:"id"`
+	ChapterID         pgtype.UUID        `json:"chapter_id"`
+	ContentRevisionID pgtype.UUID        `json:"content_revision_id"`
+	ReviewType        string             `json:"review_type"`
+	CanonVersionID    pgtype.UUID        `json:"canon_version_id"`
+	PolicyVersionID   pgtype.UUID        `json:"policy_version_id"`
+	Outcome           string             `json:"outcome"`
+	Report            []byte             `json:"report"`
+	GenerationRunID   pgtype.UUID        `json:"generation_run_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type ChapterSummary struct {
+	ID                pgtype.UUID        `json:"id"`
+	ChapterID         pgtype.UUID        `json:"chapter_id"`
+	ContentRevisionID pgtype.UUID        `json:"content_revision_id"`
+	Summary           string             `json:"summary"`
+	GenerationRunID   pgtype.UUID        `json:"generation_run_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type Character struct {
@@ -115,6 +153,27 @@ type CharacterStateVersion struct {
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentApproval struct {
+	ID                pgtype.UUID        `json:"id"`
+	ChapterID         pgtype.UUID        `json:"chapter_id"`
+	ContentRevisionID pgtype.UUID        `json:"content_revision_id"`
+	ApprovedBy        pgtype.UUID        `json:"approved_by"`
+	ApprovedAt        pgtype.Timestamptz `json:"approved_at"`
+	WarningsSnapshot  []byte             `json:"warnings_snapshot"`
+	OverrideSnapshot  []byte             `json:"override_snapshot"`
+}
+
+type ContentClassification struct {
+	ID                pgtype.UUID        `json:"id"`
+	ContentRevisionID pgtype.UUID        `json:"content_revision_id"`
+	Rating            pgtype.Text        `json:"rating"`
+	Warnings          []string           `json:"warnings"`
+	Outcome           string             `json:"outcome"`
+	PolicyVersionID   pgtype.UUID        `json:"policy_version_id"`
+	Report            []byte             `json:"report"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContextSnapshot struct {
 	ID                      pgtype.UUID        `json:"id"`
 	RunID                   pgtype.UUID        `json:"run_id"`
@@ -142,6 +201,65 @@ type EmailVerificationToken struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	UsedAt    pgtype.Timestamptz `json:"used_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type GenerationJob struct {
+	ID               pgtype.UUID        `json:"id"`
+	RunID            pgtype.UUID        `json:"run_id"`
+	JobType          string             `json:"job_type"`
+	Status           string             `json:"status"`
+	Priority         int32              `json:"priority"`
+	AvailableAt      pgtype.Timestamptz `json:"available_at"`
+	InputFingerprint pgtype.Text        `json:"input_fingerprint"`
+	AttemptCount     int32              `json:"attempt_count"`
+	MaxAttempts      int32              `json:"max_attempts"`
+	LockedBy         pgtype.Text        `json:"locked_by"`
+	LockExpiresAt    pgtype.Timestamptz `json:"lock_expires_at"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+	LastErrorClass   pgtype.Text        `json:"last_error_class"`
+	LastErrorCode    pgtype.Text        `json:"last_error_code"`
+	OutputRef        []byte             `json:"output_ref"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type GenerationJobAttempt struct {
+	ID              pgtype.UUID        `json:"id"`
+	JobID           pgtype.UUID        `json:"job_id"`
+	AttemptNo       int32              `json:"attempt_no"`
+	Provider        pgtype.Text        `json:"provider"`
+	Model           pgtype.Text        `json:"model"`
+	Status          string             `json:"status"`
+	ErrorClass      pgtype.Text        `json:"error_class"`
+	ErrorCode       pgtype.Text        `json:"error_code"`
+	SafeErrorDetail []byte             `json:"safe_error_detail"`
+	Usage           []byte             `json:"usage"`
+	LatencyMs       pgtype.Int4        `json:"latency_ms"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+}
+
+type GenerationJobDependency struct {
+	JobID          pgtype.UUID `json:"job_id"`
+	DependsOnJobID pgtype.UUID `json:"depends_on_job_id"`
+}
+
+type GenerationRun struct {
+	ID                 pgtype.UUID        `json:"id"`
+	RunType            string             `json:"run_type"`
+	StoryID            pgtype.UUID        `json:"story_id"`
+	ChapterID          pgtype.UUID        `json:"chapter_id"`
+	Status             string             `json:"status"`
+	WaitingReason      pgtype.Text        `json:"waiting_reason"`
+	WorkflowVersion    pgtype.Text        `json:"workflow_version"`
+	Priority           int32              `json:"priority"`
+	BaseCanonVersionID pgtype.UUID        `json:"base_canon_version_id"`
+	ContextSnapshotID  pgtype.UUID        `json:"context_snapshot_id"`
+	RequestedBy        pgtype.UUID        `json:"requested_by"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	StartedAt          pgtype.Timestamptz `json:"started_at"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type Genre struct {
@@ -327,6 +445,16 @@ type StoryGenerationPolicy struct {
 type StoryGenre struct {
 	StoryID pgtype.UUID `json:"story_id"`
 	GenreID pgtype.UUID `json:"genre_id"`
+}
+
+type StorySummary struct {
+	ID             pgtype.UUID        `json:"id"`
+	StoryID        pgtype.UUID        `json:"story_id"`
+	ScopeType      string             `json:"scope_type"`
+	ScopeID        pgtype.UUID        `json:"scope_id"`
+	CanonVersionID pgtype.UUID        `json:"canon_version_id"`
+	Summary        string             `json:"summary"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type StoryWorkflowSetting struct {
