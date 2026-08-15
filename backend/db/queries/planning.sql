@@ -146,6 +146,16 @@ FROM chapters
 WHERE story_id = $1
 ORDER BY chapter_number;
 
+-- name: UpdateChapterStatus :one
+UPDATE chapters
+SET status = $2,
+    published_at = CASE WHEN $2 = 'PUBLISHED' THEN NOW() ELSE published_at END,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, story_id, chapter_number, title, status, arc_id, current_plan_revision_id,
+          current_content_revision_id, current_narration_revision_id, current_audio_asset_id,
+          official_canon_version_id, published_at, archived_at, created_at, updated_at;
+
 -- ============================================================
 -- StoryFacts
 -- ============================================================

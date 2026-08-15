@@ -196,6 +196,19 @@ func (s *fakeStore) ListChapters(ctx context.Context, storyID string) ([]Chapter
 	return s.chapters[storyID], nil
 }
 
+func (s *fakeStore) UpdateChapterStatus(ctx context.Context, chapterID, status string) (Chapter, error) {
+	for storyID, cs := range s.chapters {
+		for i, c := range cs {
+			if c.ID == chapterID {
+				c.Status = status
+				s.chapters[storyID][i] = c
+				return c, nil
+			}
+		}
+	}
+	return Chapter{}, ErrChapterNotFound
+}
+
 func (s *fakeStore) CreateFact(ctx context.Context, f StoryFact) (StoryFact, error) {
 	s.facts[f.StoryID] = append(s.facts[f.StoryID], f)
 	return f, nil

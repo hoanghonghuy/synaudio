@@ -1212,3 +1212,42 @@ func (q *Queries) NextProfileVersion(ctx context.Context, characterID pgtype.UUI
 	err := row.Scan(&column_1)
 	return column_1, err
 }
+
+const updateChapterStatus = `-- name: UpdateChapterStatus :one
+UPDATE chapters
+SET status = $2,
+    published_at = CASE WHEN $2 = 'PUBLISHED' THEN NOW() ELSE published_at END,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, story_id, chapter_number, title, status, arc_id, current_plan_revision_id,
+          current_content_revision_id, current_narration_revision_id, current_audio_asset_id,
+          official_canon_version_id, published_at, archived_at, created_at, updated_at
+`
+
+type UpdateChapterStatusParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+func (q *Queries) UpdateChapterStatus(ctx context.Context, arg UpdateChapterStatusParams) (Chapter, error) {
+	row := q.db.QueryRow(ctx, updateChapterStatus, arg.ID, arg.Status)
+	var i Chapter
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.ChapterNumber,
+		&i.Title,
+		&i.Status,
+		&i.ArcID,
+		&i.CurrentPlanRevisionID,
+		&i.CurrentContentRevisionID,
+		&i.CurrentNarrationRevisionID,
+		&i.CurrentAudioAssetID,
+		&i.OfficialCanonVersionID,
+		&i.PublishedAt,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

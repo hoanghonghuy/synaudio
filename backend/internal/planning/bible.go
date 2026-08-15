@@ -67,12 +67,15 @@ type Store interface {
 
 	CreateContextSnapshot(ctx context.Context, sn ContextSnapshot) (ContextSnapshot, error)
 	ListContextSnapshots(ctx context.Context, storyID string) ([]ContextSnapshot, error)
+
+	UpdateChapterStatus(ctx context.Context, chapterID, status string) (Chapter, error)
 }
 
 type Service struct {
 	store           Store
 	architect       Architect
 	memoryExtractor MemoryExtractor
+	publishChecker  PublishChecker
 }
 
 type Option func(*Service)
@@ -86,6 +89,12 @@ func WithArchitect(a Architect) Option {
 func WithMemoryExtractor(m MemoryExtractor) Option {
 	return func(svc *Service) {
 		svc.memoryExtractor = m
+	}
+}
+
+func WithPublishChecker(c PublishChecker) Option {
+	return func(svc *Service) {
+		svc.publishChecker = c
 	}
 }
 

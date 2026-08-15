@@ -285,6 +285,20 @@ func (s *PlanningStore) ListChapters(ctx context.Context, storyID string) ([]pla
 	return out, nil
 }
 
+func (s *PlanningStore) UpdateChapterStatus(ctx context.Context, chapterID, status string) (planning.Chapter, error) {
+	row, err := s.q.UpdateChapterStatus(ctx, db.UpdateChapterStatusParams{
+		ID:     toUUID(chapterID),
+		Status: status,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return planning.Chapter{}, planning.ErrChapterNotFound
+		}
+		return planning.Chapter{}, err
+	}
+	return toChapter(row), nil
+}
+
 // ============================================================
 // StoryFacts
 // ============================================================

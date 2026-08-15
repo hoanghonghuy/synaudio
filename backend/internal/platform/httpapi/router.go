@@ -17,6 +17,8 @@ type Dependencies struct {
 	StoryHandler     http.Handler
 	PlanningHandler  http.Handler
 	GenerationHandler http.Handler
+	AudioHandler     http.Handler
+	ListenerHandler  http.Handler
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -53,6 +55,12 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	if deps.GenerationHandler != nil {
 		r.Mount("/api/v1", deps.GenerationHandler)
+	}
+	if deps.AudioHandler != nil {
+		r.Mount("/api/v1", deps.AudioHandler)
+	}
+	if deps.ListenerHandler != nil {
+		r.Mount("/api/v1", deps.ListenerHandler)
 	}
 
 	return r

@@ -10,8 +10,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/synaudio/synaudio/backend/internal/audio"
 	"github.com/synaudio/synaudio/backend/internal/generation"
 	"github.com/synaudio/synaudio/backend/internal/identity"
+	"github.com/synaudio/synaudio/backend/internal/listener"
 	"github.com/synaudio/synaudio/backend/internal/planning"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
@@ -70,6 +72,14 @@ func main() {
 	generationService := generation.NewService(generationStore, generation.WithTextAI(generation.NewMockTextAI()))
 	generationHandler := generation.NewHandler(generationService)
 
+	audioStore := pgstore.NewAudioStore(queries)
+	audioService := audio.NewService(audioStore)
+	audioHandler := audio.NewHandler(audioService)
+
+	listenerStore := pgstore.NewListenerStore(queries)
+	listenerService := listener.NewService(listenerStore)
+	listenerHandler := listener.NewHandler(listenerService)
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		ReadyCheck: func() error {
 			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -83,6 +93,8 @@ func main() {
 		StoryHandler:     storyHandler,
 		PlanningHandler:  planningHandler,
 		GenerationHandler: generationHandler,
+		AudioHandler:     audioHandler,
+		ListenerHandler:  listenerHandler,
 	})
 
 	server := &http.Server{

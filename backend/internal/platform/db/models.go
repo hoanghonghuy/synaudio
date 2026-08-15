@@ -17,6 +17,23 @@ type AccountDeletionRequest struct {
 	CompletedAt pgtype.Timestamptz `json:"completed_at"`
 }
 
+type AudioAsset struct {
+	ID                        pgtype.UUID        `json:"id"`
+	ChapterID                 pgtype.UUID        `json:"chapter_id"`
+	VersionNo                 int32              `json:"version_no"`
+	SourceNarrationRevisionID pgtype.UUID        `json:"source_narration_revision_id"`
+	Status                    string             `json:"status"`
+	StorageKey                pgtype.Text        `json:"storage_key"`
+	MimeType                  pgtype.Text        `json:"mime_type"`
+	SizeBytes                 pgtype.Int8        `json:"size_bytes"`
+	DurationMs                pgtype.Int4        `json:"duration_ms"`
+	BitrateKbps               pgtype.Int4        `json:"bitrate_kbps"`
+	Checksum                  pgtype.Text        `json:"checksum"`
+	IsActive                  bool               `json:"is_active"`
+	GenerationRunID           pgtype.UUID        `json:"generation_run_id"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+}
+
 type CanonBranch struct {
 	ID              pgtype.UUID        `json:"id"`
 	StoryID         pgtype.UUID        `json:"story_id"`
@@ -203,6 +220,12 @@ type EmailVerificationToken struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Favorite struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	StoryID   pgtype.UUID        `json:"story_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type GenerationJob struct {
 	ID               pgtype.UUID        `json:"id"`
 	RunID            pgtype.UUID        `json:"run_id"`
@@ -268,6 +291,31 @@ type Genre struct {
 	Name string      `json:"name"`
 }
 
+type ListeningProgress struct {
+	UserID                pgtype.UUID        `json:"user_id"`
+	ChapterID             pgtype.UUID        `json:"chapter_id"`
+	PositionMs            int64              `json:"position_ms"`
+	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	LastAudioAssetID      pgtype.UUID        `json:"last_audio_asset_id"`
+	LastPlaybackSessionID pgtype.UUID        `json:"last_playback_session_id"`
+	Version               int64              `json:"version"`
+	LastListenedAt        pgtype.Timestamptz `json:"last_listened_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type NarrationRevision struct {
+	ID                      pgtype.UUID        `json:"id"`
+	ChapterID               pgtype.UUID        `json:"chapter_id"`
+	RevisionNo              int32              `json:"revision_no"`
+	SourceContentRevisionID pgtype.UUID        `json:"source_content_revision_id"`
+	VoiceID                 pgtype.Text        `json:"voice_id"`
+	Script                  pgtype.Text        `json:"script"`
+	Status                  string             `json:"status"`
+	GenerationRunID         pgtype.UUID        `json:"generation_run_id"`
+	CreatedBy               pgtype.UUID        `json:"created_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+}
+
 type PasswordResetToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
@@ -280,6 +328,17 @@ type PasswordResetToken struct {
 type Permission struct {
 	ID   pgtype.UUID `json:"id"`
 	Code string      `json:"code"`
+}
+
+type PlaybackSession struct {
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	ChapterID        pgtype.UUID        `json:"chapter_id"`
+	AudioAssetID     pgtype.UUID        `json:"audio_asset_id"`
+	ClientInstanceID pgtype.Text        `json:"client_instance_id"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	LastEventAt      pgtype.Timestamptz `json:"last_event_at"`
+	EndedAt          pgtype.Timestamptz `json:"ended_at"`
 }
 
 type PlotThread struct {
@@ -471,6 +530,22 @@ type StoryWorkflowSetting struct {
 	FallbackPolicy        []byte             `json:"fallback_policy"`
 	UpdatedBy             pgtype.UUID        `json:"updated_by"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TtsSegment struct {
+	ID                  pgtype.UUID        `json:"id"`
+	NarrationRevisionID pgtype.UUID        `json:"narration_revision_id"`
+	SegmentNo           int32              `json:"segment_no"`
+	Text                string             `json:"text"`
+	Direction           []byte             `json:"direction"`
+	Status              string             `json:"status"`
+	Provider            pgtype.Text        `json:"provider"`
+	Model               pgtype.Text        `json:"model"`
+	VoiceID             pgtype.Text        `json:"voice_id"`
+	DurationMs          pgtype.Int4        `json:"duration_ms"`
+	TempStorageKey      pgtype.Text        `json:"temp_storage_key"`
+	GenerationJobID     pgtype.UUID        `json:"generation_job_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {
