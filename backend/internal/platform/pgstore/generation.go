@@ -162,6 +162,69 @@ func (s *GenerationStore) CreateJobAttempt(ctx context.Context, a generation.Job
 	return toJobAttempt(row), nil
 }
 
+func (s *GenerationStore) ClaimNextJob(ctx context.Context, workerID string) (generation.GenerationJob, error) {
+	row, err := s.q.ClaimNextJob(ctx, toText(workerID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return generation.GenerationJob{}, generation.ErrNoRunnableJob
+		}
+		return generation.GenerationJob{}, err
+	}
+	return toGenerationJob(row), nil
+}
+
+func (s *GenerationStore) UpdateJobStatus(ctx context.Context, jobID, status, errorClass, errorCode string) (generation.GenerationJob, error) {
+	row, err := s.q.UpdateJobStatus(ctx, db.UpdateJobStatusParams{
+		ID:             toUUID(jobID),
+		Status:         status,
+		LastErrorClass: toText(errorClass),
+		LastErrorCode:  toText(errorCode),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return generation.GenerationJob{}, generation.ErrGenerationJobNotFound
+		}
+		return generation.GenerationJob{}, err
+	}
+	return toGenerationJob(row), nil
+}
+
+func (s *GenerationStore) UpdateJobAttemptStatus(ctx context.Context, attemptID, status, errorClass, errorCode string) (generation.JobAttempt, error) {
+	row, err := s.q.UpdateJobAttemptStatus(ctx, db.UpdateJobAttemptStatusParams{
+		ID:         toUUID(attemptID),
+		Status:     status,
+		ErrorClass: toText(errorClass),
+		ErrorCode:  toText(errorCode),
+	})
+	if err != nil {
+		return generation.JobAttempt{}, err
+	}
+	return toJobAttempt(row), nil
+}
+
+func (s *GenerationStore) ReclaimStaleJobs(ctx context.Context, olderThan string) ([]generation.GenerationJob, error) {
+	rows, err := s.q.ReclaimStaleJobs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]generation.GenerationJob, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toGenerationJob(r))
+	}
+	return out, nil
+}
+
+func (s *GenerationStore) CancelJob(ctx context.Context, jobID string) (generation.GenerationJob, error) {
+	row, err := s.q.CancelJob(ctx, toUUID(jobID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return generation.GenerationJob{}, generation.ErrGenerationJobNotFound
+		}
+		return generation.GenerationJob{}, err
+	}
+	return toGenerationJob(row), nil
+}
+
 // ============================================================
 // Chapter Reviews
 // ============================================================
@@ -260,6 +323,7 @@ func toGenerationJob(row db.GenerationJob) generation.GenerationJob {
 		InputFingerprint: fromText(row.InputFingerprint),
 		LastErrorClass:   fromText(row.LastErrorClass),
 		LastErrorCode:    fromText(row.LastErrorCode),
+		LockedBy:         fromText(row.LockedBy),
 		OutputRef:        outputRef,
 	}
 }

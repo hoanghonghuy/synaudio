@@ -40,6 +40,7 @@ type GenerationJob struct {
 	InputFingerprint string
 	LastErrorClass   string
 	LastErrorCode    string
+	LockedBy         string
 	OutputRef        map[string]any
 }
 

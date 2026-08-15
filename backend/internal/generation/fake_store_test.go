@@ -94,3 +94,64 @@ func (s *fakeStore) CreateChapterReview(_ context.Context, r ChapterReview) (Cha
 func (s *fakeStore) ListChapterReviews(_ context.Context, chapterID string) ([]ChapterReview, error) {
 	return s.reviews[chapterID], nil
 }
+
+func (s *fakeStore) ClaimNextJob(_ context.Context, workerID string) (GenerationJob, error) {
+	for runID, jobs := range s.jobs {
+		for i, j := range jobs {
+			if j.Status == "PENDING" {
+				j.Status = "RUNNING"
+				j.LockedBy = workerID
+				s.jobs[runID][i] = j
+				return j, nil
+			}
+		}
+	}
+	return GenerationJob{}, ErrNoRunnableJob
+}
+
+func (s *fakeStore) UpdateJobStatus(_ context.Context, jobID, status, errorClass, errorCode string) (GenerationJob, error) {
+	for runID, jobs := range s.jobs {
+		for i, j := range jobs {
+			if j.ID == jobID {
+				j.Status = status
+				j.LastErrorClass = errorClass
+				j.LastErrorCode = errorCode
+				s.jobs[runID][i] = j
+				return j, nil
+			}
+		}
+	}
+	return GenerationJob{}, ErrGenerationJobNotFound
+}
+
+func (s *fakeStore) UpdateJobAttemptStatus(_ context.Context, attemptID, status, errorClass, errorCode string) (JobAttempt, error) {
+	return JobAttempt{ID: attemptID, Status: status, ErrorClass: errorClass, ErrorCode: errorCode}, nil
+}
+
+func (s *fakeStore) ReclaimStaleJobs(_ context.Context, olderThan string) ([]GenerationJob, error) {
+	out := []GenerationJob{}
+	for runID, jobs := range s.jobs {
+		for i, j := range jobs {
+			if j.Status == "RUNNING" {
+				j.Status = "PENDING"
+				j.LockedBy = ""
+				s.jobs[runID][i] = j
+				out = append(out, j)
+			}
+		}
+	}
+	return out, nil
+}
+
+func (s *fakeStore) CancelJob(_ context.Context, jobID string) (GenerationJob, error) {
+	for runID, jobs := range s.jobs {
+		for i, j := range jobs {
+			if j.ID == jobID {
+				j.Status = "CANCELLED"
+				s.jobs[runID][i] = j
+				return j, nil
+			}
+		}
+	}
+	return GenerationJob{}, ErrGenerationJobNotFound
+}

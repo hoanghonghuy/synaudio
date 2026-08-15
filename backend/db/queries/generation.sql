@@ -41,6 +41,71 @@ VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, job_id, attempt_no, provider, model, status, error_class, error_code,
           safe_error_detail, usage, latency_ms, started_at, completed_at;
 
+-- name: ClaimNextJob :one
+UPDATE generation_jobs
+SET status = 'RUNNING',
+    locked_by = $1,
+    lock_expires_at = NOW() + INTERVAL '5 minutes',
+    started_at = NOW(),
+    attempt_count = attempt_count + 1
+WHERE id = (
+    SELECT id
+    FROM generation_jobs
+    WHERE status = 'PENDING'
+      AND available_at <= NOW()
+    ORDER BY priority DESC, created_at ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT 1
+)
+RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
+          attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+          completed_at, last_error_class, last_error_code, output_ref, created_at;
+
+-- name: UpdateJobStatus :one
+UPDATE generation_jobs
+SET status = $2,
+    last_error_class = $3,
+    last_error_code = $4,
+    completed_at = CASE WHEN $2 IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN NOW() ELSE completed_at END,
+    locked_by = NULL,
+    lock_expires_at = NULL
+WHERE id = $1
+RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
+          attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+          completed_at, last_error_class, last_error_code, output_ref, created_at;
+
+-- name: UpdateJobAttemptStatus :one
+UPDATE generation_job_attempts
+SET status = $2,
+    error_class = $3,
+    error_code = $4,
+    completed_at = CASE WHEN $2 IN ('SUCCEEDED', 'FAILED') THEN NOW() ELSE completed_at END
+WHERE id = $1
+RETURNING id, job_id, attempt_no, provider, model, status, error_class, error_code,
+          safe_error_detail, usage, latency_ms, started_at, completed_at;
+
+-- name: ReclaimStaleJobs :many
+UPDATE generation_jobs
+SET status = 'PENDING',
+    locked_by = NULL,
+    lock_expires_at = NULL
+WHERE status = 'RUNNING'
+  AND lock_expires_at < NOW()
+RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
+          attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+          completed_at, last_error_class, last_error_code, output_ref, created_at;
+
+-- name: CancelJob :one
+UPDATE generation_jobs
+SET status = 'CANCELLED',
+    completed_at = NOW(),
+    locked_by = NULL,
+    lock_expires_at = NULL
+WHERE id = $1
+RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
+          attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+          completed_at, last_error_class, last_error_code, output_ref, created_at;
+
 -- ============================================================
 -- Chapter Content Revisions
 -- ============================================================

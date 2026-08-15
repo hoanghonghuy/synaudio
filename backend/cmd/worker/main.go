@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -9,8 +10,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/synaudio/synaudio/backend/internal/generation"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
+	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
+	"github.com/synaudio/synaudio/backend/internal/platform/pgstore"
 )
 
 func main() {
@@ -32,25 +36,64 @@ func main() {
 	}
 	defer pool.Close()
 
-	log.Info("worker started", "env", cfg.AppEnv)
+	queries := db.New(pool)
+	generationStore := pgstore.NewGenerationStore(queries)
+	generationService := generation.NewService(generationStore, generation.WithTextAI(generation.NewMockTextAI()))
 
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	workerID := os.Getenv("WORKER_ID")
+	if workerID == "" {
+		workerID = "worker-1"
+	}
+
+	worker := generation.NewWorker(generationService, workerID, processJob(generationService, log))
+
+	log.Info("worker started", "env", cfg.AppEnv, "worker_id", workerID)
+
+	// Reclaim stale jobs periodically.
+	reclaimTicker := time.NewTicker(30 * time.Second)
+	defer reclaimTicker.Stop()
+
+	// Poll for new jobs.
+	pollTicker := time.NewTicker(2 * time.Second)
+	defer pollTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("worker stopped")
 			return
-		case <-ticker.C:
-			pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-			err := pool.Ping(pingCtx)
-			cancel()
+		case <-reclaimTicker.C:
+			reclaimed, err := generationService.ReclaimStaleJobs(ctx, "5 minutes")
 			if err != nil {
-				log.Error("worker database ping failed", "error", err)
+				log.Error("reclaim stale jobs failed", "error", err)
 				continue
 			}
-			log.Info("worker heartbeat ok")
+			if len(reclaimed) > 0 {
+				log.Info("reclaimed stale jobs", "count", len(reclaimed))
+			}
+		case <-pollTicker.C:
+			if err := worker.ProcessOne(ctx); err != nil {
+				if err == generation.ErrNoRunnableJob {
+					continue
+				}
+				log.Error("process job failed", "error", err)
+			}
+		}
+	}
+}
+
+// processJob dispatches a claimed job to the appropriate handler based on job type.
+func processJob(svc *generation.Service, log *slog.Logger) generation.JobProcessor {
+	return func(ctx context.Context, job generation.GenerationJob) error {
+		switch job.JobType {
+		case "WRITER":
+			log.Info("processing writer job", "job_id", job.ID)
+			// Writer jobs are driven by the API layer which already created the
+			// content revision; here we simply mark success for the mock pipeline.
+			return nil
+		default:
+			log.Info("skipping unknown job type", "job_id", job.ID, "job_type", job.JobType)
+			return &generation.ClassifiedError{Class: "PERMANENT", Code: "UNKNOWN_JOB_TYPE"}
 		}
 	}
 }

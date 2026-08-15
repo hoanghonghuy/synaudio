@@ -53,6 +53,12 @@ type Store interface {
 
 	CreateChapterReview(ctx context.Context, r ChapterReview) (ChapterReview, error)
 	ListChapterReviews(ctx context.Context, chapterID string) ([]ChapterReview, error)
+
+	ClaimNextJob(ctx context.Context, workerID string) (GenerationJob, error)
+	UpdateJobStatus(ctx context.Context, jobID, status, errorClass, errorCode string) (GenerationJob, error)
+	UpdateJobAttemptStatus(ctx context.Context, attemptID, status, errorClass, errorCode string) (JobAttempt, error)
+	ReclaimStaleJobs(ctx context.Context, olderThan string) ([]GenerationJob, error)
+	CancelJob(ctx context.Context, jobID string) (GenerationJob, error)
 }
 
 // Service orchestrates Chapter content generation and review.
