@@ -62,14 +62,17 @@ type Store interface {
 	NextCanonSequence(ctx context.Context, branchID string) (int, error)
 	CreateCanonVersion(ctx context.Context, v CanonVersion) (CanonVersion, error)
 	ListCanonVersions(ctx context.Context, branchID string) ([]CanonVersion, error)
+	CreateCanonChangeItem(ctx context.Context, c CanonChangeItem) (CanonChangeItem, error)
+	ListCanonChangeItems(ctx context.Context, canonVersionID string) ([]CanonChangeItem, error)
 
 	CreateContextSnapshot(ctx context.Context, sn ContextSnapshot) (ContextSnapshot, error)
 	ListContextSnapshots(ctx context.Context, storyID string) ([]ContextSnapshot, error)
 }
 
 type Service struct {
-	store     Store
-	architect Architect
+	store           Store
+	architect       Architect
+	memoryExtractor MemoryExtractor
 }
 
 type Option func(*Service)
@@ -77,6 +80,12 @@ type Option func(*Service)
 func WithArchitect(a Architect) Option {
 	return func(svc *Service) {
 		svc.architect = a
+	}
+}
+
+func WithMemoryExtractor(m MemoryExtractor) Option {
+	return func(svc *Service) {
+		svc.memoryExtractor = m
 	}
 }
 

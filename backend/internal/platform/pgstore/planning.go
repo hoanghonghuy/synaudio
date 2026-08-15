@@ -415,6 +415,34 @@ func (s *PlanningStore) ListCanonVersions(ctx context.Context, branchID string) 
 	return out, nil
 }
 
+func (s *PlanningStore) CreateCanonChangeItem(ctx context.Context, c planning.CanonChangeItem) (planning.CanonChangeItem, error) {
+	metadata, _ := json.Marshal(c.Metadata)
+	row, err := s.q.CreateCanonChangeItem(ctx, db.CreateCanonChangeItemParams{
+		ID:             toUUID(c.ID),
+		CanonVersionID: toUUID(c.CanonVersionID),
+		EntityType:     c.EntityType,
+		EntityID:       toUUID(c.EntityID),
+		ChangeType:     c.ChangeType,
+		Metadata:       metadata,
+	})
+	if err != nil {
+		return planning.CanonChangeItem{}, err
+	}
+	return toCanonChangeItem(row), nil
+}
+
+func (s *PlanningStore) ListCanonChangeItems(ctx context.Context, canonVersionID string) ([]planning.CanonChangeItem, error) {
+	rows, err := s.q.ListCanonChangeItems(ctx, toUUID(canonVersionID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]planning.CanonChangeItem, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toCanonChangeItem(r))
+	}
+	return out, nil
+}
+
 // ============================================================
 // ContextSnapshots
 // ============================================================
@@ -606,6 +634,19 @@ func toCanonVersion(row db.CanonVersion) planning.CanonVersion {
 		SourceChapterID: fromUUID(row.SourceChapterID),
 		Status:          row.Status,
 		CommittedBy:     fromUUID(row.CommittedBy),
+	}
+}
+
+func toCanonChangeItem(row db.CanonChangeItem) planning.CanonChangeItem {
+	var metadata map[string]any
+	_ = json.Unmarshal(row.Metadata, &metadata)
+	return planning.CanonChangeItem{
+		ID:             fromUUID(row.ID),
+		CanonVersionID: fromUUID(row.CanonVersionID),
+		EntityType:     row.EntityType,
+		EntityID:       fromUUID(row.EntityID),
+		ChangeType:     row.ChangeType,
+		Metadata:       metadata,
 	}
 }
 

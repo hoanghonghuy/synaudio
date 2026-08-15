@@ -157,6 +157,42 @@ func (q *Queries) CreateCanonBranch(ctx context.Context, arg CreateCanonBranchPa
 	return i, err
 }
 
+const createCanonChangeItem = `-- name: CreateCanonChangeItem :one
+INSERT INTO canon_change_items (id, canon_version_id, entity_type, entity_id, change_type, metadata)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, canon_version_id, entity_type, entity_id, change_type, metadata
+`
+
+type CreateCanonChangeItemParams struct {
+	ID             pgtype.UUID `json:"id"`
+	CanonVersionID pgtype.UUID `json:"canon_version_id"`
+	EntityType     string      `json:"entity_type"`
+	EntityID       pgtype.UUID `json:"entity_id"`
+	ChangeType     string      `json:"change_type"`
+	Metadata       []byte      `json:"metadata"`
+}
+
+func (q *Queries) CreateCanonChangeItem(ctx context.Context, arg CreateCanonChangeItemParams) (CanonChangeItem, error) {
+	row := q.db.QueryRow(ctx, createCanonChangeItem,
+		arg.ID,
+		arg.CanonVersionID,
+		arg.EntityType,
+		arg.EntityID,
+		arg.ChangeType,
+		arg.Metadata,
+	)
+	var i CanonChangeItem
+	err := row.Scan(
+		&i.ID,
+		&i.CanonVersionID,
+		&i.EntityType,
+		&i.EntityID,
+		&i.ChangeType,
+		&i.Metadata,
+	)
+	return i, err
+}
+
 const createCanonVersion = `-- name: CreateCanonVersion :one
 INSERT INTO canon_versions (id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id, status, committed_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -757,6 +793,40 @@ func (q *Queries) ListArcs(ctx context.Context, storyID pgtype.UUID) ([]StoryArc
 			&i.Status,
 			&i.CurrentVersionID,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCanonChangeItems = `-- name: ListCanonChangeItems :many
+SELECT id, canon_version_id, entity_type, entity_id, change_type, metadata
+FROM canon_change_items
+WHERE canon_version_id = $1
+ORDER BY entity_type
+`
+
+func (q *Queries) ListCanonChangeItems(ctx context.Context, canonVersionID pgtype.UUID) ([]CanonChangeItem, error) {
+	rows, err := q.db.Query(ctx, listCanonChangeItems, canonVersionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CanonChangeItem{}
+	for rows.Next() {
+		var i CanonChangeItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.CanonVersionID,
+			&i.EntityType,
+			&i.EntityID,
+			&i.ChangeType,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}

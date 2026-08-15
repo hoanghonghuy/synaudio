@@ -29,6 +29,7 @@ type fakeStore struct {
 	versions    map[string][]CanonVersion
 	nextSeq     map[string]int
 	snapshots   map[string][]ContextSnapshot
+	changeItems map[string][]CanonChangeItem
 }
 
 func newFakeStore() *fakeStore {
@@ -55,6 +56,7 @@ func newFakeStore() *fakeStore {
 		versions:    map[string][]CanonVersion{},
 		nextSeq:     map[string]int{},
 		snapshots:   map[string][]ContextSnapshot{},
+		changeItems: map[string][]CanonChangeItem{},
 	}
 }
 
@@ -243,6 +245,15 @@ func (s *fakeStore) CreateContextSnapshot(ctx context.Context, sn ContextSnapsho
 
 func (s *fakeStore) ListContextSnapshots(ctx context.Context, storyID string) ([]ContextSnapshot, error) {
 	return s.snapshots[storyID], nil
+}
+
+func (s *fakeStore) CreateCanonChangeItem(ctx context.Context, c CanonChangeItem) (CanonChangeItem, error) {
+	s.changeItems[c.CanonVersionID] = append(s.changeItems[c.CanonVersionID], c)
+	return c, nil
+}
+
+func (s *fakeStore) ListCanonChangeItems(ctx context.Context, canonVersionID string) ([]CanonChangeItem, error) {
+	return s.changeItems[canonVersionID], nil
 }
 
 func TestCreateBibleVersionAssignsSequentialVersion(t *testing.T) {

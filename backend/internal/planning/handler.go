@@ -33,6 +33,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Get("/admin/canon-branches/{branchID}/versions", h.listCanonVersions)
 	r.Post("/admin/stories/{storyID}/context-snapshots", h.createContextSnapshot)
 	r.Get("/admin/stories/{storyID}/context-snapshots", h.listContextSnapshots)
+	r.Post("/admin/canon-branches/{branchID}/commit", h.commitCanon)
 	return r
 }
 
@@ -370,6 +371,31 @@ func (h *Handler) listContextSnapshots(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"snapshots": snapshots})
+}
+
+type commitCanonRequest struct {
+	StoryID           string `json:"story_id"`
+	SourceChapterID   string `json:"source_chapter_id"`
+	ContentRevisionID string `json:"content_revision_id"`
+	CommittedBy       string `json:"committed_by"`
+}
+
+func (h *Handler) commitCanon(w http.ResponseWriter, r *http.Request) {
+	branchID := chi.URLParam(r, "branchID")
+
+	var req commitCanonRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	res, err := h.svc.CommitCanon(r.Context(), req.StoryID, branchID, req.SourceChapterID, req.ContentRevisionID, req.CommittedBy)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, res)
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

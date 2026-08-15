@@ -54,7 +54,10 @@ func main() {
 		os.Exit(1)
 	}
 	planningStore := pgstore.NewPlanningStore(queries)
-	planningService := planning.NewService(planningStore, planning.WithArchitect(planning.NewMockArchitect()))
+	planningService := planning.NewService(planningStore,
+		planning.WithArchitect(planning.NewMockArchitect()),
+		planning.WithMemoryExtractor(planning.NewMockMemoryExtractor()),
+	)
 	planningHandler := planning.NewHandler(planningService)
 
 	storyService := story.NewService(storyStore,

@@ -216,6 +216,17 @@ FROM canon_versions
 WHERE branch_id = $1
 ORDER BY sequence_no;
 
+-- name: CreateCanonChangeItem :one
+INSERT INTO canon_change_items (id, canon_version_id, entity_type, entity_id, change_type, metadata)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, canon_version_id, entity_type, entity_id, change_type, metadata;
+
+-- name: ListCanonChangeItems :many
+SELECT id, canon_version_id, entity_type, entity_id, change_type, metadata
+FROM canon_change_items
+WHERE canon_version_id = $1
+ORDER BY entity_type;
+
 -- ============================================================
 -- ContextSnapshots
 -- ============================================================
