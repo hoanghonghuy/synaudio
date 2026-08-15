@@ -13,6 +13,7 @@ type fakeStore struct {
 	genres           []story.Genre
 	workflowSettings map[string]story.WorkflowSettings
 	contentProfiles  map[string][]story.ContentProfileVersion
+	assets           map[string]story.StoryAsset
 }
 
 func newFakeStore() *fakeStore {
@@ -23,6 +24,7 @@ func newFakeStore() *fakeStore {
 		genres:           []story.Genre{},
 		workflowSettings: map[string]story.WorkflowSettings{},
 		contentProfiles:  map[string][]story.ContentProfileVersion{},
+		assets:           map[string]story.StoryAsset{},
 	}
 }
 
@@ -99,4 +101,34 @@ func (s *fakeStore) GetStory(_ context.Context, storyID string) (story.Story, er
 func (s *fakeStore) UpdateStory(_ context.Context, st story.Story) (story.Story, error) {
 	s.stories[st.ID] = st
 	return st, nil
+}
+
+func (s *fakeStore) CreateStoryAsset(_ context.Context, a story.StoryAsset) (story.StoryAsset, error) {
+	s.assets[a.ID] = a
+	return a, nil
+}
+
+func (s *fakeStore) LinkCoverAsset(_ context.Context, storyID, assetID string) error {
+	st := s.stories[storyID]
+	st.CoverAssetID = assetID
+	s.stories[storyID] = st
+	return nil
+}
+
+type fakeStorage struct {
+	objects map[string][]byte
+}
+
+func newFakeStorage() *fakeStorage {
+	return &fakeStorage{objects: map[string][]byte{}}
+}
+
+func (f *fakeStorage) Put(_ context.Context, key string, data []byte) error {
+	f.objects[key] = data
+	return nil
+}
+
+func (f *fakeStorage) hasKey(key string) bool {
+	_, ok := f.objects[key]
+	return ok
 }

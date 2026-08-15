@@ -3,6 +3,7 @@ package story_test
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -290,5 +291,39 @@ func TestMakePublicHandlerRejectsDraft(t *testing.T) {
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUploadCoverHandlerReturnsCreated(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A"}
+	storage := newFakeStorage()
+	svc := story.NewService(store, story.WithObjectStorage(storage))
+	h := story.NewHandler(svc)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("file", "cover.png")
+	_, _ = fw.Write([]byte("fake-image"))
+	_ = mw.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/stories/s1/cover", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["id"] == "" {
+		t.Fatal("expected asset id")
+	}
+	if resp["type"] != story.AssetTypeCover {
+		t.Fatalf("expected COVER, got %v", resp["type"])
 	}
 }

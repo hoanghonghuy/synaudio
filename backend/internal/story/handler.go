@@ -29,6 +29,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Post("/api/v1/admin/stories/{storyID}/restore", h.restoreStory)
 	r.Post("/api/v1/admin/stories/{storyID}/make-public", h.makePublic)
 	r.Post("/api/v1/admin/stories/{storyID}/make-private", h.makePrivate)
+	r.Post("/api/v1/admin/stories/{storyID}/cover", h.uploadCover)
 	return r
 }
 
@@ -358,6 +359,59 @@ func (h *Handler) makePrivate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, storyResponse{
 		ID: s.ID, Slug: s.Slug, Title: s.Title, Description: s.Description,
 		Status: s.Status, Visibility: s.Visibility,
+	})
+}
+
+type storyAssetResponse struct {
+	ID          string `json:"id"`
+	StoryID     string `json:"story_id"`
+	Type        string `json:"type"`
+	StorageKey  string `json:"storage_key"`
+	MimeType    string `json:"mime_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+	Status      string `json:"status"`
+}
+
+func (h *Handler) uploadCover(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid multipart form")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "missing file")
+		return
+	}
+	defer file.Close()
+
+	data := make([]byte, header.Size)
+	if _, err := file.Read(data); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "failed to read file")
+		return
+	}
+
+	asset, err := h.svc.UploadCover(r.Context(), UploadCoverInput{
+		StoryID:     storyID,
+		Filename:    header.Filename,
+		ContentType: header.Header.Get("Content-Type"),
+		Data:        data,
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, storyAssetResponse{
+		ID:         asset.ID,
+		StoryID:    asset.StoryID,
+		Type:       asset.Type,
+		StorageKey: asset.StorageKey,
+		MimeType:   asset.MimeType,
+		SizeBytes:  asset.SizeBytes,
+		Status:     asset.Status,
 	})
 }
 

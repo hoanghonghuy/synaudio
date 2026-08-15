@@ -42,6 +42,41 @@ type Store interface {
 	GetCurrentContentProfile(ctx context.Context, storyID string) (ContentProfileVersion, error)
 	GetStory(ctx context.Context, storyID string) (Story, error)
 	UpdateStory(ctx context.Context, s Story) (Story, error)
+	CreateStoryAsset(ctx context.Context, a StoryAsset) (StoryAsset, error)
+	LinkCoverAsset(ctx context.Context, storyID, assetID string) error
+}
+
+// ObjectStorage is the boundary for object storage (MinIO/R2).
+type ObjectStorage interface {
+	Put(ctx context.Context, key string, data []byte) error
+}
+
+const (
+	AssetTypeCover = "COVER"
+
+	AssetStatusPending = "PENDING"
+	AssetStatusReady   = "READY"
+)
+
+type StoryAsset struct {
+	ID          string
+	StoryID     string
+	Type        string
+	StorageKey  string
+	MimeType    string
+	SizeBytes   int64
+	Checksum    string
+	RightsStatus string
+	Status      string
+	CreatedBy   string
+}
+
+type UploadCoverInput struct {
+	StoryID     string
+	Filename    string
+	ContentType string
+	Data        []byte
+	CreatedBy   string
 }
 
 type Genre struct {
@@ -109,6 +144,7 @@ type Story struct {
 	Status             string
 	Visibility         string
 	StatusBeforeArchive string
+	CoverAssetID       string
 	CreatedBy          string
 }
 
@@ -139,11 +175,24 @@ type CreateStoryInput struct {
 }
 
 type Service struct {
-	store Store
+	store   Store
+	storage ObjectStorage
 }
 
-func NewService(store Store) *Service {
-	return &Service{store: store}
+type Option func(*Service)
+
+func WithObjectStorage(s ObjectStorage) Option {
+	return func(svc *Service) {
+		svc.storage = s
+	}
+}
+
+func NewService(store Store, opts ...Option) *Service {
+	svc := &Service{store: store}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // CreateStory creates a DRAFT/PRIVATE story with an immutable generation policy.
@@ -315,6 +364,45 @@ func (s *Service) MakePrivate(ctx context.Context, storyID string) (Story, error
 	}
 	st.Visibility = VisibilityPrivate
 	return s.store.UpdateStory(ctx, st)
+}
+
+// UploadCover stores a cover image in object storage and links it to the story.
+func (s *Service) UploadCover(ctx context.Context, in UploadCoverInput) (StoryAsset, error) {
+	if _, err := s.store.GetStory(ctx, in.StoryID); err != nil {
+		return StoryAsset{}, err
+	}
+	if s.storage == nil {
+		return StoryAsset{}, errors.New("object storage not configured")
+	}
+
+	assetID := uuid.NewString()
+	storageKey := "stories/" + in.StoryID + "/cover/" + assetID
+
+	if err := s.storage.Put(ctx, storageKey, in.Data); err != nil {
+		return StoryAsset{}, err
+	}
+
+	asset := StoryAsset{
+		ID:          assetID,
+		StoryID:     in.StoryID,
+		Type:        AssetTypeCover,
+		StorageKey:  storageKey,
+		MimeType:    in.ContentType,
+		SizeBytes:   int64(len(in.Data)),
+		Status:      AssetStatusReady,
+		CreatedBy:   in.CreatedBy,
+	}
+
+	created, err := s.store.CreateStoryAsset(ctx, asset)
+	if err != nil {
+		return StoryAsset{}, err
+	}
+
+	if err := s.store.LinkCoverAsset(ctx, in.StoryID, created.ID); err != nil {
+		return StoryAsset{}, err
+	}
+
+	return created, nil
 }
 
 var (
