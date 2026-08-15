@@ -17,6 +17,18 @@ func NewHandler(svc *Service) http.Handler {
 
 	r := chi.NewRouter()
 	r.Post("/api/v1/admin/stories", h.createStory)
+	r.Get("/api/v1/admin/stories", h.listAdminStories)
+	r.Get("/api/v1/stories", h.listPublicStories)
+	r.Get("/api/v1/genres", h.listGenres)
+	r.Get("/api/v1/admin/stories/{storyID}/workflow-settings", h.getWorkflowSettings)
+	r.Put("/api/v1/admin/stories/{storyID}/workflow-settings", h.updateWorkflowSettings)
+	r.Post("/api/v1/admin/stories/{storyID}/content-profile", h.createContentProfile)
+	r.Get("/api/v1/admin/stories/{storyID}/content-profile", h.getContentProfile)
+	r.Post("/api/v1/admin/stories/{storyID}/activate", h.activateStory)
+	r.Post("/api/v1/admin/stories/{storyID}/archive", h.archiveStory)
+	r.Post("/api/v1/admin/stories/{storyID}/restore", h.restoreStory)
+	r.Post("/api/v1/admin/stories/{storyID}/make-public", h.makePublic)
+	r.Post("/api/v1/admin/stories/{storyID}/make-private", h.makePrivate)
 	return r
 }
 
@@ -42,6 +54,36 @@ type storyResponse struct {
 	Description string `json:"description"`
 	Status      string `json:"status"`
 	Visibility  string `json:"visibility"`
+}
+
+func (h *Handler) listPublicStories(w http.ResponseWriter, r *http.Request) {
+	h.listStories(w, r, true)
+}
+
+func (h *Handler) listAdminStories(w http.ResponseWriter, r *http.Request) {
+	h.listStories(w, r, false)
+}
+
+func (h *Handler) listStories(w http.ResponseWriter, r *http.Request, publicOnly bool) {
+	stories, err := h.svc.ListStories(r.Context(), ListStoriesInput{PublicOnly: publicOnly})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	out := make([]storyResponse, 0, len(stories))
+	for _, s := range stories {
+		out = append(out, storyResponse{
+			ID:          s.ID,
+			Slug:        s.Slug,
+			Title:       s.Title,
+			Description: s.Description,
+			Status:      s.Status,
+			Visibility:  s.Visibility,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"stories": out})
 }
 
 func (h *Handler) createStory(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +125,255 @@ func (h *Handler) createStory(w http.ResponseWriter, r *http.Request) {
 		Status:      s.Status,
 		Visibility:  s.Visibility,
 	})
+}
+
+type genreResponse struct {
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+}
+
+type workflowSettingsResponse struct {
+	StoryID              string         `json:"story_id"`
+	BatchGenerationSize  int            `json:"batch_generation_size"`
+	CreativeAutonomy     string         `json:"creative_autonomy"`
+	PreferredTextProvider string        `json:"preferred_text_provider"`
+	PreferredTextModel    string        `json:"preferred_text_model"`
+	PreferredTTSProvider  string        `json:"preferred_tts_provider"`
+	PreferredVoiceID      string        `json:"preferred_voice_id"`
+	PauseBeforeTTS        bool          `json:"pause_before_tts"`
+	AutoAIReview          bool          `json:"auto_ai_review"`
+	PlanningHorizon       int           `json:"planning_horizon"`
+	FallbackPolicy        map[string]any `json:"fallback_policy"`
+}
+
+func (h *Handler) getWorkflowSettings(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	ws, err := h.svc.GetWorkflowSettings(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toWorkflowSettingsResponse(ws))
+}
+
+func (h *Handler) updateWorkflowSettings(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	var req workflowSettingsInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	ws, err := h.svc.UpdateWorkflowSettings(r.Context(), storyID, WorkflowSettingsInput{
+		BatchGenerationSize:  req.BatchGenerationSize,
+		CreativeAutonomy:     req.CreativeAutonomy,
+		PreferredTextProvider: req.PreferredTextProvider,
+		PreferredTextModel:    req.PreferredTextModel,
+		PreferredTTSProvider:  req.PreferredTTSProvider,
+		PreferredVoiceID:      req.PreferredVoiceID,
+		PauseBeforeTTS:        req.PauseBeforeTTS,
+		AutoAIReview:          req.AutoAIReview,
+		PlanningHorizon:       req.PlanningHorizon,
+		FallbackPolicy:        req.FallbackPolicy,
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toWorkflowSettingsResponse(ws))
+}
+
+type workflowSettingsInput struct {
+	BatchGenerationSize  int            `json:"batch_generation_size"`
+	CreativeAutonomy     string         `json:"creative_autonomy"`
+	PreferredTextProvider string        `json:"preferred_text_provider"`
+	PreferredTextModel    string        `json:"preferred_text_model"`
+	PreferredTTSProvider  string        `json:"preferred_tts_provider"`
+	PreferredVoiceID      string        `json:"preferred_voice_id"`
+	PauseBeforeTTS        bool          `json:"pause_before_tts"`
+	AutoAIReview          bool          `json:"auto_ai_review"`
+	PlanningHorizon       int           `json:"planning_horizon"`
+	FallbackPolicy        map[string]any `json:"fallback_policy"`
+}
+
+func toWorkflowSettingsResponse(ws WorkflowSettings) workflowSettingsResponse {
+	return workflowSettingsResponse{
+		StoryID:              ws.StoryID,
+		BatchGenerationSize:  ws.BatchGenerationSize,
+		CreativeAutonomy:     ws.CreativeAutonomy,
+		PreferredTextProvider: ws.PreferredTextProvider,
+		PreferredTextModel:    ws.PreferredTextModel,
+		PreferredTTSProvider:  ws.PreferredTTSProvider,
+		PreferredVoiceID:      ws.PreferredVoiceID,
+		PauseBeforeTTS:        ws.PauseBeforeTTS,
+		AutoAIReview:          ws.AutoAIReview,
+		PlanningHorizon:       ws.PlanningHorizon,
+		FallbackPolicy:        ws.FallbackPolicy,
+	}
+}
+
+type contentProfileInput struct {
+	MaturityTarget   string         `json:"maturity_target"`
+	AllowedThemes    []string       `json:"allowed_themes"`
+	DisallowedThemes []string       `json:"disallowed_themes"`
+	ViolenceLevel    string         `json:"violence_level"`
+	LanguageLimits   string         `json:"language_limits"`
+	RomanceLimits    string         `json:"romance_limits"`
+	Constraints      map[string]any `json:"constraints"`
+}
+
+type contentProfileResponse struct {
+	ID        string         `json:"id"`
+	StoryID   string         `json:"story_id"`
+	VersionNo int            `json:"version_no"`
+	Profile   map[string]any `json:"profile"`
+}
+
+func (h *Handler) createContentProfile(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	var req contentProfileInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	cp, err := h.svc.CreateContentProfileVersion(r.Context(), storyID, ContentProfileInput{
+		MaturityTarget:    req.MaturityTarget,
+		AllowedThemes:     req.AllowedThemes,
+		DisallowedThemes:  req.DisallowedThemes,
+		ViolenceLevel:     req.ViolenceLevel,
+		LanguageLimits:    req.LanguageLimits,
+		RomanceLimits:     req.RomanceLimits,
+		Constraints:       req.Constraints,
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, contentProfileResponse{
+		ID:        cp.ID,
+		StoryID:   cp.StoryID,
+		VersionNo: cp.VersionNo,
+		Profile:   cp.Profile,
+	})
+}
+
+func (h *Handler) getContentProfile(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	cp, err := h.svc.GetCurrentContentProfile(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "CONTENT_PROFILE_NOT_FOUND", "content profile not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, contentProfileResponse{
+		ID:        cp.ID,
+		StoryID:   cp.StoryID,
+		VersionNo: cp.VersionNo,
+		Profile:   cp.Profile,
+	})
+}
+
+func (h *Handler) activateStory(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	s, err := h.svc.ActivateStory(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, storyResponse{
+		ID: s.ID, Slug: s.Slug, Title: s.Title, Description: s.Description,
+		Status: s.Status, Visibility: s.Visibility,
+	})
+}
+
+func (h *Handler) archiveStory(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	s, err := h.svc.ArchiveStory(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, storyResponse{
+		ID: s.ID, Slug: s.Slug, Title: s.Title, Description: s.Description,
+		Status: s.Status, Visibility: s.Visibility,
+	})
+}
+
+func (h *Handler) restoreStory(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	s, err := h.svc.RestoreStory(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, storyResponse{
+		ID: s.ID, Slug: s.Slug, Title: s.Title, Description: s.Description,
+		Status: s.Status, Visibility: s.Visibility,
+	})
+}
+
+func (h *Handler) makePublic(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	s, err := h.svc.MakePublic(r.Context(), storyID)
+	if err != nil {
+		if errors.Is(err, ErrNotPublicable) {
+			writeError(w, http.StatusConflict, "NOT_PUBLICABLE", "story not publicable")
+			return
+		}
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, storyResponse{
+		ID: s.ID, Slug: s.Slug, Title: s.Title, Description: s.Description,
+		Status: s.Status, Visibility: s.Visibility,
+	})
+}
+
+func (h *Handler) makePrivate(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	s, err := h.svc.MakePrivate(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, storyResponse{
+		ID: s.ID, Slug: s.Slug, Title: s.Title, Description: s.Description,
+		Status: s.Status, Visibility: s.Visibility,
+	})
+}
+
+func (h *Handler) listGenres(w http.ResponseWriter, r *http.Request) {
+	genres, err := h.svc.ListGenres(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	out := make([]genreResponse, 0, len(genres))
+	for _, g := range genres {
+		out = append(out, genreResponse{ID: g.ID, Slug: g.Slug, Name: g.Name})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"genres": out})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

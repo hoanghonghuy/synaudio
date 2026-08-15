@@ -23,6 +23,9 @@ const (
 var (
 	ErrInvalidTitle = errors.New("invalid title")
 	ErrSlugTaken    = errors.New("slug already taken")
+	ErrStoryNotFound = errors.New("story not found")
+	ErrContentProfileNotFound = errors.New("content profile not found")
+	ErrNotPublicable = errors.New("story not publicable")
 )
 
 // Store is the persistence boundary for the story service.
@@ -30,16 +33,83 @@ type Store interface {
 	CreateStory(ctx context.Context, s Story) (Story, error)
 	CreateGenerationPolicy(ctx context.Context, p GenerationPolicy) error
 	SlugExists(ctx context.Context, slug string) (bool, error)
+	ListGenres(ctx context.Context) ([]Genre, error)
+	ListStories(ctx context.Context, publicOnly bool) ([]Story, error)
+	GetWorkflowSettings(ctx context.Context, storyID string) (WorkflowSettings, error)
+	UpdateWorkflowSettings(ctx context.Context, ws WorkflowSettings) (WorkflowSettings, error)
+	NextContentProfileVersion(ctx context.Context, storyID string) (int, error)
+	CreateContentProfileVersion(ctx context.Context, cp ContentProfileVersion) (ContentProfileVersion, error)
+	GetCurrentContentProfile(ctx context.Context, storyID string) (ContentProfileVersion, error)
+	GetStory(ctx context.Context, storyID string) (Story, error)
+	UpdateStory(ctx context.Context, s Story) (Story, error)
+}
+
+type Genre struct {
+	ID   string
+	Slug string
+	Name string
+}
+
+type ListStoriesInput struct {
+	PublicOnly bool
+}
+
+type WorkflowSettings struct {
+	StoryID             string
+	BatchGenerationSize int
+	CreativeAutonomy    string
+	PreferredTextProvider string
+	PreferredTextModel    string
+	PreferredTTSProvider  string
+	PreferredVoiceID      string
+	PauseBeforeTTS        bool
+	AutoAIReview          bool
+	PlanningHorizon       int
+	FallbackPolicy        map[string]any
+	UpdatedBy             string
+}
+
+type WorkflowSettingsInput struct {
+	BatchGenerationSize int
+	CreativeAutonomy    string
+	PreferredTextProvider string
+	PreferredTextModel    string
+	PreferredTTSProvider  string
+	PreferredVoiceID      string
+	PauseBeforeTTS        bool
+	AutoAIReview          bool
+	PlanningHorizon       int
+	FallbackPolicy        map[string]any
+}
+
+type ContentProfileVersion struct {
+	ID        string
+	StoryID   string
+	VersionNo int
+	Profile   map[string]any
+	CreatedBy string
+}
+
+type ContentProfileInput struct {
+	MaturityTarget string
+	AllowedThemes  []string
+	DisallowedThemes []string
+	ViolenceLevel  string
+	LanguageLimits string
+	RomanceLimits  string
+	Constraints    map[string]any
+	CreatedBy      string
 }
 
 type Story struct {
-	ID          string
-	Slug        string
-	Title       string
-	Description string
-	Status      string
-	Visibility  string
-	CreatedBy   string
+	ID                 string
+	Slug               string
+	Title              string
+	Description        string
+	Status             string
+	Visibility         string
+	StatusBeforeArchive string
+	CreatedBy          string
 }
 
 type GenerationPolicy struct {
@@ -122,6 +192,129 @@ func (s *Service) CreateStory(ctx context.Context, in CreateStoryInput) (Story, 
 	}
 
 	return created, nil
+}
+
+// ListGenres returns all available genres.
+func (s *Service) ListGenres(ctx context.Context) ([]Genre, error) {
+	return s.store.ListGenres(ctx)
+}
+
+// ListStories returns stories, optionally filtered to public only.
+func (s *Service) ListStories(ctx context.Context, in ListStoriesInput) ([]Story, error) {
+	return s.store.ListStories(ctx, in.PublicOnly)
+}
+
+// GetWorkflowSettings returns the mutable workflow settings for a story.
+func (s *Service) GetWorkflowSettings(ctx context.Context, storyID string) (WorkflowSettings, error) {
+	return s.store.GetWorkflowSettings(ctx, storyID)
+}
+
+// UpdateWorkflowSettings updates the mutable workflow settings for a story.
+func (s *Service) UpdateWorkflowSettings(ctx context.Context, storyID string, in WorkflowSettingsInput) (WorkflowSettings, error) {
+	ws := WorkflowSettings{
+		StoryID:              storyID,
+		BatchGenerationSize:  in.BatchGenerationSize,
+		CreativeAutonomy:     in.CreativeAutonomy,
+		PreferredTextProvider: in.PreferredTextProvider,
+		PreferredTextModel:    in.PreferredTextModel,
+		PreferredTTSProvider:  in.PreferredTTSProvider,
+		PreferredVoiceID:      in.PreferredVoiceID,
+		PauseBeforeTTS:        in.PauseBeforeTTS,
+		AutoAIReview:          in.AutoAIReview,
+		PlanningHorizon:       in.PlanningHorizon,
+		FallbackPolicy:        in.FallbackPolicy,
+	}
+	return s.store.UpdateWorkflowSettings(ctx, ws)
+}
+
+// CreateContentProfileVersion creates a new versioned content profile.
+func (s *Service) CreateContentProfileVersion(ctx context.Context, storyID string, in ContentProfileInput) (ContentProfileVersion, error) {
+	versionNo, err := s.store.NextContentProfileVersion(ctx, storyID)
+	if err != nil {
+		return ContentProfileVersion{}, err
+	}
+
+	profile := map[string]any{
+		"maturity_target":    in.MaturityTarget,
+		"allowed_themes":     in.AllowedThemes,
+		"disallowed_themes":  in.DisallowedThemes,
+		"violence_level":     in.ViolenceLevel,
+		"language_limits":    in.LanguageLimits,
+		"romance_limits":     in.RomanceLimits,
+		"constraints":        in.Constraints,
+	}
+
+	cp := ContentProfileVersion{
+		ID:        uuid.NewString(),
+		StoryID:   storyID,
+		VersionNo: versionNo,
+		Profile:   profile,
+		CreatedBy: in.CreatedBy,
+	}
+
+	return s.store.CreateContentProfileVersion(ctx, cp)
+}
+
+// GetCurrentContentProfile returns the latest content profile version.
+func (s *Service) GetCurrentContentProfile(ctx context.Context, storyID string) (ContentProfileVersion, error) {
+	return s.store.GetCurrentContentProfile(ctx, storyID)
+}
+
+// ActivateStory transitions a DRAFT story to ACTIVE.
+func (s *Service) ActivateStory(ctx context.Context, storyID string) (Story, error) {
+	st, err := s.store.GetStory(ctx, storyID)
+	if err != nil {
+		return Story{}, err
+	}
+	st.Status = StatusActive
+	return s.store.UpdateStory(ctx, st)
+}
+
+// ArchiveStory transitions a story to ARCHIVED, saving the previous status.
+func (s *Service) ArchiveStory(ctx context.Context, storyID string) (Story, error) {
+	st, err := s.store.GetStory(ctx, storyID)
+	if err != nil {
+		return Story{}, err
+	}
+	st.StatusBeforeArchive = st.Status
+	st.Status = StatusArchived
+	return s.store.UpdateStory(ctx, st)
+}
+
+// RestoreStory returns an archived story to its previous status.
+func (s *Service) RestoreStory(ctx context.Context, storyID string) (Story, error) {
+	st, err := s.store.GetStory(ctx, storyID)
+	if err != nil {
+		return Story{}, err
+	}
+	if st.StatusBeforeArchive != "" {
+		st.Status = st.StatusBeforeArchive
+		st.StatusBeforeArchive = ""
+	}
+	return s.store.UpdateStory(ctx, st)
+}
+
+// MakePublic sets a story to PUBLIC, requiring ACTIVE or COMPLETED status.
+func (s *Service) MakePublic(ctx context.Context, storyID string) (Story, error) {
+	st, err := s.store.GetStory(ctx, storyID)
+	if err != nil {
+		return Story{}, err
+	}
+	if st.Status != StatusActive && st.Status != StatusCompleted {
+		return Story{}, ErrNotPublicable
+	}
+	st.Visibility = VisibilityPublic
+	return s.store.UpdateStory(ctx, st)
+}
+
+// MakePrivate sets a story to PRIVATE.
+func (s *Service) MakePrivate(ctx context.Context, storyID string) (Story, error) {
+	st, err := s.store.GetStory(ctx, storyID)
+	if err != nil {
+		return Story{}, err
+	}
+	st.Visibility = VisibilityPrivate
+	return s.store.UpdateStory(ctx, st)
 }
 
 var (

@@ -78,3 +78,217 @@ func TestCreateStoryHandlerRejectsEmptyTitle(t *testing.T) {
 		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestListGenresHandlerReturnsGenres(t *testing.T) {
+	store := newFakeStore()
+	store.genres = []story.Genre{
+		{ID: "g1", Slug: "fantasy", Name: "Fantasy"},
+		{ID: "g2", Slug: "romance", Name: "Romance"},
+	}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodGet, "/api/v1/genres", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	genres, ok := resp["genres"].([]any)
+	if !ok {
+		t.Fatalf("expected genres array, got %v", resp["genres"])
+	}
+	if len(genres) != 2 {
+		t.Fatalf("expected 2 genres, got %d", len(genres))
+	}
+}
+
+func TestListStoriesPublicHandlerReturnsPublicOnly(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Visibility: story.VisibilityPublic}
+	store.stories["s2"] = story.Story{ID: "s2", Slug: "b", Title: "B", Visibility: story.VisibilityPrivate}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodGet, "/api/v1/stories", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	stories, ok := resp["stories"].([]any)
+	if !ok {
+		t.Fatalf("expected stories array, got %v", resp["stories"])
+	}
+	if len(stories) != 1 {
+		t.Fatalf("expected 1 public story, got %d", len(stories))
+	}
+}
+
+func TestListStoriesAdminHandlerReturnsAll(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Visibility: story.VisibilityPublic}
+	store.stories["s2"] = story.Story{ID: "s2", Slug: "b", Title: "B", Visibility: story.VisibilityPrivate}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodGet, "/api/v1/admin/stories", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	stories, ok := resp["stories"].([]any)
+	if !ok {
+		t.Fatalf("expected stories array, got %v", resp["stories"])
+	}
+	if len(stories) != 2 {
+		t.Fatalf("expected 2 stories, got %d", len(stories))
+	}
+}
+
+func TestGetWorkflowSettingsHandlerReturnsSettings(t *testing.T) {
+	store := newFakeStore()
+	store.workflowSettings["s1"] = story.WorkflowSettings{StoryID: "s1", AutoAIReview: true}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodGet, "/api/v1/admin/stories/s1/workflow-settings", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["auto_ai_review"] != true {
+		t.Fatalf("expected auto_ai_review true, got %v", resp["auto_ai_review"])
+	}
+}
+
+func TestUpdateWorkflowSettingsHandlerPersists(t *testing.T) {
+	store := newFakeStore()
+	store.workflowSettings["s1"] = story.WorkflowSettings{StoryID: "s1"}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodPut, "/api/v1/admin/stories/s1/workflow-settings", map[string]any{
+		"batch_generation_size": 5,
+		"creative_autonomy":     "BALANCED",
+		"auto_ai_review":        false,
+		"pause_before_tts":      true,
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["batch_generation_size"] != float64(5) {
+		t.Fatalf("expected batch size 5, got %v", resp["batch_generation_size"])
+	}
+}
+
+func TestCreateContentProfileHandlerReturnsCreated(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A"}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodPost, "/api/v1/admin/stories/s1/content-profile", map[string]any{
+		"maturity_target": "TEEN",
+		"allowed_themes":  []string{"adventure"},
+	})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["version_no"] != float64(1) {
+		t.Fatalf("expected version 1, got %v", resp["version_no"])
+	}
+}
+
+func TestGetContentProfileHandlerReturnsCurrent(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A"}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	doJSON(t, h, http.MethodPost, "/api/v1/admin/stories/s1/content-profile", map[string]any{
+		"maturity_target": "TEEN",
+	})
+
+	rec := doJSON(t, h, http.MethodGet, "/api/v1/admin/stories/s1/content-profile", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	profile, ok := resp["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected profile object, got %v", resp["profile"])
+	}
+	if profile["maturity_target"] != "TEEN" {
+		t.Fatalf("expected TEEN, got %v", profile["maturity_target"])
+	}
+}
+
+func TestArchiveStoryHandlerReturnsArchived(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Status: story.StatusActive}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodPost, "/api/v1/admin/stories/s1/archive", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["status"] != story.StatusArchived {
+		t.Fatalf("expected ARCHIVED, got %v", resp["status"])
+	}
+}
+
+func TestMakePublicHandlerRejectsDraft(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Status: story.StatusDraft}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodPost, "/api/v1/admin/stories/s1/make-public", nil)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
