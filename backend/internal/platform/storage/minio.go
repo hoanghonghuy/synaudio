@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -19,7 +20,10 @@ type MinIO struct {
 }
 
 func NewMinIO(cfg config.Config) (*MinIO, error) {
-	client, err := minio.New(cfg.StorageEndpoint, &minio.Options{
+	endpoint := strings.TrimPrefix(cfg.StorageEndpoint, "http://")
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+
+	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.StorageAccessKey, cfg.StorageSecretKey, ""),
 		Secure: false,
 	})

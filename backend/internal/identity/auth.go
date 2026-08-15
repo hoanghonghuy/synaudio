@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -101,6 +103,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Use
 	}
 
 	u := User{
+		ID:           uuid.NewString(),
 		Email:        normalized,
 		PasswordHash: hash,
 		Status:       StatusActive,

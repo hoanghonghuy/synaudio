@@ -41,10 +41,10 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	if deps.AuthHandler != nil {
-		r.Mount("/", deps.AuthHandler)
+		r.Mount("/api/v1/auth", deps.AuthHandler)
 	}
 	if deps.StoryHandler != nil {
-		r.Mount("/", deps.StoryHandler)
+		r.Mount("/api/v1", deps.StoryHandler)
 	}
 
 	return r

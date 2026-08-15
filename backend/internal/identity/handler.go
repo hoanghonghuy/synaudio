@@ -18,15 +18,15 @@ func NewAuthHandler(svc *AuthService) http.Handler {
 	h := &AuthHandler{svc: svc}
 
 	r := chi.NewRouter()
-	r.Post("/api/v1/auth/register", h.register)
-	r.Post("/api/v1/auth/login", h.login)
-	r.Post("/api/v1/auth/email/verify", h.emailVerify)
-	r.Post("/api/v1/auth/email/resend", h.emailResend)
-	r.Post("/api/v1/auth/password/forgot", h.passwordForgot)
-	r.Post("/api/v1/auth/password/reset", h.passwordReset)
-	r.Post("/api/v1/auth/mfa/totp/setup", h.mfaSetup)
-	r.Post("/api/v1/auth/mfa/totp/confirm", h.mfaConfirm)
-	r.Post("/api/v1/auth/mfa/totp/disable", h.mfaDisable)
+	r.Post("/register", h.register)
+	r.Post("/login", h.login)
+	r.Post("/email/verify", h.emailVerify)
+	r.Post("/email/resend", h.emailResend)
+	r.Post("/password/forgot", h.passwordForgot)
+	r.Post("/password/reset", h.passwordReset)
+	r.Post("/mfa/totp/setup", h.mfaSetup)
+	r.Post("/mfa/totp/confirm", h.mfaConfirm)
+	r.Post("/mfa/totp/disable", h.mfaDisable)
 	return r
 }
 

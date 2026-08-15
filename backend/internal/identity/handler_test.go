@@ -8,13 +8,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/synaudio/synaudio/backend/internal/identity"
 )
 
 func newTestHandler() http.Handler {
 	store := newFakeStore()
 	svc := identity.NewAuthService(store)
-	return identity.NewAuthHandler(svc)
+	r := chi.NewRouter()
+	r.Mount("/api/v1/auth", identity.NewAuthHandler(svc))
+	return r
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path string, body any) *httptest.ResponseRecorder {

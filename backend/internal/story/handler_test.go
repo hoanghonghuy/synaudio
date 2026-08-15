@@ -8,13 +8,20 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/synaudio/synaudio/backend/internal/story"
 )
 
 func newTestHandler() http.Handler {
 	store := newFakeStore()
 	svc := story.NewService(store)
-	return story.NewHandler(svc)
+	return wrapHandler(svc)
+}
+
+func wrapHandler(svc *story.Service) http.Handler {
+	r := chi.NewRouter()
+	r.Mount("/api/v1", story.NewHandler(svc))
+	return r
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -87,7 +94,7 @@ func TestListGenresHandlerReturnsGenres(t *testing.T) {
 		{ID: "g2", Slug: "romance", Name: "Romance"},
 	}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodGet, "/api/v1/genres", nil)
 
@@ -113,7 +120,7 @@ func TestListStoriesPublicHandlerReturnsPublicOnly(t *testing.T) {
 	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Visibility: story.VisibilityPublic}
 	store.stories["s2"] = story.Story{ID: "s2", Slug: "b", Title: "B", Visibility: story.VisibilityPrivate}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodGet, "/api/v1/stories", nil)
 
@@ -139,7 +146,7 @@ func TestListStoriesAdminHandlerReturnsAll(t *testing.T) {
 	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Visibility: story.VisibilityPublic}
 	store.stories["s2"] = story.Story{ID: "s2", Slug: "b", Title: "B", Visibility: story.VisibilityPrivate}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodGet, "/api/v1/admin/stories", nil)
 
@@ -164,7 +171,7 @@ func TestGetWorkflowSettingsHandlerReturnsSettings(t *testing.T) {
 	store := newFakeStore()
 	store.workflowSettings["s1"] = story.WorkflowSettings{StoryID: "s1", AutoAIReview: true}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodGet, "/api/v1/admin/stories/s1/workflow-settings", nil)
 
@@ -185,7 +192,7 @@ func TestUpdateWorkflowSettingsHandlerPersists(t *testing.T) {
 	store := newFakeStore()
 	store.workflowSettings["s1"] = story.WorkflowSettings{StoryID: "s1"}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodPut, "/api/v1/admin/stories/s1/workflow-settings", map[string]any{
 		"batch_generation_size": 5,
@@ -211,7 +218,7 @@ func TestCreateContentProfileHandlerReturnsCreated(t *testing.T) {
 	store := newFakeStore()
 	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A"}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/admin/stories/s1/content-profile", map[string]any{
 		"maturity_target": "TEEN",
@@ -235,7 +242,7 @@ func TestGetContentProfileHandlerReturnsCurrent(t *testing.T) {
 	store := newFakeStore()
 	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A"}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	doJSON(t, h, http.MethodPost, "/api/v1/admin/stories/s1/content-profile", map[string]any{
 		"maturity_target": "TEEN",
@@ -264,7 +271,7 @@ func TestArchiveStoryHandlerReturnsArchived(t *testing.T) {
 	store := newFakeStore()
 	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Status: story.StatusActive}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/admin/stories/s1/archive", nil)
 
@@ -285,7 +292,7 @@ func TestMakePublicHandlerRejectsDraft(t *testing.T) {
 	store := newFakeStore()
 	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Status: story.StatusDraft}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/admin/stories/s1/make-public", nil)
 
@@ -299,7 +306,7 @@ func TestUploadCoverHandlerReturnsCreated(t *testing.T) {
 	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A"}
 	storage := newFakeStorage()
 	svc := story.NewService(store, story.WithObjectStorage(storage))
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -334,7 +341,7 @@ func TestSearchStoriesHandlerReturnsPublic(t *testing.T) {
 	store.stories["s2"] = story.Story{ID: "s2", Slug: "b", Title: "B", Visibility: story.VisibilityPrivate}
 	store.storyGenres["s1"] = []string{"fantasy"}
 	svc := story.NewService(store)
-	h := story.NewHandler(svc)
+	h := wrapHandler(svc)
 
 	rec := doJSON(t, h, http.MethodGet, "/api/v1/stories?q=road&genre=fantasy&sort=NEW", nil)
 

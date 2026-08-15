@@ -10,12 +10,10 @@ import (
 
 func TestMFASetupHandlerReturnsSecret(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "user@example.com", "password": "correct password",
-	})
+	userID := registerUser(t, h, "user@example.com")
 
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", map[string]string{
-		"user_id": "user-1",
+		"user_id": userID,
 	})
 
 	if rec.Code != http.StatusOK {
@@ -33,13 +31,11 @@ func TestMFASetupHandlerReturnsSecret(t *testing.T) {
 
 func TestMFAConfirmHandlerReturnsRecoveryCodes(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "user@example.com", "password": "correct password",
-	})
+	userID := registerUser(t, h, "user@example.com")
 
 	// Setup to obtain a valid secret.
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", map[string]string{
-		"user_id": "user-1",
+		"user_id": userID,
 	})
 	var setupResp map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &setupResp)
@@ -49,7 +45,7 @@ func TestMFAConfirmHandlerReturnsRecoveryCodes(t *testing.T) {
 	code, _ := identity.TOTPCode(secret, now)
 
 	rec = doJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/confirm", map[string]any{
-		"user_id": "user-1",
+		"user_id": userID,
 		"code":    code,
 	})
 
@@ -69,15 +65,13 @@ func TestMFAConfirmHandlerReturnsRecoveryCodes(t *testing.T) {
 
 func TestMFAConfirmHandlerRejectsWrongCode(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "user@example.com", "password": "correct password",
-	})
+	userID := registerUser(t, h, "user@example.com")
 	doJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", map[string]string{
-		"user_id": "user-1",
+		"user_id": userID,
 	})
 
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/confirm", map[string]any{
-		"user_id": "user-1",
+		"user_id": userID,
 		"code":    "000000",
 	})
 
@@ -88,18 +82,35 @@ func TestMFAConfirmHandlerRejectsWrongCode(t *testing.T) {
 
 func TestMFADisableHandlerReturnsOK(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "user@example.com", "password": "correct password",
-	})
+	userID := registerUser(t, h, "user@example.com")
 	doJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", map[string]string{
-		"user_id": "user-1",
+		"user_id": userID,
 	})
 
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/disable", map[string]string{
-		"user_id": "user-1",
+		"user_id": userID,
 	})
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
+}
+
+func registerUser(t *testing.T, h http.Handler, email string) string {
+	t.Helper()
+	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
+		"email": email, "password": "correct password",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
+	id, _ := resp["id"].(string)
+	if id == "" {
+		t.Fatal("expected id in register response")
+	}
+	return id
 }
