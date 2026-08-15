@@ -17,14 +17,16 @@ var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrAccountSuspended   = errors.New("account suspended")
+	ErrInvalidToken       = errors.New("invalid token")
 )
 
 type User struct {
-	ID           string
-	Email        string
-	PasswordHash string
-	DisplayName  string
-	Status       string
+	ID              string
+	Email           string
+	PasswordHash    string
+	DisplayName     string
+	Status          string
+	EmailVerifiedAt string
 }
 
 type Session struct {
@@ -39,7 +41,17 @@ type Session struct {
 type Store interface {
 	CreateUser(ctx context.Context, u User) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	GetUserByID(ctx context.Context, id string) (User, error)
 	CreateSession(ctx context.Context, s Session) error
+
+	StoreVerificationToken(ctx context.Context, userID, tokenHash string) error
+	GetVerificationToken(ctx context.Context, userID string) (string, error)
+	MarkEmailVerified(ctx context.Context, userID string) error
+
+	StoreResetToken(ctx context.Context, userID, tokenHash string) error
+	GetResetToken(ctx context.Context, userID string) (string, error)
+	UpdatePassword(ctx context.Context, userID, passwordHash string) error
+	RevokeSessions(ctx context.Context, userID string) error
 }
 
 type AuthService struct {

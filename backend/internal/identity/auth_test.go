@@ -41,14 +41,19 @@ func TestHashTokenVerifies(t *testing.T) {
 }
 
 type fakeStore struct {
-	users    map[string]identity.User
-	sessions map[string]identity.Session
+	users              map[string]identity.User
+	sessions           map[string]identity.Session
+	verificationTokens map[string]string
+	resetTokens        map[string]string
+	sessionsRevoked    bool
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		users:    map[string]identity.User{},
-		sessions: map[string]identity.Session{},
+		users:              map[string]identity.User{},
+		sessions:           map[string]identity.Session{},
+		verificationTokens: map[string]string{},
+		resetTokens:        map[string]string{},
 	}
 }
 
@@ -70,6 +75,68 @@ func (s *fakeStore) GetUserByEmail(_ context.Context, email string) (identity.Us
 
 func (s *fakeStore) CreateSession(_ context.Context, sess identity.Session) error {
 	s.sessions[sess.ID] = sess
+	return nil
+}
+
+func (s *fakeStore) GetUserByID(_ context.Context, id string) (identity.User, error) {
+	for _, u := range s.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return identity.User{}, identity.ErrUserNotFound
+}
+
+func (s *fakeStore) StoreVerificationToken(_ context.Context, userID, tokenHash string) error {
+	s.verificationTokens[userID] = tokenHash
+	return nil
+}
+
+func (s *fakeStore) GetVerificationToken(_ context.Context, userID string) (string, error) {
+	h, ok := s.verificationTokens[userID]
+	if !ok {
+		return "", identity.ErrInvalidToken
+	}
+	return h, nil
+}
+
+func (s *fakeStore) MarkEmailVerified(_ context.Context, userID string) error {
+	for email, u := range s.users {
+		if u.ID == userID {
+			u.EmailVerifiedAt = "now"
+			s.users[email] = u
+			return nil
+		}
+	}
+	return identity.ErrUserNotFound
+}
+
+func (s *fakeStore) StoreResetToken(_ context.Context, userID, tokenHash string) error {
+	s.resetTokens[userID] = tokenHash
+	return nil
+}
+
+func (s *fakeStore) GetResetToken(_ context.Context, userID string) (string, error) {
+	h, ok := s.resetTokens[userID]
+	if !ok {
+		return "", identity.ErrInvalidToken
+	}
+	return h, nil
+}
+
+func (s *fakeStore) UpdatePassword(_ context.Context, userID, passwordHash string) error {
+	for email, u := range s.users {
+		if u.ID == userID {
+			u.PasswordHash = passwordHash
+			s.users[email] = u
+			return nil
+		}
+	}
+	return identity.ErrUserNotFound
+}
+
+func (s *fakeStore) RevokeSessions(_ context.Context, userID string) error {
+	s.sessionsRevoked = true
 	return nil
 }
 
