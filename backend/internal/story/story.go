@@ -26,12 +26,14 @@ var (
 	ErrStoryNotFound = errors.New("story not found")
 	ErrContentProfileNotFound = errors.New("content profile not found")
 	ErrNotPublicable = errors.New("story not publicable")
+	ErrActivationNotReady = errors.New("activation gate not ready")
 )
 
 // Store is the persistence boundary for the story service.
 type Store interface {
 	CreateStory(ctx context.Context, s Story) (Story, error)
 	CreateGenerationPolicy(ctx context.Context, p GenerationPolicy) error
+	HasGenerationPolicy(ctx context.Context, storyID string) (bool, error)
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	ListGenres(ctx context.Context) ([]Genre, error)
 	ListStories(ctx context.Context, publicOnly bool) ([]Story, error)
@@ -62,6 +64,11 @@ type SearchStoriesInput struct {
 // ObjectStorage is the boundary for object storage (MinIO/R2).
 type ObjectStorage interface {
 	Put(ctx context.Context, key string, data []byte) error
+}
+
+// ActivationChecker reports missing dependencies blocking story activation.
+type ActivationChecker interface {
+	CheckActivationReady(ctx context.Context, storyID string) (missing []string, err error)
 }
 
 const (
@@ -156,6 +163,7 @@ type Story struct {
 	Description        string
 	Status             string
 	Visibility         string
+	PlanningMode       string
 	StatusBeforeArchive string
 	CoverAssetID       string
 	CreatedBy          string
@@ -188,8 +196,9 @@ type CreateStoryInput struct {
 }
 
 type Service struct {
-	store   Store
-	storage ObjectStorage
+	store     Store
+	storage   ObjectStorage
+	activation ActivationChecker
 }
 
 type Option func(*Service)
@@ -197,6 +206,12 @@ type Option func(*Service)
 func WithObjectStorage(s ObjectStorage) Option {
 	return func(svc *Service) {
 		svc.storage = s
+	}
+}
+
+func WithActivationChecker(c ActivationChecker) Option {
+	return func(svc *Service) {
+		svc.activation = c
 	}
 }
 
@@ -327,12 +342,45 @@ func (s *Service) GetCurrentContentProfile(ctx context.Context, storyID string) 
 	return s.store.GetCurrentContentProfile(ctx, storyID)
 }
 
-// ActivateStory transitions a DRAFT story to ACTIVE.
+// ActivateStory transitions a DRAFT story to ACTIVE after the Activation Gate passes.
 func (s *Service) ActivateStory(ctx context.Context, storyID string) (Story, error) {
 	st, err := s.store.GetStory(ctx, storyID)
 	if err != nil {
 		return Story{}, err
 	}
+
+	missing := []string{}
+
+	if st.PlanningMode == "" {
+		missing = append(missing, "planning_mode")
+	}
+
+	hasPolicy, err := s.store.HasGenerationPolicy(ctx, storyID)
+	if err != nil {
+		return Story{}, err
+	}
+	if !hasPolicy {
+		missing = append(missing, "generation_policy")
+	}
+
+	if _, err := s.store.GetCurrentContentProfile(ctx, storyID); err != nil {
+		missing = append(missing, "content_profile")
+	}
+
+	if s.activation == nil {
+		missing = append(missing, "planning_foundation")
+	} else {
+		planningMissing, err := s.activation.CheckActivationReady(ctx, storyID)
+		if err != nil {
+			return Story{}, err
+		}
+		missing = append(missing, planningMissing...)
+	}
+
+	if len(missing) > 0 {
+		return Story{}, ErrActivationNotReady
+	}
+
 	st.Status = StatusActive
 	return s.store.UpdateStory(ctx, st)
 }

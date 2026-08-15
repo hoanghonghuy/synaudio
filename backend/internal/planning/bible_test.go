@@ -18,6 +18,17 @@ type fakeStore struct {
 	characters  map[string][]Character
 	profiles    map[string][]CharacterProfileVersion
 	nextProf    map[string]int
+	chapters    map[string][]Chapter
+	plans       map[string][]ChapterPlanRevision
+	nextPlan    map[string]int
+	nextChapter map[string]int
+	facts       map[string][]StoryFact
+	threads     map[string][]PlotThread
+	events      map[string][]PlotThreadEvent
+	branches    map[string][]CanonBranch
+	versions    map[string][]CanonVersion
+	nextSeq     map[string]int
+	snapshots   map[string][]ContextSnapshot
 }
 
 func newFakeStore() *fakeStore {
@@ -33,6 +44,17 @@ func newFakeStore() *fakeStore {
 		characters:  map[string][]Character{},
 		profiles:    map[string][]CharacterProfileVersion{},
 		nextProf:    map[string]int{},
+		chapters:    map[string][]Chapter{},
+		plans:       map[string][]ChapterPlanRevision{},
+		nextPlan:    map[string]int{},
+		nextChapter: map[string]int{},
+		facts:       map[string][]StoryFact{},
+		threads:     map[string][]PlotThread{},
+		events:      map[string][]PlotThreadEvent{},
+		branches:    map[string][]CanonBranch{},
+		versions:    map[string][]CanonVersion{},
+		nextSeq:     map[string]int{},
+		snapshots:   map[string][]ContextSnapshot{},
 	}
 }
 
@@ -135,6 +157,92 @@ func (s *fakeStore) GetCharacter(ctx context.Context, characterID string) (Chara
 		}
 	}
 	return Character{}, ErrCharacterNotFound
+}
+
+func (s *fakeStore) NextChapterNumber(ctx context.Context, storyID string) (int, error) {
+	s.nextChapter[storyID]++
+	return s.nextChapter[storyID], nil
+}
+
+func (s *fakeStore) CreateChapter(ctx context.Context, c Chapter) (Chapter, error) {
+	s.chapters[c.StoryID] = append(s.chapters[c.StoryID], c)
+	return c, nil
+}
+
+func (s *fakeStore) NextPlanRevision(ctx context.Context, chapterID string) (int, error) {
+	s.nextPlan[chapterID]++
+	return s.nextPlan[chapterID], nil
+}
+
+func (s *fakeStore) CreatePlanRevision(ctx context.Context, p ChapterPlanRevision) (ChapterPlanRevision, error) {
+	s.plans[p.ChapterID] = append(s.plans[p.ChapterID], p)
+	return p, nil
+}
+
+func (s *fakeStore) GetChapter(ctx context.Context, chapterID string) (Chapter, error) {
+	for _, cs := range s.chapters {
+		for _, c := range cs {
+			if c.ID == chapterID {
+				return c, nil
+			}
+		}
+	}
+	return Chapter{}, ErrChapterNotFound
+}
+
+func (s *fakeStore) ListChapters(ctx context.Context, storyID string) ([]Chapter, error) {
+	return s.chapters[storyID], nil
+}
+
+func (s *fakeStore) CreateFact(ctx context.Context, f StoryFact) (StoryFact, error) {
+	s.facts[f.StoryID] = append(s.facts[f.StoryID], f)
+	return f, nil
+}
+
+func (s *fakeStore) ListFacts(ctx context.Context, storyID string) ([]StoryFact, error) {
+	return s.facts[storyID], nil
+}
+
+func (s *fakeStore) CreatePlotThread(ctx context.Context, t PlotThread) (PlotThread, error) {
+	s.threads[t.StoryID] = append(s.threads[t.StoryID], t)
+	return t, nil
+}
+
+func (s *fakeStore) ListPlotThreads(ctx context.Context, storyID string) ([]PlotThread, error) {
+	return s.threads[storyID], nil
+}
+
+func (s *fakeStore) CreatePlotThreadEvent(ctx context.Context, e PlotThreadEvent) (PlotThreadEvent, error) {
+	s.events[e.PlotThreadID] = append(s.events[e.PlotThreadID], e)
+	return e, nil
+}
+
+func (s *fakeStore) CreateCanonBranch(ctx context.Context, b CanonBranch) (CanonBranch, error) {
+	s.branches[b.StoryID] = append(s.branches[b.StoryID], b)
+	return b, nil
+}
+
+func (s *fakeStore) NextCanonSequence(ctx context.Context, branchID string) (int, error) {
+	s.nextSeq[branchID]++
+	return s.nextSeq[branchID], nil
+}
+
+func (s *fakeStore) CreateCanonVersion(ctx context.Context, v CanonVersion) (CanonVersion, error) {
+	s.versions[v.BranchID] = append(s.versions[v.BranchID], v)
+	return v, nil
+}
+
+func (s *fakeStore) ListCanonVersions(ctx context.Context, branchID string) ([]CanonVersion, error) {
+	return s.versions[branchID], nil
+}
+
+func (s *fakeStore) CreateContextSnapshot(ctx context.Context, sn ContextSnapshot) (ContextSnapshot, error) {
+	s.snapshots[sn.StoryID] = append(s.snapshots[sn.StoryID], sn)
+	return sn, nil
+}
+
+func (s *fakeStore) ListContextSnapshots(ctx context.Context, storyID string) ([]ContextSnapshot, error) {
+	return s.snapshots[storyID], nil
 }
 
 func TestCreateBibleVersionAssignsSequentialVersion(t *testing.T) {

@@ -44,6 +44,11 @@ func (s *fakeStore) CreateGenerationPolicy(_ context.Context, p story.Generation
 	return nil
 }
 
+func (s *fakeStore) HasGenerationPolicy(_ context.Context, storyID string) (bool, error) {
+	_, ok := s.policies[storyID]
+	return ok, nil
+}
+
 func (s *fakeStore) SlugExists(_ context.Context, slug string) (bool, error) {
 	return s.slugs[slug], nil
 }

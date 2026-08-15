@@ -272,6 +272,17 @@ func (q *Queries) GetWorkflowSettings(ctx context.Context, storyID pgtype.UUID) 
 	return i, err
 }
 
+const hasGenerationPolicy = `-- name: HasGenerationPolicy :one
+SELECT EXISTS(SELECT 1 FROM story_generation_policies WHERE story_id = $1)
+`
+
+func (q *Queries) HasGenerationPolicy(ctx context.Context, storyID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasGenerationPolicy, storyID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const linkCoverAsset = `-- name: LinkCoverAsset :exec
 UPDATE stories SET cover_asset_id = $2, updated_at = NOW() WHERE id = $1
 `

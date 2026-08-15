@@ -48,6 +48,9 @@ INSERT INTO story_generation_policies (story_id, minimum_audio_duration_sec, tar
                                        content_origin, language, narration_language, policy_version, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
+-- name: HasGenerationPolicy :one
+SELECT EXISTS(SELECT 1 FROM story_generation_policies WHERE story_id = $1);
+
 -- name: GetWorkflowSettings :one
 SELECT story_id, batch_generation_size, creative_autonomy, preferred_text_provider,
        preferred_text_model, preferred_tts_provider, preferred_voice_id, pause_before_tts,

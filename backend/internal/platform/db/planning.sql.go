@@ -119,6 +119,140 @@ func (q *Queries) CreateBibleVersion(ctx context.Context, arg CreateBibleVersion
 	return i, err
 }
 
+const createCanonBranch = `-- name: CreateCanonBranch :one
+
+INSERT INTO canon_branches (id, story_id, type, status)
+VALUES ($1, $2, $3, $4)
+RETURNING id, story_id, type, status, base_version_id, generation_run_id, retcon_request_id, created_at
+`
+
+type CreateCanonBranchParams struct {
+	ID      pgtype.UUID `json:"id"`
+	StoryID pgtype.UUID `json:"story_id"`
+	Type    string      `json:"type"`
+	Status  string      `json:"status"`
+}
+
+// ============================================================
+// Canon branches + versions
+// ============================================================
+func (q *Queries) CreateCanonBranch(ctx context.Context, arg CreateCanonBranchParams) (CanonBranch, error) {
+	row := q.db.QueryRow(ctx, createCanonBranch,
+		arg.ID,
+		arg.StoryID,
+		arg.Type,
+		arg.Status,
+	)
+	var i CanonBranch
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.Type,
+		&i.Status,
+		&i.BaseVersionID,
+		&i.GenerationRunID,
+		&i.RetconRequestID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createCanonVersion = `-- name: CreateCanonVersion :one
+INSERT INTO canon_versions (id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id, status, committed_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id,
+          source_content_revision_id, source_provisional_version_id, generation_run_id,
+          retcon_request_id, status, committed_by, created_at
+`
+
+type CreateCanonVersionParams struct {
+	ID              pgtype.UUID `json:"id"`
+	StoryID         pgtype.UUID `json:"story_id"`
+	BranchID        pgtype.UUID `json:"branch_id"`
+	SequenceNo      int32       `json:"sequence_no"`
+	ParentVersionID pgtype.UUID `json:"parent_version_id"`
+	SourceChapterID pgtype.UUID `json:"source_chapter_id"`
+	Status          string      `json:"status"`
+	CommittedBy     pgtype.UUID `json:"committed_by"`
+}
+
+func (q *Queries) CreateCanonVersion(ctx context.Context, arg CreateCanonVersionParams) (CanonVersion, error) {
+	row := q.db.QueryRow(ctx, createCanonVersion,
+		arg.ID,
+		arg.StoryID,
+		arg.BranchID,
+		arg.SequenceNo,
+		arg.ParentVersionID,
+		arg.SourceChapterID,
+		arg.Status,
+		arg.CommittedBy,
+	)
+	var i CanonVersion
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.BranchID,
+		&i.SequenceNo,
+		&i.ParentVersionID,
+		&i.SourceChapterID,
+		&i.SourceContentRevisionID,
+		&i.SourceProvisionalVersionID,
+		&i.GenerationRunID,
+		&i.RetconRequestID,
+		&i.Status,
+		&i.CommittedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createChapter = `-- name: CreateChapter :one
+INSERT INTO chapters (id, story_id, chapter_number, title, status, arc_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, story_id, chapter_number, title, status, arc_id, current_plan_revision_id,
+          current_content_revision_id, current_narration_revision_id, current_audio_asset_id,
+          official_canon_version_id, published_at, archived_at, created_at, updated_at
+`
+
+type CreateChapterParams struct {
+	ID            pgtype.UUID `json:"id"`
+	StoryID       pgtype.UUID `json:"story_id"`
+	ChapterNumber int32       `json:"chapter_number"`
+	Title         pgtype.Text `json:"title"`
+	Status        string      `json:"status"`
+	ArcID         pgtype.UUID `json:"arc_id"`
+}
+
+func (q *Queries) CreateChapter(ctx context.Context, arg CreateChapterParams) (Chapter, error) {
+	row := q.db.QueryRow(ctx, createChapter,
+		arg.ID,
+		arg.StoryID,
+		arg.ChapterNumber,
+		arg.Title,
+		arg.Status,
+		arg.ArcID,
+	)
+	var i Chapter
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.ChapterNumber,
+		&i.Title,
+		&i.Status,
+		&i.ArcID,
+		&i.CurrentPlanRevisionID,
+		&i.CurrentContentRevisionID,
+		&i.CurrentNarrationRevisionID,
+		&i.CurrentAudioAssetID,
+		&i.OfficialCanonVersionID,
+		&i.PublishedAt,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createCharacter = `-- name: CreateCharacter :one
 
 INSERT INTO characters (id, story_id, canonical_name, importance)
@@ -150,6 +284,74 @@ func (q *Queries) CreateCharacter(ctx context.Context, arg CreateCharacterParams
 		&i.CanonicalName,
 		&i.Importance,
 		&i.CurrentProfileVersionID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createContextSnapshot = `-- name: CreateContextSnapshot :one
+
+INSERT INTO context_snapshots (id, story_id, chapter_id, canon_version_id, bible_version_id,
+                              ending_plan_version_id, arc_version_id, content_profile_version_id,
+                              prompt_version, workflow_version, provider, model)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, run_id, story_id, chapter_id, canon_version_id, bible_version_id,
+          ending_plan_version_id, arc_version_id, content_profile_version_id,
+          prompt_version, workflow_version, provider, model, included_refs,
+          historical_hits, admin_instruction, created_at
+`
+
+type CreateContextSnapshotParams struct {
+	ID                      pgtype.UUID `json:"id"`
+	StoryID                 pgtype.UUID `json:"story_id"`
+	ChapterID               pgtype.UUID `json:"chapter_id"`
+	CanonVersionID          pgtype.UUID `json:"canon_version_id"`
+	BibleVersionID          pgtype.UUID `json:"bible_version_id"`
+	EndingPlanVersionID     pgtype.UUID `json:"ending_plan_version_id"`
+	ArcVersionID            pgtype.UUID `json:"arc_version_id"`
+	ContentProfileVersionID pgtype.UUID `json:"content_profile_version_id"`
+	PromptVersion           pgtype.Text `json:"prompt_version"`
+	WorkflowVersion         pgtype.Text `json:"workflow_version"`
+	Provider                pgtype.Text `json:"provider"`
+	Model                   pgtype.Text `json:"model"`
+}
+
+// ============================================================
+// ContextSnapshots
+// ============================================================
+func (q *Queries) CreateContextSnapshot(ctx context.Context, arg CreateContextSnapshotParams) (ContextSnapshot, error) {
+	row := q.db.QueryRow(ctx, createContextSnapshot,
+		arg.ID,
+		arg.StoryID,
+		arg.ChapterID,
+		arg.CanonVersionID,
+		arg.BibleVersionID,
+		arg.EndingPlanVersionID,
+		arg.ArcVersionID,
+		arg.ContentProfileVersionID,
+		arg.PromptVersion,
+		arg.WorkflowVersion,
+		arg.Provider,
+		arg.Model,
+	)
+	var i ContextSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.StoryID,
+		&i.ChapterID,
+		&i.CanonVersionID,
+		&i.BibleVersionID,
+		&i.EndingPlanVersionID,
+		&i.ArcVersionID,
+		&i.ContentProfileVersionID,
+		&i.PromptVersion,
+		&i.WorkflowVersion,
+		&i.Provider,
+		&i.Model,
+		&i.IncludedRefs,
+		&i.HistoricalHits,
+		&i.AdminInstruction,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -188,6 +390,188 @@ func (q *Queries) CreateEndingVersion(ctx context.Context, arg CreateEndingVersi
 		&i.BasedOnVersionID,
 		&i.CreatedBy,
 		&i.GenerationRunID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createFact = `-- name: CreateFact :one
+
+INSERT INTO story_facts (id, story_id, subject_type, subject_id, fact_type, value, importance, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, story_id, subject_type, subject_id, fact_type, value, importance, status,
+          valid_from_canon_version_id, invalidated_at_canon_version_id, supersedes_fact_id,
+          source_chapter_id, source_content_revision_id, generation_run_id, created_at
+`
+
+type CreateFactParams struct {
+	ID          pgtype.UUID `json:"id"`
+	StoryID     pgtype.UUID `json:"story_id"`
+	SubjectType pgtype.Text `json:"subject_type"`
+	SubjectID   pgtype.UUID `json:"subject_id"`
+	FactType    string      `json:"fact_type"`
+	Value       []byte      `json:"value"`
+	Importance  string      `json:"importance"`
+	Status      string      `json:"status"`
+}
+
+// ============================================================
+// StoryFacts
+// ============================================================
+func (q *Queries) CreateFact(ctx context.Context, arg CreateFactParams) (StoryFact, error) {
+	row := q.db.QueryRow(ctx, createFact,
+		arg.ID,
+		arg.StoryID,
+		arg.SubjectType,
+		arg.SubjectID,
+		arg.FactType,
+		arg.Value,
+		arg.Importance,
+		arg.Status,
+	)
+	var i StoryFact
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.SubjectType,
+		&i.SubjectID,
+		&i.FactType,
+		&i.Value,
+		&i.Importance,
+		&i.Status,
+		&i.ValidFromCanonVersionID,
+		&i.InvalidatedAtCanonVersionID,
+		&i.SupersedesFactID,
+		&i.SourceChapterID,
+		&i.SourceContentRevisionID,
+		&i.GenerationRunID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createPlanRevision = `-- name: CreatePlanRevision :one
+INSERT INTO chapter_plan_revisions (id, chapter_id, revision_no, plan, base_canon_version_id, arc_version_id, source_type, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, chapter_id, revision_no, plan, base_canon_version_id, arc_version_id, source_type, generation_run_id, created_by, created_at
+`
+
+type CreatePlanRevisionParams struct {
+	ID                 pgtype.UUID `json:"id"`
+	ChapterID          pgtype.UUID `json:"chapter_id"`
+	RevisionNo         int32       `json:"revision_no"`
+	Plan               []byte      `json:"plan"`
+	BaseCanonVersionID pgtype.UUID `json:"base_canon_version_id"`
+	ArcVersionID       pgtype.UUID `json:"arc_version_id"`
+	SourceType         string      `json:"source_type"`
+	CreatedBy          pgtype.UUID `json:"created_by"`
+}
+
+func (q *Queries) CreatePlanRevision(ctx context.Context, arg CreatePlanRevisionParams) (ChapterPlanRevision, error) {
+	row := q.db.QueryRow(ctx, createPlanRevision,
+		arg.ID,
+		arg.ChapterID,
+		arg.RevisionNo,
+		arg.Plan,
+		arg.BaseCanonVersionID,
+		arg.ArcVersionID,
+		arg.SourceType,
+		arg.CreatedBy,
+	)
+	var i ChapterPlanRevision
+	err := row.Scan(
+		&i.ID,
+		&i.ChapterID,
+		&i.RevisionNo,
+		&i.Plan,
+		&i.BaseCanonVersionID,
+		&i.ArcVersionID,
+		&i.SourceType,
+		&i.GenerationRunID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createPlotThread = `-- name: CreatePlotThread :one
+
+INSERT INTO plot_threads (id, story_id, title, summary, importance, status)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, story_id, title, summary, importance, status,
+          opened_chapter_id, resolved_chapter_id, last_advanced_chapter_id, created_at, updated_at
+`
+
+type CreatePlotThreadParams struct {
+	ID         pgtype.UUID `json:"id"`
+	StoryID    pgtype.UUID `json:"story_id"`
+	Title      string      `json:"title"`
+	Summary    pgtype.Text `json:"summary"`
+	Importance string      `json:"importance"`
+	Status     string      `json:"status"`
+}
+
+// ============================================================
+// PlotThreads
+// ============================================================
+func (q *Queries) CreatePlotThread(ctx context.Context, arg CreatePlotThreadParams) (PlotThread, error) {
+	row := q.db.QueryRow(ctx, createPlotThread,
+		arg.ID,
+		arg.StoryID,
+		arg.Title,
+		arg.Summary,
+		arg.Importance,
+		arg.Status,
+	)
+	var i PlotThread
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.Title,
+		&i.Summary,
+		&i.Importance,
+		&i.Status,
+		&i.OpenedChapterID,
+		&i.ResolvedChapterID,
+		&i.LastAdvancedChapterID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createPlotThreadEvent = `-- name: CreatePlotThreadEvent :one
+INSERT INTO plot_thread_events (id, plot_thread_id, canon_version_id, chapter_id, event_type, detail)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, plot_thread_id, canon_version_id, chapter_id, event_type, detail, created_at
+`
+
+type CreatePlotThreadEventParams struct {
+	ID             pgtype.UUID `json:"id"`
+	PlotThreadID   pgtype.UUID `json:"plot_thread_id"`
+	CanonVersionID pgtype.UUID `json:"canon_version_id"`
+	ChapterID      pgtype.UUID `json:"chapter_id"`
+	EventType      string      `json:"event_type"`
+	Detail         []byte      `json:"detail"`
+}
+
+func (q *Queries) CreatePlotThreadEvent(ctx context.Context, arg CreatePlotThreadEventParams) (PlotThreadEvent, error) {
+	row := q.db.QueryRow(ctx, createPlotThreadEvent,
+		arg.ID,
+		arg.PlotThreadID,
+		arg.CanonVersionID,
+		arg.ChapterID,
+		arg.EventType,
+		arg.Detail,
+	)
+	var i PlotThreadEvent
+	err := row.Scan(
+		&i.ID,
+		&i.PlotThreadID,
+		&i.CanonVersionID,
+		&i.ChapterID,
+		&i.EventType,
+		&i.Detail,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -247,6 +631,37 @@ func (q *Queries) GetArc(ctx context.Context, id pgtype.UUID) (StoryArc, error) 
 		&i.Status,
 		&i.CurrentVersionID,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getChapter = `-- name: GetChapter :one
+SELECT id, story_id, chapter_number, title, status, arc_id, current_plan_revision_id,
+       current_content_revision_id, current_narration_revision_id, current_audio_asset_id,
+       official_canon_version_id, published_at, archived_at, created_at, updated_at
+FROM chapters
+WHERE id = $1
+`
+
+func (q *Queries) GetChapter(ctx context.Context, id pgtype.UUID) (Chapter, error) {
+	row := q.db.QueryRow(ctx, getChapter, id)
+	var i Chapter
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.ChapterNumber,
+		&i.Title,
+		&i.Status,
+		&i.ArcID,
+		&i.CurrentPlanRevisionID,
+		&i.CurrentContentRevisionID,
+		&i.CurrentNarrationRevisionID,
+		&i.CurrentAudioAssetID,
+		&i.OfficialCanonVersionID,
+		&i.PublishedAt,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -353,6 +768,94 @@ func (q *Queries) ListArcs(ctx context.Context, storyID pgtype.UUID) ([]StoryArc
 	return items, nil
 }
 
+const listCanonVersions = `-- name: ListCanonVersions :many
+SELECT id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id,
+       source_content_revision_id, source_provisional_version_id, generation_run_id,
+       retcon_request_id, status, committed_by, created_at
+FROM canon_versions
+WHERE branch_id = $1
+ORDER BY sequence_no
+`
+
+func (q *Queries) ListCanonVersions(ctx context.Context, branchID pgtype.UUID) ([]CanonVersion, error) {
+	rows, err := q.db.Query(ctx, listCanonVersions, branchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CanonVersion{}
+	for rows.Next() {
+		var i CanonVersion
+		if err := rows.Scan(
+			&i.ID,
+			&i.StoryID,
+			&i.BranchID,
+			&i.SequenceNo,
+			&i.ParentVersionID,
+			&i.SourceChapterID,
+			&i.SourceContentRevisionID,
+			&i.SourceProvisionalVersionID,
+			&i.GenerationRunID,
+			&i.RetconRequestID,
+			&i.Status,
+			&i.CommittedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChapters = `-- name: ListChapters :many
+SELECT id, story_id, chapter_number, title, status, arc_id, current_plan_revision_id,
+       current_content_revision_id, current_narration_revision_id, current_audio_asset_id,
+       official_canon_version_id, published_at, archived_at, created_at, updated_at
+FROM chapters
+WHERE story_id = $1
+ORDER BY chapter_number
+`
+
+func (q *Queries) ListChapters(ctx context.Context, storyID pgtype.UUID) ([]Chapter, error) {
+	rows, err := q.db.Query(ctx, listChapters, storyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Chapter{}
+	for rows.Next() {
+		var i Chapter
+		if err := rows.Scan(
+			&i.ID,
+			&i.StoryID,
+			&i.ChapterNumber,
+			&i.Title,
+			&i.Status,
+			&i.ArcID,
+			&i.CurrentPlanRevisionID,
+			&i.CurrentContentRevisionID,
+			&i.CurrentNarrationRevisionID,
+			&i.CurrentAudioAssetID,
+			&i.OfficialCanonVersionID,
+			&i.PublishedAt,
+			&i.ArchivedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCharacters = `-- name: ListCharacters :many
 SELECT id, story_id, canonical_name, importance, current_profile_version_id, created_at
 FROM characters
@@ -376,6 +879,139 @@ func (q *Queries) ListCharacters(ctx context.Context, storyID pgtype.UUID) ([]Ch
 			&i.Importance,
 			&i.CurrentProfileVersionID,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listContextSnapshots = `-- name: ListContextSnapshots :many
+SELECT id, run_id, story_id, chapter_id, canon_version_id, bible_version_id,
+       ending_plan_version_id, arc_version_id, content_profile_version_id,
+       prompt_version, workflow_version, provider, model, included_refs,
+       historical_hits, admin_instruction, created_at
+FROM context_snapshots
+WHERE story_id = $1
+ORDER BY created_at
+`
+
+func (q *Queries) ListContextSnapshots(ctx context.Context, storyID pgtype.UUID) ([]ContextSnapshot, error) {
+	rows, err := q.db.Query(ctx, listContextSnapshots, storyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ContextSnapshot{}
+	for rows.Next() {
+		var i ContextSnapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.StoryID,
+			&i.ChapterID,
+			&i.CanonVersionID,
+			&i.BibleVersionID,
+			&i.EndingPlanVersionID,
+			&i.ArcVersionID,
+			&i.ContentProfileVersionID,
+			&i.PromptVersion,
+			&i.WorkflowVersion,
+			&i.Provider,
+			&i.Model,
+			&i.IncludedRefs,
+			&i.HistoricalHits,
+			&i.AdminInstruction,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFacts = `-- name: ListFacts :many
+SELECT id, story_id, subject_type, subject_id, fact_type, value, importance, status,
+       valid_from_canon_version_id, invalidated_at_canon_version_id, supersedes_fact_id,
+       source_chapter_id, source_content_revision_id, generation_run_id, created_at
+FROM story_facts
+WHERE story_id = $1
+ORDER BY created_at
+`
+
+func (q *Queries) ListFacts(ctx context.Context, storyID pgtype.UUID) ([]StoryFact, error) {
+	rows, err := q.db.Query(ctx, listFacts, storyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StoryFact{}
+	for rows.Next() {
+		var i StoryFact
+		if err := rows.Scan(
+			&i.ID,
+			&i.StoryID,
+			&i.SubjectType,
+			&i.SubjectID,
+			&i.FactType,
+			&i.Value,
+			&i.Importance,
+			&i.Status,
+			&i.ValidFromCanonVersionID,
+			&i.InvalidatedAtCanonVersionID,
+			&i.SupersedesFactID,
+			&i.SourceChapterID,
+			&i.SourceContentRevisionID,
+			&i.GenerationRunID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlotThreads = `-- name: ListPlotThreads :many
+SELECT id, story_id, title, summary, importance, status,
+       opened_chapter_id, resolved_chapter_id, last_advanced_chapter_id, created_at, updated_at
+FROM plot_threads
+WHERE story_id = $1
+ORDER BY created_at
+`
+
+func (q *Queries) ListPlotThreads(ctx context.Context, storyID pgtype.UUID) ([]PlotThread, error) {
+	rows, err := q.db.Query(ctx, listPlotThreads, storyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlotThread{}
+	for rows.Next() {
+		var i PlotThread
+		if err := rows.Scan(
+			&i.ID,
+			&i.StoryID,
+			&i.Title,
+			&i.Summary,
+			&i.Importance,
+			&i.Status,
+			&i.OpenedChapterID,
+			&i.ResolvedChapterID,
+			&i.LastAdvancedChapterID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -434,6 +1070,36 @@ func (q *Queries) NextBibleVersion(ctx context.Context, storyID pgtype.UUID) (in
 	return column_1, err
 }
 
+const nextCanonSequence = `-- name: NextCanonSequence :one
+SELECT COALESCE(MAX(sequence_no), 0) + 1
+FROM canon_versions
+WHERE branch_id = $1
+`
+
+func (q *Queries) NextCanonSequence(ctx context.Context, branchID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, nextCanonSequence, branchID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const nextChapterNumber = `-- name: NextChapterNumber :one
+
+SELECT COALESCE(MAX(chapter_number), 0) + 1
+FROM chapters
+WHERE story_id = $1
+`
+
+// ============================================================
+// Chapters
+// ============================================================
+func (q *Queries) NextChapterNumber(ctx context.Context, storyID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, nextChapterNumber, storyID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const nextEndingVersion = `-- name: NextEndingVersion :one
 
 SELECT COALESCE(MAX(version_no), 0) + 1
@@ -446,6 +1112,19 @@ WHERE story_id = $1
 // ============================================================
 func (q *Queries) NextEndingVersion(ctx context.Context, storyID pgtype.UUID) (int32, error) {
 	row := q.db.QueryRow(ctx, nextEndingVersion, storyID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const nextPlanRevision = `-- name: NextPlanRevision :one
+SELECT COALESCE(MAX(revision_no), 0) + 1
+FROM chapter_plan_revisions
+WHERE chapter_id = $1
+`
+
+func (q *Queries) NextPlanRevision(ctx context.Context, chapterID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, nextPlanRevision, chapterID)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err

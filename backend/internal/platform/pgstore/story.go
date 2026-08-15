@@ -49,6 +49,10 @@ func (s *StoryStore) CreateGenerationPolicy(ctx context.Context, p story.Generat
 	})
 }
 
+func (s *StoryStore) HasGenerationPolicy(ctx context.Context, storyID string) (bool, error) {
+	return s.q.HasGenerationPolicy(ctx, toUUID(storyID))
+}
+
 func (s *StoryStore) SlugExists(ctx context.Context, slug string) (bool, error) {
 	return s.q.SlugExists(ctx, slug)
 }
@@ -220,6 +224,7 @@ func toStory(row db.Story) story.Story {
 		Description:        fromText(row.Description),
 		Status:             row.Status,
 		Visibility:         row.Visibility,
+		PlanningMode:       row.PlanningMode,
 		StatusBeforeArchive: fromText(row.StatusBeforeArchive),
 		CoverAssetID:       fromUUID(row.CoverAssetID),
 		CreatedBy:          fromUUID(row.CreatedBy),

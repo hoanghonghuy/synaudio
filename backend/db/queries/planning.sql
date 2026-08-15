@@ -104,3 +104,140 @@ ORDER BY created_at;
 SELECT id, story_id, canonical_name, importance, current_profile_version_id, created_at
 FROM characters
 WHERE id = $1;
+
+-- ============================================================
+-- Chapters
+-- ============================================================
+
+-- name: NextChapterNumber :one
+SELECT COALESCE(MAX(chapter_number), 0) + 1
+FROM chapters
+WHERE story_id = $1;
+
+-- name: CreateChapter :one
+INSERT INTO chapters (id, story_id, chapter_number, title, status, arc_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, story_id, chapter_number, title, status, arc_id, current_plan_revision_id,
+          current_content_revision_id, current_narration_revision_id, current_audio_asset_id,
+          official_canon_version_id, published_at, archived_at, created_at, updated_at;
+
+-- name: NextPlanRevision :one
+SELECT COALESCE(MAX(revision_no), 0) + 1
+FROM chapter_plan_revisions
+WHERE chapter_id = $1;
+
+-- name: CreatePlanRevision :one
+INSERT INTO chapter_plan_revisions (id, chapter_id, revision_no, plan, base_canon_version_id, arc_version_id, source_type, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, chapter_id, revision_no, plan, base_canon_version_id, arc_version_id, source_type, generation_run_id, created_by, created_at;
+
+-- name: GetChapter :one
+SELECT id, story_id, chapter_number, title, status, arc_id, current_plan_revision_id,
+       current_content_revision_id, current_narration_revision_id, current_audio_asset_id,
+       official_canon_version_id, published_at, archived_at, created_at, updated_at
+FROM chapters
+WHERE id = $1;
+
+-- name: ListChapters :many
+SELECT id, story_id, chapter_number, title, status, arc_id, current_plan_revision_id,
+       current_content_revision_id, current_narration_revision_id, current_audio_asset_id,
+       official_canon_version_id, published_at, archived_at, created_at, updated_at
+FROM chapters
+WHERE story_id = $1
+ORDER BY chapter_number;
+
+-- ============================================================
+-- StoryFacts
+-- ============================================================
+
+-- name: CreateFact :one
+INSERT INTO story_facts (id, story_id, subject_type, subject_id, fact_type, value, importance, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, story_id, subject_type, subject_id, fact_type, value, importance, status,
+          valid_from_canon_version_id, invalidated_at_canon_version_id, supersedes_fact_id,
+          source_chapter_id, source_content_revision_id, generation_run_id, created_at;
+
+-- name: ListFacts :many
+SELECT id, story_id, subject_type, subject_id, fact_type, value, importance, status,
+       valid_from_canon_version_id, invalidated_at_canon_version_id, supersedes_fact_id,
+       source_chapter_id, source_content_revision_id, generation_run_id, created_at
+FROM story_facts
+WHERE story_id = $1
+ORDER BY created_at;
+
+-- ============================================================
+-- PlotThreads
+-- ============================================================
+
+-- name: CreatePlotThread :one
+INSERT INTO plot_threads (id, story_id, title, summary, importance, status)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, story_id, title, summary, importance, status,
+          opened_chapter_id, resolved_chapter_id, last_advanced_chapter_id, created_at, updated_at;
+
+-- name: ListPlotThreads :many
+SELECT id, story_id, title, summary, importance, status,
+       opened_chapter_id, resolved_chapter_id, last_advanced_chapter_id, created_at, updated_at
+FROM plot_threads
+WHERE story_id = $1
+ORDER BY created_at;
+
+-- name: CreatePlotThreadEvent :one
+INSERT INTO plot_thread_events (id, plot_thread_id, canon_version_id, chapter_id, event_type, detail)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, plot_thread_id, canon_version_id, chapter_id, event_type, detail, created_at;
+
+-- ============================================================
+-- Canon branches + versions
+-- ============================================================
+
+-- name: CreateCanonBranch :one
+INSERT INTO canon_branches (id, story_id, type, status)
+VALUES ($1, $2, $3, $4)
+RETURNING id, story_id, type, status, base_version_id, generation_run_id, retcon_request_id, created_at;
+
+-- name: NextCanonSequence :one
+SELECT COALESCE(MAX(sequence_no), 0) + 1
+FROM canon_versions
+WHERE branch_id = $1;
+
+-- name: CreateCanonVersion :one
+INSERT INTO canon_versions (id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id, status, committed_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id,
+          source_content_revision_id, source_provisional_version_id, generation_run_id,
+          retcon_request_id, status, committed_by, created_at;
+
+-- name: ListCanonVersions :many
+SELECT id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id,
+       source_content_revision_id, source_provisional_version_id, generation_run_id,
+       retcon_request_id, status, committed_by, created_at
+FROM canon_versions
+WHERE branch_id = $1
+ORDER BY sequence_no;
+
+-- ============================================================
+-- ContextSnapshots
+-- ============================================================
+
+-- name: CreateContextSnapshot :one
+INSERT INTO context_snapshots (id, story_id, chapter_id, canon_version_id, bible_version_id,
+                              ending_plan_version_id, arc_version_id, content_profile_version_id,
+                              prompt_version, workflow_version, provider, model)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, run_id, story_id, chapter_id, canon_version_id, bible_version_id,
+          ending_plan_version_id, arc_version_id, content_profile_version_id,
+          prompt_version, workflow_version, provider, model, included_refs,
+          historical_hits, admin_instruction, created_at;
+
+-- name: ListContextSnapshots :many
+SELECT id, run_id, story_id, chapter_id, canon_version_id, bible_version_id,
+       ending_plan_version_id, arc_version_id, content_profile_version_id,
+       prompt_version, workflow_version, provider, model, included_refs,
+       historical_hits, admin_instruction, created_at
+FROM context_snapshots
+WHERE story_id = $1
+ORDER BY created_at;
+
+
+

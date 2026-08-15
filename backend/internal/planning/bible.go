@@ -43,6 +43,28 @@ type Store interface {
 	CreateProfileVersion(ctx context.Context, v CharacterProfileVersion) (CharacterProfileVersion, error)
 	ListCharacters(ctx context.Context, storyID string) ([]Character, error)
 	GetCharacter(ctx context.Context, characterID string) (Character, error)
+
+	NextChapterNumber(ctx context.Context, storyID string) (int, error)
+	CreateChapter(ctx context.Context, c Chapter) (Chapter, error)
+	NextPlanRevision(ctx context.Context, chapterID string) (int, error)
+	CreatePlanRevision(ctx context.Context, p ChapterPlanRevision) (ChapterPlanRevision, error)
+	GetChapter(ctx context.Context, chapterID string) (Chapter, error)
+	ListChapters(ctx context.Context, storyID string) ([]Chapter, error)
+
+	CreateFact(ctx context.Context, f StoryFact) (StoryFact, error)
+	ListFacts(ctx context.Context, storyID string) ([]StoryFact, error)
+
+	CreatePlotThread(ctx context.Context, t PlotThread) (PlotThread, error)
+	ListPlotThreads(ctx context.Context, storyID string) ([]PlotThread, error)
+	CreatePlotThreadEvent(ctx context.Context, e PlotThreadEvent) (PlotThreadEvent, error)
+
+	CreateCanonBranch(ctx context.Context, b CanonBranch) (CanonBranch, error)
+	NextCanonSequence(ctx context.Context, branchID string) (int, error)
+	CreateCanonVersion(ctx context.Context, v CanonVersion) (CanonVersion, error)
+	ListCanonVersions(ctx context.Context, branchID string) ([]CanonVersion, error)
+
+	CreateContextSnapshot(ctx context.Context, sn ContextSnapshot) (ContextSnapshot, error)
+	ListContextSnapshots(ctx context.Context, storyID string) ([]ContextSnapshot, error)
 }
 
 type Service struct {

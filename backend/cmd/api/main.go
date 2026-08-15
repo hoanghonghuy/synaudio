@@ -52,12 +52,15 @@ func main() {
 		log.Error("storage init failed", "error", err)
 		os.Exit(1)
 	}
-	storyService := story.NewService(storyStore, story.WithObjectStorage(objStorage))
-	storyHandler := story.NewHandler(storyService)
-
 	planningStore := pgstore.NewPlanningStore(queries)
 	planningService := planning.NewService(planningStore, planning.WithArchitect(planning.NewMockArchitect()))
 	planningHandler := planning.NewHandler(planningService)
+
+	storyService := story.NewService(storyStore,
+		story.WithObjectStorage(objStorage),
+		story.WithActivationChecker(planningService),
+	)
+	storyHandler := story.NewHandler(storyService)
 
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		ReadyCheck: func() error {

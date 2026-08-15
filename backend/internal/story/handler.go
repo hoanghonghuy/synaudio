@@ -321,6 +321,10 @@ func (h *Handler) activateStory(w http.ResponseWriter, r *http.Request) {
 
 	s, err := h.svc.ActivateStory(r.Context(), storyID)
 	if err != nil {
+		if errors.Is(err, ErrActivationNotReady) {
+			writeError(w, http.StatusConflict, "ACTIVATION_NOT_READY", "activation gate not ready")
+			return
+		}
 		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
 		return
 	}
