@@ -102,3 +102,142 @@ h1 {
 .admin {
   border-left: 4px solid var(--accent);
 }
+
+.searchbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.searchbar input,
+.searchbar select,
+.create-form input,
+.create-form textarea,
+.create-form select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffdf8;
+  color: var(--ink);
+  font: inherit;
+}
+
+.searchbar input {
+  flex: 1 1 12rem;
+}
+
+.searchbar button,
+.create-form button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.searchbar button:disabled,
+.create-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.story-grid,
+.story-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.story-grid {
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+
+.story-card,
+.story-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem;
+  background: #fffdf8;
+}
+
+.story-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+.desc {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.slug {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.story-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.create-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.create-form h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.create-form label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.create-form .row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+
+.error {
+  color: #b3261e;
+}
+
+.success {
+  color: var(--accent);
+}
