@@ -12,7 +12,9 @@ import (
 var ErrDependencyUnavailable = errors.New("dependency unavailable")
 
 type Dependencies struct {
-	ReadyCheck func() error
+	ReadyCheck   func() error
+	AuthHandler  http.Handler
+	StoryHandler http.Handler
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -37,6 +39,13 @@ func NewRouter(deps Dependencies) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
+
+	if deps.AuthHandler != nil {
+		r.Mount("/", deps.AuthHandler)
+	}
+	if deps.StoryHandler != nil {
+		r.Mount("/", deps.StoryHandler)
+	}
 
 	return r
 }

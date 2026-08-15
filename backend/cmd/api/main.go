@@ -10,9 +10,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/synaudio/synaudio/backend/internal/identity"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
+	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
+	"github.com/synaudio/synaudio/backend/internal/platform/pgstore"
+	"github.com/synaudio/synaudio/backend/internal/platform/storage"
+	"github.com/synaudio/synaudio/backend/internal/story"
 )
 
 func main() {
@@ -34,6 +39,21 @@ func main() {
 	}
 	defer pool.Close()
 
+	queries := db.New(pool)
+
+	identityStore := pgstore.NewIdentityStore(queries)
+	authService := identity.NewAuthService(identityStore)
+	authHandler := identity.NewAuthHandler(authService)
+
+	storyStore := pgstore.NewStoryStore(queries)
+	objStorage, err := storage.NewMinIO(cfg)
+	if err != nil {
+		log.Error("storage init failed", "error", err)
+		os.Exit(1)
+	}
+	storyService := story.NewService(storyStore, story.WithObjectStorage(objStorage))
+	storyHandler := story.NewHandler(storyService)
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		ReadyCheck: func() error {
 			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -43,6 +63,8 @@ func main() {
 			}
 			return nil
 		},
+		AuthHandler:  authHandler,
+		StoryHandler: storyHandler,
 	})
 
 	server := &http.Server{

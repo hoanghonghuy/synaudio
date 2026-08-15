@@ -100,6 +100,16 @@ type StoryAsset struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type StoryContentProfileVersion struct {
+	ID                  pgtype.UUID        `json:"id"`
+	StoryID             pgtype.UUID        `json:"story_id"`
+	VersionNo           int32              `json:"version_no"`
+	Profile             []byte             `json:"profile"`
+	BasePolicyVersionID pgtype.UUID        `json:"base_policy_version_id"`
+	CreatedBy           pgtype.UUID        `json:"created_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
 type StoryGenerationPolicy struct {
 	StoryID                 pgtype.UUID        `json:"story_id"`
 	MinimumAudioDurationSec int32              `json:"minimum_audio_duration_sec"`
