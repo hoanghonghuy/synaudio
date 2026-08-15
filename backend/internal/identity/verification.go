@@ -34,6 +34,42 @@ func (s *AuthService) VerifyEmail(ctx context.Context, userID, token string) err
 	return s.store.MarkEmailVerified(ctx, userID)
 }
 
+// VerifyEmailByEmail resolves the user by email then verifies the token.
+func (s *AuthService) VerifyEmailByEmail(ctx context.Context, email, token string) error {
+	u, err := s.store.GetUserByEmail(ctx, NormalizeEmail(email))
+	if err != nil {
+		return ErrInvalidToken
+	}
+	return s.VerifyEmail(ctx, u.ID, token)
+}
+
+// ResendEmailVerification resolves the user by email and issues a new token.
+func (s *AuthService) ResendEmailVerification(ctx context.Context, email string) (string, error) {
+	u, err := s.store.GetUserByEmail(ctx, NormalizeEmail(email))
+	if err != nil {
+		return "", ErrUserNotFound
+	}
+	return s.RequestEmailVerification(ctx, u.ID)
+}
+
+// RequestPasswordResetByEmail resolves the user by email and issues a reset token.
+func (s *AuthService) RequestPasswordResetByEmail(ctx context.Context, email string) (string, error) {
+	u, err := s.store.GetUserByEmail(ctx, NormalizeEmail(email))
+	if err != nil {
+		return "", ErrUserNotFound
+	}
+	return s.RequestPasswordReset(ctx, u.ID)
+}
+
+// ResetPasswordByEmail resolves the user by email then resets the password.
+func (s *AuthService) ResetPasswordByEmail(ctx context.Context, email, token, newPassword string) error {
+	u, err := s.store.GetUserByEmail(ctx, NormalizeEmail(email))
+	if err != nil {
+		return ErrInvalidToken
+	}
+	return s.ResetPassword(ctx, u.ID, token, newPassword)
+}
+
 // RequestPasswordReset creates a one-time hashed reset token.
 func (s *AuthService) RequestPasswordReset(ctx context.Context, userID string) (string, error) {
 	if _, err := s.store.GetUserByID(ctx, userID); err != nil {

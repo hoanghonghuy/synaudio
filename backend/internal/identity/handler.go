@@ -20,6 +20,10 @@ func NewAuthHandler(svc *AuthService) http.Handler {
 	r := chi.NewRouter()
 	r.Post("/api/v1/auth/register", h.register)
 	r.Post("/api/v1/auth/login", h.login)
+	r.Post("/api/v1/auth/email/verify", h.emailVerify)
+	r.Post("/api/v1/auth/email/resend", h.emailResend)
+	r.Post("/api/v1/auth/password/forgot", h.passwordForgot)
+	r.Post("/api/v1/auth/password/reset", h.passwordReset)
 	return r
 }
 
@@ -101,6 +105,83 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
 	})
+}
+
+type emailVerifyRequest struct {
+	Email string `json:"email"`
+	Token string `json:"token"`
+}
+
+func (h *AuthHandler) emailVerify(w http.ResponseWriter, r *http.Request) {
+	var req emailVerifyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.svc.VerifyEmailByEmail(r.Context(), req.Email, req.Token); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_TOKEN", "invalid or expired token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type emailResendRequest struct {
+	Email string `json:"email"`
+}
+
+func (h *AuthHandler) emailResend(w http.ResponseWriter, r *http.Request) {
+	var req emailResendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	if _, err := h.svc.ResendEmailVerification(r.Context(), req.Email); err != nil {
+		// Do not reveal whether the email exists.
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+type passwordForgotRequest struct {
+	Email string `json:"email"`
+}
+
+func (h *AuthHandler) passwordForgot(w http.ResponseWriter, r *http.Request) {
+	var req passwordForgotRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	// Always return 202 to avoid revealing whether the email exists.
+	_, _ = h.svc.RequestPasswordResetByEmail(r.Context(), req.Email)
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+type passwordResetRequest struct {
+	Email       string `json:"email"`
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
+func (h *AuthHandler) passwordReset(w http.ResponseWriter, r *http.Request) {
+	var req passwordResetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.svc.ResetPasswordByEmail(r.Context(), req.Email, req.Token, req.NewPassword); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_TOKEN", "invalid or expired token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
