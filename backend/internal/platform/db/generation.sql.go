@@ -637,6 +637,41 @@ func (q *Queries) ReclaimStaleJobs(ctx context.Context) ([]GenerationJob, error)
 	return items, nil
 }
 
+const updateContentRevisionStatus = `-- name: UpdateContentRevisionStatus :one
+UPDATE chapter_content_revisions
+SET status = $2
+WHERE id = $1
+RETURNING id, chapter_id, revision_no, content_text, source_type, based_on_revision_id,
+          plan_revision_id, base_canon_version_id, generation_run_id, retcon_request_id,
+          status, created_by, created_at
+`
+
+type UpdateContentRevisionStatusParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+func (q *Queries) UpdateContentRevisionStatus(ctx context.Context, arg UpdateContentRevisionStatusParams) (ChapterContentRevision, error) {
+	row := q.db.QueryRow(ctx, updateContentRevisionStatus, arg.ID, arg.Status)
+	var i ChapterContentRevision
+	err := row.Scan(
+		&i.ID,
+		&i.ChapterID,
+		&i.RevisionNo,
+		&i.ContentText,
+		&i.SourceType,
+		&i.BasedOnRevisionID,
+		&i.PlanRevisionID,
+		&i.BaseCanonVersionID,
+		&i.GenerationRunID,
+		&i.RetconRequestID,
+		&i.Status,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateJobAttemptStatus = `-- name: UpdateJobAttemptStatus :one
 UPDATE generation_job_attempts
 SET status = $2,

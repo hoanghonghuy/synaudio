@@ -51,6 +51,19 @@ func (s *fakeStore) ListContentRevisions(_ context.Context, chapterID string) ([
 	return s.revisions[chapterID], nil
 }
 
+func (s *fakeStore) UpdateContentRevisionStatus(_ context.Context, revisionID, status string) (ContentRevision, error) {
+	for chapterID, rs := range s.revisions {
+		for i, r := range rs {
+			if r.ID == revisionID {
+				r.Status = status
+				s.revisions[chapterID][i] = r
+				return r, nil
+			}
+		}
+	}
+	return ContentRevision{}, ErrContentRevisionNotFound
+}
+
 func (s *fakeStore) CreateContentApproval(_ context.Context, a ContentApproval) (ContentApproval, error) {
 	s.approvals[a.ChapterID] = append(s.approvals[a.ChapterID], a)
 	return a, nil

@@ -72,6 +72,20 @@ func (s *GenerationStore) ListContentRevisions(ctx context.Context, chapterID st
 	return out, nil
 }
 
+func (s *GenerationStore) UpdateContentRevisionStatus(ctx context.Context, revisionID, status string) (generation.ContentRevision, error) {
+	row, err := s.q.UpdateContentRevisionStatus(ctx, db.UpdateContentRevisionStatusParams{
+		ID:     toUUID(revisionID),
+		Status: status,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return generation.ContentRevision{}, generation.ErrContentRevisionNotFound
+		}
+		return generation.ContentRevision{}, err
+	}
+	return toContentRevision(row), nil
+}
+
 func (s *GenerationStore) CreateContentApproval(ctx context.Context, a generation.ContentApproval) (generation.ContentApproval, error) {
 	warnings, _ := json.Marshal(a.WarningsSnapshot)
 	override, _ := json.Marshal(a.OverrideSnapshot)

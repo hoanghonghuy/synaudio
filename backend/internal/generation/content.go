@@ -43,6 +43,7 @@ type Store interface {
 	CreateContentRevision(ctx context.Context, r ContentRevision) (ContentRevision, error)
 	GetContentRevision(ctx context.Context, revisionID string) (ContentRevision, error)
 	ListContentRevisions(ctx context.Context, chapterID string) ([]ContentRevision, error)
+	UpdateContentRevisionStatus(ctx context.Context, revisionID, status string) (ContentRevision, error)
 	CreateContentApproval(ctx context.Context, a ContentApproval) (ContentApproval, error)
 
 	CreateGenerationRun(ctx context.Context, r GenerationRun) (GenerationRun, error)
@@ -63,8 +64,10 @@ type Store interface {
 
 // Service orchestrates Chapter content generation and review.
 type Service struct {
-	store  Store
-	textAI TextAIProvider
+	store            Store
+	textAI           TextAIProvider
+	durationAnalyzer DurationAnalyzer
+	reviewer         Reviewer
 }
 
 type Option func(*Service)
@@ -72,6 +75,18 @@ type Option func(*Service)
 func WithTextAI(p TextAIProvider) Option {
 	return func(svc *Service) {
 		svc.textAI = p
+	}
+}
+
+func WithDurationAnalyzer(a DurationAnalyzer) Option {
+	return func(svc *Service) {
+		svc.durationAnalyzer = a
+	}
+}
+
+func WithReviewer(r Reviewer) Option {
+	return func(svc *Service) {
+		svc.reviewer = r
 	}
 }
 

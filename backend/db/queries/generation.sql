@@ -140,6 +140,14 @@ FROM chapter_content_revisions
 WHERE chapter_id = $1
 ORDER BY revision_no;
 
+-- name: UpdateContentRevisionStatus :one
+UPDATE chapter_content_revisions
+SET status = $2
+WHERE id = $1
+RETURNING id, chapter_id, revision_no, content_text, source_type, based_on_revision_id,
+          plan_revision_id, base_canon_version_id, generation_run_id, retcon_request_id,
+          status, created_by, created_at;
+
 -- name: CreateContentApproval :one
 INSERT INTO content_approvals (id, chapter_id, content_revision_id, approved_by,
                                warnings_snapshot, override_snapshot)

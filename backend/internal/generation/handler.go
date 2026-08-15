@@ -21,6 +21,14 @@ func NewHandler(svc *Service) http.Handler {
 	r.Post("/admin/chapters/{chapterID}/approve", h.approveContent)
 	r.Post("/admin/chapters/{chapterID}/reviews", h.createReview)
 	r.Get("/admin/chapters/{chapterID}/reviews", h.listReviews)
+	r.Post("/admin/chapters/{chapterID}/duration", h.analyzeDuration)
+	r.Post("/admin/chapters/{chapterID}/continuity", h.runContinuity)
+	r.Post("/admin/chapters/{chapterID}/quality", h.runQuality)
+	r.Post("/admin/chapters/{chapterID}/safety", h.runSafety)
+	r.Post("/admin/chapters/{chapterID}/rewrite", h.rewriteChapter)
+	r.Post("/admin/chapters/{chapterID}/edit", h.editContent)
+	r.Post("/admin/chapters/{chapterID}/regenerate", h.regenerateContent)
+	r.Post("/admin/revisions/{revisionID}/reject", h.rejectContent)
 	r.Post("/admin/runs", h.createRun)
 	r.Get("/admin/runs/{runID}", h.getRun)
 	r.Post("/admin/runs/{runID}/jobs", h.createJob)
@@ -186,6 +194,171 @@ func (h *Handler) createJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, job)
+}
+
+type analyzeDurationRequest struct {
+	RevisionID string `json:"revision_id"`
+	Text       string `json:"text"`
+}
+
+func (h *Handler) analyzeDuration(w http.ResponseWriter, r *http.Request) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	var req analyzeDurationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	out, err := h.svc.AnalyzeDuration(r.Context(), chapterID, req.RevisionID, req.Text)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, out)
+}
+
+type runReviewRequest struct {
+	RevisionID string `json:"revision_id"`
+	Text       string `json:"text"`
+}
+
+func (h *Handler) runContinuity(w http.ResponseWriter, r *http.Request) {
+	h.runReview(w, r, "CONTINUITY")
+}
+
+func (h *Handler) runQuality(w http.ResponseWriter, r *http.Request) {
+	h.runReview(w, r, "QUALITY")
+}
+
+func (h *Handler) runSafety(w http.ResponseWriter, r *http.Request) {
+	h.runReview(w, r, "SAFETY")
+}
+
+func (h *Handler) runReview(w http.ResponseWriter, r *http.Request, reviewType string) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	var req runReviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	var review ChapterReview
+	var err error
+	switch reviewType {
+	case "CONTINUITY":
+		review, err = h.svc.RunContinuityReview(r.Context(), chapterID, req.RevisionID, req.Text)
+	case "QUALITY":
+		review, err = h.svc.RunQualityReview(r.Context(), chapterID, req.RevisionID, req.Text)
+	case "SAFETY":
+		review, err = h.svc.RunSafetyReview(r.Context(), chapterID, req.RevisionID, req.Text)
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, review)
+}
+
+type rewriteRequest struct {
+	BasedOnRevisionID string `json:"based_on_revision_id"`
+	Feedback          string `json:"feedback"`
+	CreatedBy         string `json:"created_by"`
+}
+
+func (h *Handler) rewriteChapter(w http.ResponseWriter, r *http.Request) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	var req rewriteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	rev, err := h.svc.RewriteChapter(r.Context(), chapterID, req.BasedOnRevisionID, req.Feedback, req.CreatedBy)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, rev)
+}
+
+type editRequest struct {
+	BasedOnRevisionID string `json:"based_on_revision_id"`
+	Text              string `json:"text"`
+	EditedBy          string `json:"edited_by"`
+}
+
+func (h *Handler) editContent(w http.ResponseWriter, r *http.Request) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	var req editRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	rev, err := h.svc.EditContent(r.Context(), chapterID, req.BasedOnRevisionID, req.Text, req.EditedBy)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, rev)
+}
+
+type regenerateRequest struct {
+	BasedOnRevisionID string `json:"based_on_revision_id"`
+	RequestedBy       string `json:"requested_by"`
+}
+
+func (h *Handler) regenerateContent(w http.ResponseWriter, r *http.Request) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	var req regenerateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	rev, err := h.svc.RegenerateContent(r.Context(), chapterID, req.BasedOnRevisionID, req.RequestedBy)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, rev)
+}
+
+type rejectRequest struct {
+	RejectedBy string `json:"rejected_by"`
+	Reason     string `json:"reason"`
+}
+
+func (h *Handler) rejectContent(w http.ResponseWriter, r *http.Request) {
+	revisionID := chi.URLParam(r, "revisionID")
+
+	var req rejectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	rev, err := h.svc.RejectContent(r.Context(), revisionID, req.RejectedBy, req.Reason)
+	if err != nil {
+		if errors.Is(err, ErrContentRevisionNotFound) {
+			writeError(w, http.StatusNotFound, "CONTENT_REVISION_NOT_FOUND", "content revision not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, rev)
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
