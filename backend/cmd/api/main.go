@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/synaudio/synaudio/backend/internal/identity"
+	"github.com/synaudio/synaudio/backend/internal/planning"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
@@ -54,6 +55,10 @@ func main() {
 	storyService := story.NewService(storyStore, story.WithObjectStorage(objStorage))
 	storyHandler := story.NewHandler(storyService)
 
+	planningStore := pgstore.NewPlanningStore(queries)
+	planningService := planning.NewService(planningStore, planning.WithArchitect(planning.NewMockArchitect()))
+	planningHandler := planning.NewHandler(planningService)
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		ReadyCheck: func() error {
 			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -63,8 +68,9 @@ func main() {
 			}
 			return nil
 		},
-		AuthHandler:  authHandler,
-		StoryHandler: storyHandler,
+		AuthHandler:     authHandler,
+		StoryHandler:    storyHandler,
+		PlanningHandler: planningHandler,
 	})
 
 	server := &http.Server{

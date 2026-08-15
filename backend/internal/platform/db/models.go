@@ -17,6 +17,124 @@ type AccountDeletionRequest struct {
 	CompletedAt pgtype.Timestamptz `json:"completed_at"`
 }
 
+type CanonBranch struct {
+	ID              pgtype.UUID        `json:"id"`
+	StoryID         pgtype.UUID        `json:"story_id"`
+	Type            string             `json:"type"`
+	Status          string             `json:"status"`
+	BaseVersionID   pgtype.UUID        `json:"base_version_id"`
+	GenerationRunID pgtype.UUID        `json:"generation_run_id"`
+	RetconRequestID pgtype.UUID        `json:"retcon_request_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type CanonChangeItem struct {
+	ID             pgtype.UUID `json:"id"`
+	CanonVersionID pgtype.UUID `json:"canon_version_id"`
+	EntityType     string      `json:"entity_type"`
+	EntityID       pgtype.UUID `json:"entity_id"`
+	ChangeType     string      `json:"change_type"`
+	Metadata       []byte      `json:"metadata"`
+}
+
+type CanonVersion struct {
+	ID                         pgtype.UUID        `json:"id"`
+	StoryID                    pgtype.UUID        `json:"story_id"`
+	BranchID                   pgtype.UUID        `json:"branch_id"`
+	SequenceNo                 int32              `json:"sequence_no"`
+	ParentVersionID            pgtype.UUID        `json:"parent_version_id"`
+	SourceChapterID            pgtype.UUID        `json:"source_chapter_id"`
+	SourceContentRevisionID    pgtype.UUID        `json:"source_content_revision_id"`
+	SourceProvisionalVersionID pgtype.UUID        `json:"source_provisional_version_id"`
+	GenerationRunID            pgtype.UUID        `json:"generation_run_id"`
+	RetconRequestID            pgtype.UUID        `json:"retcon_request_id"`
+	Status                     string             `json:"status"`
+	CommittedBy                pgtype.UUID        `json:"committed_by"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+}
+
+type Chapter struct {
+	ID                         pgtype.UUID        `json:"id"`
+	StoryID                    pgtype.UUID        `json:"story_id"`
+	ChapterNumber              int32              `json:"chapter_number"`
+	Title                      pgtype.Text        `json:"title"`
+	Status                     string             `json:"status"`
+	ArcID                      pgtype.UUID        `json:"arc_id"`
+	CurrentPlanRevisionID      pgtype.UUID        `json:"current_plan_revision_id"`
+	CurrentContentRevisionID   pgtype.UUID        `json:"current_content_revision_id"`
+	CurrentNarrationRevisionID pgtype.UUID        `json:"current_narration_revision_id"`
+	CurrentAudioAssetID        pgtype.UUID        `json:"current_audio_asset_id"`
+	OfficialCanonVersionID     pgtype.UUID        `json:"official_canon_version_id"`
+	PublishedAt                pgtype.Timestamptz `json:"published_at"`
+	ArchivedAt                 pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ChapterPlanRevision struct {
+	ID                 pgtype.UUID        `json:"id"`
+	ChapterID          pgtype.UUID        `json:"chapter_id"`
+	RevisionNo         int32              `json:"revision_no"`
+	Plan               []byte             `json:"plan"`
+	BaseCanonVersionID pgtype.UUID        `json:"base_canon_version_id"`
+	ArcVersionID       pgtype.UUID        `json:"arc_version_id"`
+	SourceType         string             `json:"source_type"`
+	GenerationRunID    pgtype.UUID        `json:"generation_run_id"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type Character struct {
+	ID                      pgtype.UUID        `json:"id"`
+	StoryID                 pgtype.UUID        `json:"story_id"`
+	CanonicalName           string             `json:"canonical_name"`
+	Importance              string             `json:"importance"`
+	CurrentProfileVersionID pgtype.UUID        `json:"current_profile_version_id"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+}
+
+type CharacterProfileVersion struct {
+	ID                 pgtype.UUID        `json:"id"`
+	CharacterID        pgtype.UUID        `json:"character_id"`
+	VersionNo          int32              `json:"version_no"`
+	Profile            []byte             `json:"profile"`
+	BaseCanonVersionID pgtype.UUID        `json:"base_canon_version_id"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	GenerationRunID    pgtype.UUID        `json:"generation_run_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type CharacterStateVersion struct {
+	ID                      pgtype.UUID        `json:"id"`
+	CharacterID             pgtype.UUID        `json:"character_id"`
+	CanonVersionID          pgtype.UUID        `json:"canon_version_id"`
+	State                   []byte             `json:"state"`
+	SourceChapterID         pgtype.UUID        `json:"source_chapter_id"`
+	SourceContentRevisionID pgtype.UUID        `json:"source_content_revision_id"`
+	GenerationRunID         pgtype.UUID        `json:"generation_run_id"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContextSnapshot struct {
+	ID                      pgtype.UUID        `json:"id"`
+	RunID                   pgtype.UUID        `json:"run_id"`
+	StoryID                 pgtype.UUID        `json:"story_id"`
+	ChapterID               pgtype.UUID        `json:"chapter_id"`
+	CanonVersionID          pgtype.UUID        `json:"canon_version_id"`
+	BibleVersionID          pgtype.UUID        `json:"bible_version_id"`
+	EndingPlanVersionID     pgtype.UUID        `json:"ending_plan_version_id"`
+	ArcVersionID            pgtype.UUID        `json:"arc_version_id"`
+	ContentProfileVersionID pgtype.UUID        `json:"content_profile_version_id"`
+	PromptVersion           pgtype.Text        `json:"prompt_version"`
+	WorkflowVersion         pgtype.Text        `json:"workflow_version"`
+	Provider                pgtype.Text        `json:"provider"`
+	Model                   pgtype.Text        `json:"model"`
+	IncludedRefs            []byte             `json:"included_refs"`
+	HistoricalHits          []byte             `json:"historical_hits"`
+	AdminInstruction        pgtype.Text        `json:"admin_instruction"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+}
+
 type EmailVerificationToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
@@ -44,6 +162,30 @@ type PasswordResetToken struct {
 type Permission struct {
 	ID   pgtype.UUID `json:"id"`
 	Code string      `json:"code"`
+}
+
+type PlotThread struct {
+	ID                    pgtype.UUID        `json:"id"`
+	StoryID               pgtype.UUID        `json:"story_id"`
+	Title                 string             `json:"title"`
+	Summary               pgtype.Text        `json:"summary"`
+	Importance            string             `json:"importance"`
+	Status                string             `json:"status"`
+	OpenedChapterID       pgtype.UUID        `json:"opened_chapter_id"`
+	ResolvedChapterID     pgtype.UUID        `json:"resolved_chapter_id"`
+	LastAdvancedChapterID pgtype.UUID        `json:"last_advanced_chapter_id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PlotThreadEvent struct {
+	ID             pgtype.UUID        `json:"id"`
+	PlotThreadID   pgtype.UUID        `json:"plot_thread_id"`
+	CanonVersionID pgtype.UUID        `json:"canon_version_id"`
+	ChapterID      pgtype.UUID        `json:"chapter_id"`
+	EventType      string             `json:"event_type"`
+	Detail         []byte             `json:"detail"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Role struct {
@@ -86,6 +228,26 @@ type Story struct {
 	ArchivedAt                     pgtype.Timestamptz `json:"archived_at"`
 }
 
+type StoryArc struct {
+	ID               pgtype.UUID        `json:"id"`
+	StoryID          pgtype.UUID        `json:"story_id"`
+	Ordinal          int32              `json:"ordinal"`
+	Status           string             `json:"status"`
+	CurrentVersionID pgtype.UUID        `json:"current_version_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type StoryArcVersion struct {
+	ID                 pgtype.UUID        `json:"id"`
+	ArcID              pgtype.UUID        `json:"arc_id"`
+	VersionNo          int32              `json:"version_no"`
+	Content            []byte             `json:"content"`
+	BaseCanonVersionID pgtype.UUID        `json:"base_canon_version_id"`
+	GenerationRunID    pgtype.UUID        `json:"generation_run_id"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type StoryAsset struct {
 	ID           pgtype.UUID        `json:"id"`
 	StoryID      pgtype.UUID        `json:"story_id"`
@@ -100,6 +262,17 @@ type StoryAsset struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type StoryBibleVersion struct {
+	ID               pgtype.UUID        `json:"id"`
+	StoryID          pgtype.UUID        `json:"story_id"`
+	VersionNo        int32              `json:"version_no"`
+	Content          []byte             `json:"content"`
+	BasedOnVersionID pgtype.UUID        `json:"based_on_version_id"`
+	CreatedBy        pgtype.UUID        `json:"created_by"`
+	GenerationRunID  pgtype.UUID        `json:"generation_run_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type StoryContentProfileVersion struct {
 	ID                  pgtype.UUID        `json:"id"`
 	StoryID             pgtype.UUID        `json:"story_id"`
@@ -108,6 +281,35 @@ type StoryContentProfileVersion struct {
 	BasePolicyVersionID pgtype.UUID        `json:"base_policy_version_id"`
 	CreatedBy           pgtype.UUID        `json:"created_by"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type StoryEndingPlanVersion struct {
+	ID               pgtype.UUID        `json:"id"`
+	StoryID          pgtype.UUID        `json:"story_id"`
+	VersionNo        int32              `json:"version_no"`
+	Content          []byte             `json:"content"`
+	BasedOnVersionID pgtype.UUID        `json:"based_on_version_id"`
+	CreatedBy        pgtype.UUID        `json:"created_by"`
+	GenerationRunID  pgtype.UUID        `json:"generation_run_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type StoryFact struct {
+	ID                          pgtype.UUID        `json:"id"`
+	StoryID                     pgtype.UUID        `json:"story_id"`
+	SubjectType                 pgtype.Text        `json:"subject_type"`
+	SubjectID                   pgtype.UUID        `json:"subject_id"`
+	FactType                    string             `json:"fact_type"`
+	Value                       []byte             `json:"value"`
+	Importance                  string             `json:"importance"`
+	Status                      string             `json:"status"`
+	ValidFromCanonVersionID     pgtype.UUID        `json:"valid_from_canon_version_id"`
+	InvalidatedAtCanonVersionID pgtype.UUID        `json:"invalidated_at_canon_version_id"`
+	SupersedesFactID            pgtype.UUID        `json:"supersedes_fact_id"`
+	SourceChapterID             pgtype.UUID        `json:"source_chapter_id"`
+	SourceContentRevisionID     pgtype.UUID        `json:"source_content_revision_id"`
+	GenerationRunID             pgtype.UUID        `json:"generation_run_id"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
 }
 
 type StoryGenerationPolicy struct {

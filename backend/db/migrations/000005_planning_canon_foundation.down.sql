@@ -1,0 +1,18 @@
+DROP TABLE IF EXISTS context_snapshots;
+DROP TABLE IF EXISTS canon_change_items;
+DROP TABLE IF EXISTS canon_versions;
+DROP TABLE IF EXISTS canon_branches;
+DROP TABLE IF EXISTS plot_thread_events;
+DROP TABLE IF EXISTS plot_threads;
+DROP TABLE IF EXISTS story_facts;
+DROP TABLE IF EXISTS chapter_plan_revisions;
+DROP TABLE IF EXISTS chapters;
+DROP TABLE IF EXISTS character_state_versions;
+ALTER TABLE characters DROP CONSTRAINT IF EXISTS fk_characters_current_profile_version;
+DROP TABLE IF EXISTS character_profile_versions;
+DROP TABLE IF EXISTS characters;
+ALTER TABLE story_arcs DROP CONSTRAINT IF EXISTS fk_story_arcs_current_version;
+DROP TABLE IF EXISTS story_arc_versions;
+DROP TABLE IF EXISTS story_arcs;
+DROP TABLE IF EXISTS story_ending_plan_versions;
+DROP TABLE IF EXISTS story_bible_versions;
