@@ -18,6 +18,21 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrAccountSuspended   = errors.New("account suspended")
 	ErrInvalidToken       = errors.New("invalid token")
+	ErrLastAdmin          = errors.New("cannot remove last active admin")
+	ErrForbidden          = errors.New("forbidden")
+)
+
+const (
+	RoleGuest = "GUEST"
+	RoleUser  = "USER"
+	RoleAdmin = "ADMIN"
+)
+
+const (
+	PermStoryCreate = "STORY_CREATE"
+
+	PermAdminRoleGrant  = "ADMIN_ROLE_GRANT"
+	PermAdminRoleRevoke = "ADMIN_ROLE_REVOKE"
 )
 
 type User struct {
@@ -52,6 +67,17 @@ type Store interface {
 	GetResetToken(ctx context.Context, userID string) (string, error)
 	UpdatePassword(ctx context.Context, userID, passwordHash string) error
 	RevokeSessions(ctx context.Context, userID string) error
+
+	StoreMFAMethod(ctx context.Context, userID string, m MFAMethod) error
+	GetMFAMethod(ctx context.Context, userID string) (*MFAMethod, error)
+	ConfirmMFAMethod(ctx context.Context, userID string) error
+	DisableMFAMethod(ctx context.Context, userID string) error
+
+	GetUserRoles(ctx context.Context, userID string) ([]string, error)
+	GetRolePermissions(ctx context.Context, role string) ([]string, error)
+	GrantRole(ctx context.Context, userID, role string) error
+	RevokeRole(ctx context.Context, userID, role string) error
+	CountActiveAdmins(ctx context.Context) (int, error)
 }
 
 type AuthService struct {

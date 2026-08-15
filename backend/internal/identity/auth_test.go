@@ -3,6 +3,7 @@ package identity_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/synaudio/synaudio/backend/internal/identity"
@@ -46,6 +47,10 @@ type fakeStore struct {
 	verificationTokens map[string]string
 	resetTokens        map[string]string
 	sessionsRevoked    bool
+	mfaMethods         map[string]*identity.MFAMethod
+	userRoles          map[string][]string
+	rolePermissions    map[string][]string
+	nextID             int
 }
 
 func newFakeStore() *fakeStore {
@@ -54,12 +59,19 @@ func newFakeStore() *fakeStore {
 		sessions:           map[string]identity.Session{},
 		verificationTokens: map[string]string{},
 		resetTokens:        map[string]string{},
+		mfaMethods:         map[string]*identity.MFAMethod{},
+		userRoles:          map[string][]string{},
+		rolePermissions:    map[string][]string{},
 	}
 }
 
 func (s *fakeStore) CreateUser(_ context.Context, u identity.User) (identity.User, error) {
 	if _, exists := s.users[u.Email]; exists {
 		return identity.User{}, identity.ErrEmailTaken
+	}
+	if u.ID == "" {
+		s.nextID++
+		u.ID = fmt.Sprintf("user-%d", s.nextID)
 	}
 	s.users[u.Email] = u
 	return u, nil
@@ -138,6 +150,81 @@ func (s *fakeStore) UpdatePassword(_ context.Context, userID, passwordHash strin
 func (s *fakeStore) RevokeSessions(_ context.Context, userID string) error {
 	s.sessionsRevoked = true
 	return nil
+}
+
+func (s *fakeStore) StoreMFAMethod(_ context.Context, userID string, m identity.MFAMethod) error {
+	cp := m
+	s.mfaMethods[userID] = &cp
+	return nil
+}
+
+func (s *fakeStore) GetMFAMethod(_ context.Context, userID string) (*identity.MFAMethod, error) {
+	m, ok := s.mfaMethods[userID]
+	if !ok {
+		return nil, identity.ErrUserNotFound
+	}
+	return m, nil
+}
+
+func (s *fakeStore) ConfirmMFAMethod(_ context.Context, userID string) error {
+	m, ok := s.mfaMethods[userID]
+	if !ok {
+		return identity.ErrUserNotFound
+	}
+	m.Confirmed = true
+	return nil
+}
+
+func (s *fakeStore) DisableMFAMethod(_ context.Context, userID string) error {
+	m, ok := s.mfaMethods[userID]
+	if !ok {
+		return identity.ErrUserNotFound
+	}
+	m.Disabled = true
+	return nil
+}
+
+func (s *fakeStore) GetUserRoles(_ context.Context, userID string) ([]string, error) {
+	roles, ok := s.userRoles[userID]
+	if !ok {
+		return nil, identity.ErrUserNotFound
+	}
+	return roles, nil
+}
+
+func (s *fakeStore) GetRolePermissions(_ context.Context, role string) ([]string, error) {
+	perms, ok := s.rolePermissions[role]
+	if !ok {
+		return nil, nil
+	}
+	return perms, nil
+}
+
+func (s *fakeStore) GrantRole(_ context.Context, userID, role string) error {
+	s.userRoles[userID] = append(s.userRoles[userID], role)
+	return nil
+}
+
+func (s *fakeStore) RevokeRole(_ context.Context, userID, role string) error {
+	roles := s.userRoles[userID]
+	out := roles[:0]
+	for _, r := range roles {
+		if r != role {
+			out = append(out, r)
+		}
+	}
+	s.userRoles[userID] = out
+	return nil
+}
+
+func (s *fakeStore) CountActiveAdmins(_ context.Context) (int, error) {
+	count := 0
+	for _, roles := range s.userRoles {
+		if contains(roles, identity.RoleAdmin) {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func TestRegisterCreatesActiveUserWithHashedPassword(t *testing.T) {

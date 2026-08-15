@@ -24,6 +24,9 @@ func NewAuthHandler(svc *AuthService) http.Handler {
 	r.Post("/api/v1/auth/email/resend", h.emailResend)
 	r.Post("/api/v1/auth/password/forgot", h.passwordForgot)
 	r.Post("/api/v1/auth/password/reset", h.passwordReset)
+	r.Post("/api/v1/auth/mfa/totp/setup", h.mfaSetup)
+	r.Post("/api/v1/auth/mfa/totp/confirm", h.mfaConfirm)
+	r.Post("/api/v1/auth/mfa/totp/disable", h.mfaDisable)
 	return r
 }
 
@@ -178,6 +181,66 @@ func (h *AuthHandler) passwordReset(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.svc.ResetPasswordByEmail(r.Context(), req.Email, req.Token, req.NewPassword); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_TOKEN", "invalid or expired token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type mfaSetupRequest struct {
+	UserID string `json:"user_id"`
+}
+
+func (h *AuthHandler) mfaSetup(w http.ResponseWriter, r *http.Request) {
+	var req mfaSetupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	secret, err := h.svc.SetupTOTP(r.Context(), req.UserID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_USER", "user not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"secret": secret})
+}
+
+type mfaConfirmRequest struct {
+	UserID string `json:"user_id"`
+	Code   string `json:"code"`
+}
+
+func (h *AuthHandler) mfaConfirm(w http.ResponseWriter, r *http.Request) {
+	var req mfaConfirmRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	codes, err := h.svc.ConfirmTOTP(r.Context(), req.UserID, req.Code, TOTPTimeStep(0))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_TOKEN", "invalid or expired code")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"recovery_codes": codes})
+}
+
+type mfaDisableRequest struct {
+	UserID string `json:"user_id"`
+}
+
+func (h *AuthHandler) mfaDisable(w http.ResponseWriter, r *http.Request) {
+	var req mfaDisableRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.svc.DisableTOTP(r.Context(), req.UserID); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_USER", "user not found")
 		return
 	}
 
