@@ -5107,7 +5107,7 @@ Microservice extraction only after actual operational need.
 # 170. Health Endpoints
 
 ```text
-GET /healthz
+GET /health
 ```
 
 Shallow liveness:
@@ -5116,7 +5116,7 @@ Shallow liveness:
 * no DB/R2/AI/TTS calls.
 
 ```text
-GET /readyz
+GET /ready
 ```
 
 Checks:
@@ -5493,8 +5493,8 @@ Build first:
 9. migrations;
 10. sqlc;
 11. OpenAPI skeleton;
-12. `/healthz`;
-13. `/readyz`;
+12. `/health`;
+13. `/ready`;
 14. structured logging;
 15. Vue/Vite app;
 16. `/admin` shell;
@@ -5931,8 +5931,8 @@ Exact first sequence:
 9. Migration setup
 10. sqlc setup
 11. OpenAPI skeleton
-12. /healthz
-13. /readyz
+12. /health
+13. /ready
 14. Logging + request IDs
 15. Vue/Vite shell
 16. /admin shell
