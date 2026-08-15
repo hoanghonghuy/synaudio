@@ -14,6 +14,9 @@ type fakeStore struct {
 	workflowSettings map[string]story.WorkflowSettings
 	contentProfiles  map[string][]story.ContentProfileVersion
 	assets           map[string]story.StoryAsset
+	storyGenres      map[string][]string
+	lastSearchQuery  string
+	lastSearchSort   string
 }
 
 func newFakeStore() *fakeStore {
@@ -25,6 +28,7 @@ func newFakeStore() *fakeStore {
 		workflowSettings: map[string]story.WorkflowSettings{},
 		contentProfiles:  map[string][]story.ContentProfileVersion{},
 		assets:           map[string]story.StoryAsset{},
+		storyGenres:      map[string][]string{},
 	}
 }
 
@@ -113,6 +117,33 @@ func (s *fakeStore) LinkCoverAsset(_ context.Context, storyID, assetID string) e
 	st.CoverAssetID = assetID
 	s.stories[storyID] = st
 	return nil
+}
+
+func (s *fakeStore) SearchStories(_ context.Context, in story.SearchStoriesInput) ([]story.Story, error) {
+	s.lastSearchQuery = in.Query
+	s.lastSearchSort = in.Sort
+
+	out := make([]story.Story, 0, len(s.stories))
+	for _, st := range s.stories {
+		if st.Visibility != story.VisibilityPublic {
+			continue
+		}
+		if in.Genre != "" {
+			genres := s.storyGenres[st.ID]
+			found := false
+			for _, g := range genres {
+				if g == in.Genre {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		out = append(out, st)
+	}
+	return out, nil
 }
 
 type fakeStorage struct {

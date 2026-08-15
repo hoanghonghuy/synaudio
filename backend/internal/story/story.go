@@ -44,6 +44,19 @@ type Store interface {
 	UpdateStory(ctx context.Context, s Story) (Story, error)
 	CreateStoryAsset(ctx context.Context, a StoryAsset) (StoryAsset, error)
 	LinkCoverAsset(ctx context.Context, storyID, assetID string) error
+	SearchStories(ctx context.Context, in SearchStoriesInput) ([]Story, error)
+}
+
+const (
+	SortRecentlyUpdated = "RECENTLY_UPDATED"
+	SortNew             = "NEW"
+	SortTitle           = "TITLE"
+)
+
+type SearchStoriesInput struct {
+	Query string
+	Genre string
+	Sort  string
 }
 
 // ObjectStorage is the boundary for object storage (MinIO/R2).
@@ -251,6 +264,11 @@ func (s *Service) ListGenres(ctx context.Context) ([]Genre, error) {
 // ListStories returns stories, optionally filtered to public only.
 func (s *Service) ListStories(ctx context.Context, in ListStoriesInput) ([]Story, error) {
 	return s.store.ListStories(ctx, in.PublicOnly)
+}
+
+// SearchStories searches public stories by query, genre, and sort.
+func (s *Service) SearchStories(ctx context.Context, in SearchStoriesInput) ([]Story, error) {
+	return s.store.SearchStories(ctx, in)
 }
 
 // GetWorkflowSettings returns the mutable workflow settings for a story.

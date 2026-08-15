@@ -327,3 +327,30 @@ func TestUploadCoverHandlerReturnsCreated(t *testing.T) {
 		t.Fatalf("expected COVER, got %v", resp["type"])
 	}
 }
+
+func TestSearchStoriesHandlerReturnsPublic(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Visibility: story.VisibilityPublic}
+	store.stories["s2"] = story.Story{ID: "s2", Slug: "b", Title: "B", Visibility: story.VisibilityPrivate}
+	store.storyGenres["s1"] = []string{"fantasy"}
+	svc := story.NewService(store)
+	h := story.NewHandler(svc)
+
+	rec := doJSON(t, h, http.MethodGet, "/api/v1/stories?q=road&genre=fantasy&sort=NEW", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	stories, ok := resp["stories"].([]any)
+	if !ok {
+		t.Fatalf("expected stories array, got %v", resp["stories"])
+	}
+	if len(stories) != 1 {
+		t.Fatalf("expected 1 public story, got %d", len(stories))
+	}
+}

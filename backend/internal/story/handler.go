@@ -58,7 +58,40 @@ type storyResponse struct {
 }
 
 func (h *Handler) listPublicStories(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	genre := r.URL.Query().Get("genre")
+	sort := r.URL.Query().Get("sort")
+
+	if q != "" || genre != "" || sort != "" {
+		stories, err := h.svc.SearchStories(r.Context(), SearchStoriesInput{
+			Query: q,
+			Genre: genre,
+			Sort:  sort,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+			return
+		}
+		writeStoryList(w, stories)
+		return
+	}
+
 	h.listStories(w, r, true)
+}
+
+func writeStoryList(w http.ResponseWriter, stories []Story) {
+	out := make([]storyResponse, 0, len(stories))
+	for _, s := range stories {
+		out = append(out, storyResponse{
+			ID:          s.ID,
+			Slug:        s.Slug,
+			Title:       s.Title,
+			Description: s.Description,
+			Status:      s.Status,
+			Visibility:  s.Visibility,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"stories": out})
 }
 
 func (h *Handler) listAdminStories(w http.ResponseWriter, r *http.Request) {
