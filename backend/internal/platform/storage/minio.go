@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -41,4 +42,13 @@ func (m *MinIO) Put(ctx context.Context, key string, data []byte) error {
 		return fmt.Errorf("put object %q: %w", key, err)
 	}
 	return nil
+}
+
+// PresignedGetObject returns a presigned URL for downloading an object.
+func (m *MinIO) PresignedGetObject(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	url, err := m.client.PresignedGetObject(ctx, m.bucket, key, expiry, nil)
+	if err != nil {
+		return "", fmt.Errorf("presign object %q: %w", key, err)
+	}
+	return url.String(), nil
 }

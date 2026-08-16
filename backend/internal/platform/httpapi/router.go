@@ -47,23 +47,38 @@ func NewRouter(deps Dependencies) http.Handler {
 	if deps.AuthHandler != nil {
 		r.Mount("/api/v1/auth", deps.AuthHandler)
 	}
-	if deps.StoryHandler != nil {
-		r.Mount("/api/v1", deps.StoryHandler)
+
+	api := chi.NewRouter()
+	for _, h := range []http.Handler{
+		deps.StoryHandler,
+		deps.PlanningHandler,
+		deps.GenerationHandler,
+		deps.AudioHandler,
+		deps.ListenerHandler,
+	} {
+		if h == nil {
+			continue
+		}
+		mountRoutes(api, h)
 	}
-	if deps.PlanningHandler != nil {
-		r.Mount("/api/v1", deps.PlanningHandler)
-	}
-	if deps.GenerationHandler != nil {
-		r.Mount("/api/v1", deps.GenerationHandler)
-	}
-	if deps.AudioHandler != nil {
-		r.Mount("/api/v1", deps.AudioHandler)
-	}
-	if deps.ListenerHandler != nil {
-		r.Mount("/api/v1", deps.ListenerHandler)
-	}
+	r.Mount("/api/v1", api)
 
 	return r
+}
+
+// mountRoutes copies every route registered on src onto dst. Several domain
+// handlers share overlapping path prefixes (e.g. /admin/chapters/...), so they
+// cannot each be chi.Mount-ed at the same base path; walking their route trees
+// and re-registering them on one router avoids the conflict.
+func mountRoutes(dst chi.Router, src http.Handler) {
+	routes, ok := src.(chi.Routes)
+	if !ok {
+		return
+	}
+	_ = chi.Walk(routes, func(method, route string, handler http.Handler, _ ...func(http.Handler) http.Handler) error {
+		dst.Method(method, route, handler)
+		return nil
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

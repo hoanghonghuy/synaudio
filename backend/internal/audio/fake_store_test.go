@@ -7,6 +7,7 @@ import (
 type fakeStore struct {
 	narrations map[string][]NarrationRevision
 	nextNar    map[string]int
+	segments   map[string][]TTSSegment
 	assets     map[string][]AudioAsset
 	nextVer    map[string]int
 }
@@ -15,6 +16,7 @@ func newFakeStore() *fakeStore {
 	return &fakeStore{
 		narrations: map[string][]NarrationRevision{},
 		nextNar:    map[string]int{},
+		segments:   map[string][]TTSSegment{},
 		assets:     map[string][]AudioAsset{},
 		nextVer:    map[string]int{},
 	}
@@ -39,6 +41,34 @@ func (s *fakeStore) GetNarrationRevision(_ context.Context, revisionID string) (
 		}
 	}
 	return NarrationRevision{}, ErrNarrationNotFound
+}
+
+func (s *fakeStore) CreateTTSSegment(_ context.Context, seg TTSSegment) (TTSSegment, error) {
+	s.segments[seg.NarrationRevisionID] = append(s.segments[seg.NarrationRevisionID], seg)
+	return seg, nil
+}
+
+func (s *fakeStore) GetTTSSegment(_ context.Context, segmentID string) (TTSSegment, error) {
+	for _, segs := range s.segments {
+		for _, seg := range segs {
+			if seg.ID == segmentID {
+				return seg, nil
+			}
+		}
+	}
+	return TTSSegment{}, ErrTTSSegmentNotFound
+}
+
+func (s *fakeStore) UpdateTTSSegment(_ context.Context, seg TTSSegment) (TTSSegment, error) {
+	for narID, segs := range s.segments {
+		for i, s2 := range segs {
+			if s2.ID == seg.ID {
+				s.segments[narID][i] = seg
+				return seg, nil
+			}
+		}
+	}
+	return TTSSegment{}, ErrTTSSegmentNotFound
 }
 
 func (s *fakeStore) NextAudioVersion(_ context.Context, chapterID string) (int, error) {

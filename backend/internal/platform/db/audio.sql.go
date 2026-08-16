@@ -117,6 +117,65 @@ func (q *Queries) CreateNarrationRevision(ctx context.Context, arg CreateNarrati
 	return i, err
 }
 
+const createTTSSegment = `-- name: CreateTTSSegment :one
+
+INSERT INTO tts_segments (id, narration_revision_id, segment_no, text, direction,
+                          status, provider, model, voice_id, duration_ms, temp_storage_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, narration_revision_id, segment_no, text, direction, status, provider,
+          model, voice_id, duration_ms, temp_storage_key, generation_job_id, created_at
+`
+
+type CreateTTSSegmentParams struct {
+	ID                  pgtype.UUID `json:"id"`
+	NarrationRevisionID pgtype.UUID `json:"narration_revision_id"`
+	SegmentNo           int32       `json:"segment_no"`
+	Text                string      `json:"text"`
+	Direction           []byte      `json:"direction"`
+	Status              string      `json:"status"`
+	Provider            pgtype.Text `json:"provider"`
+	Model               pgtype.Text `json:"model"`
+	VoiceID             pgtype.Text `json:"voice_id"`
+	DurationMs          pgtype.Int4 `json:"duration_ms"`
+	TempStorageKey      pgtype.Text `json:"temp_storage_key"`
+}
+
+// ============================================================
+// TTS Segments
+// ============================================================
+func (q *Queries) CreateTTSSegment(ctx context.Context, arg CreateTTSSegmentParams) (TtsSegment, error) {
+	row := q.db.QueryRow(ctx, createTTSSegment,
+		arg.ID,
+		arg.NarrationRevisionID,
+		arg.SegmentNo,
+		arg.Text,
+		arg.Direction,
+		arg.Status,
+		arg.Provider,
+		arg.Model,
+		arg.VoiceID,
+		arg.DurationMs,
+		arg.TempStorageKey,
+	)
+	var i TtsSegment
+	err := row.Scan(
+		&i.ID,
+		&i.NarrationRevisionID,
+		&i.SegmentNo,
+		&i.Text,
+		&i.Direction,
+		&i.Status,
+		&i.Provider,
+		&i.Model,
+		&i.VoiceID,
+		&i.DurationMs,
+		&i.TempStorageKey,
+		&i.GenerationJobID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getActiveAudioAsset = `-- name: GetActiveAudioAsset :one
 SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage_key,
        mime_type, size_bytes, duration_ms, bitrate_kbps, checksum, is_active,
@@ -197,6 +256,34 @@ func (q *Queries) GetNarrationRevision(ctx context.Context, id pgtype.UUID) (Nar
 		&i.Status,
 		&i.GenerationRunID,
 		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTTSSegment = `-- name: GetTTSSegment :one
+SELECT id, narration_revision_id, segment_no, text, direction, status, provider,
+       model, voice_id, duration_ms, temp_storage_key, generation_job_id, created_at
+FROM tts_segments
+WHERE id = $1
+`
+
+func (q *Queries) GetTTSSegment(ctx context.Context, id pgtype.UUID) (TtsSegment, error) {
+	row := q.db.QueryRow(ctx, getTTSSegment, id)
+	var i TtsSegment
+	err := row.Scan(
+		&i.ID,
+		&i.NarrationRevisionID,
+		&i.SegmentNo,
+		&i.Text,
+		&i.Direction,
+		&i.Status,
+		&i.Provider,
+		&i.Model,
+		&i.VoiceID,
+		&i.DurationMs,
+		&i.TempStorageKey,
+		&i.GenerationJobID,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -283,4 +370,53 @@ func (q *Queries) SetActiveAudioAsset(ctx context.Context, arg SetActiveAudioAss
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateTTSSegment = `-- name: UpdateTTSSegment :one
+UPDATE tts_segments
+SET status = $2,
+    provider = $3,
+    model = $4,
+    duration_ms = $5,
+    temp_storage_key = $6
+WHERE id = $1
+RETURNING id, narration_revision_id, segment_no, text, direction, status, provider,
+          model, voice_id, duration_ms, temp_storage_key, generation_job_id, created_at
+`
+
+type UpdateTTSSegmentParams struct {
+	ID             pgtype.UUID `json:"id"`
+	Status         string      `json:"status"`
+	Provider       pgtype.Text `json:"provider"`
+	Model          pgtype.Text `json:"model"`
+	DurationMs     pgtype.Int4 `json:"duration_ms"`
+	TempStorageKey pgtype.Text `json:"temp_storage_key"`
+}
+
+func (q *Queries) UpdateTTSSegment(ctx context.Context, arg UpdateTTSSegmentParams) (TtsSegment, error) {
+	row := q.db.QueryRow(ctx, updateTTSSegment,
+		arg.ID,
+		arg.Status,
+		arg.Provider,
+		arg.Model,
+		arg.DurationMs,
+		arg.TempStorageKey,
+	)
+	var i TtsSegment
+	err := row.Scan(
+		&i.ID,
+		&i.NarrationRevisionID,
+		&i.SegmentNo,
+		&i.Text,
+		&i.Direction,
+		&i.Status,
+		&i.Provider,
+		&i.Model,
+		&i.VoiceID,
+		&i.DurationMs,
+		&i.TempStorageKey,
+		&i.GenerationJobID,
+		&i.CreatedAt,
+	)
+	return i, err
 }

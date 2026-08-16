@@ -57,6 +57,58 @@ func (s *AudioStore) GetNarrationRevision(ctx context.Context, revisionID string
 }
 
 // ============================================================
+// TTS Segments
+// ============================================================
+
+func (s *AudioStore) CreateTTSSegment(ctx context.Context, seg audio.TTSSegment) (audio.TTSSegment, error) {
+	row, err := s.q.CreateTTSSegment(ctx, db.CreateTTSSegmentParams{
+		ID:                  toUUID(seg.ID),
+		NarrationRevisionID: toUUID(seg.NarrationRevisionID),
+		SegmentNo:           int32(seg.SegmentNo),
+		Text:                seg.Text,
+		Status:              seg.Status,
+		Provider:            toText(seg.Provider),
+		Model:               toText(seg.Model),
+		VoiceID:             toText(seg.VoiceID),
+		DurationMs:          toInt4(seg.DurationMs),
+		TempStorageKey:      toText(seg.TempStorageKey),
+	})
+	if err != nil {
+		return audio.TTSSegment{}, err
+	}
+	return toTTSSegment(row), nil
+}
+
+func (s *AudioStore) GetTTSSegment(ctx context.Context, segmentID string) (audio.TTSSegment, error) {
+	row, err := s.q.GetTTSSegment(ctx, toUUID(segmentID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return audio.TTSSegment{}, audio.ErrTTSSegmentNotFound
+		}
+		return audio.TTSSegment{}, err
+	}
+	return toTTSSegment(row), nil
+}
+
+func (s *AudioStore) UpdateTTSSegment(ctx context.Context, seg audio.TTSSegment) (audio.TTSSegment, error) {
+	row, err := s.q.UpdateTTSSegment(ctx, db.UpdateTTSSegmentParams{
+		ID:             toUUID(seg.ID),
+		Status:         seg.Status,
+		Provider:       toText(seg.Provider),
+		Model:          toText(seg.Model),
+		DurationMs:     toInt4(seg.DurationMs),
+		TempStorageKey: toText(seg.TempStorageKey),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return audio.TTSSegment{}, audio.ErrTTSSegmentNotFound
+		}
+		return audio.TTSSegment{}, err
+	}
+	return toTTSSegment(row), nil
+}
+
+// ============================================================
 // Audio Assets
 // ============================================================
 
@@ -155,5 +207,20 @@ func toAudioAsset(row db.AudioAsset) audio.AudioAsset {
 		BitrateKbps:               int(row.BitrateKbps.Int32),
 		Checksum:                  fromText(row.Checksum),
 		IsActive:                  row.IsActive,
+	}
+}
+
+func toTTSSegment(row db.TtsSegment) audio.TTSSegment {
+	return audio.TTSSegment{
+		ID:                  fromUUID(row.ID),
+		NarrationRevisionID: fromUUID(row.NarrationRevisionID),
+		SegmentNo:           int(row.SegmentNo),
+		Text:                row.Text,
+		Status:              row.Status,
+		Provider:            fromText(row.Provider),
+		Model:               fromText(row.Model),
+		VoiceID:             fromText(row.VoiceID),
+		DurationMs:          int(row.DurationMs.Int32),
+		TempStorageKey:      fromText(row.TempStorageKey),
 	}
 }

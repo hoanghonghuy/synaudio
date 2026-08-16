@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -47,6 +48,10 @@ type Store interface {
 	CreateNarrationRevision(ctx context.Context, r NarrationRevision) (NarrationRevision, error)
 	GetNarrationRevision(ctx context.Context, revisionID string) (NarrationRevision, error)
 
+	CreateTTSSegment(ctx context.Context, seg TTSSegment) (TTSSegment, error)
+	GetTTSSegment(ctx context.Context, segmentID string) (TTSSegment, error)
+	UpdateTTSSegment(ctx context.Context, seg TTSSegment) (TTSSegment, error)
+
 	NextAudioVersion(ctx context.Context, chapterID string) (int, error)
 	CreateAudioAsset(ctx context.Context, a AudioAsset) (AudioAsset, error)
 	GetAudioAsset(ctx context.Context, assetID string) (AudioAsset, error)
@@ -54,13 +59,38 @@ type Store interface {
 	SetActiveAudioAsset(ctx context.Context, chapterID, assetID string) (AudioAsset, error)
 }
 
-// Service orchestrates narration and audio asset production.
-type Service struct {
-	store Store
+// Presigner generates presigned download URLs for object storage.
+type Presigner interface {
+	PresignedGetObject(ctx context.Context, key string, expiry time.Duration) (string, error)
 }
 
-func NewService(store Store) *Service {
-	return &Service{store: store}
+// Service orchestrates narration and audio asset production.
+type Service struct {
+	store     Store
+	tts       TTSProvider
+	presigner Presigner
+}
+
+type Option func(*Service)
+
+func WithTTS(p TTSProvider) Option {
+	return func(svc *Service) {
+		svc.tts = p
+	}
+}
+
+func WithPresigner(p Presigner) Option {
+	return func(svc *Service) {
+		svc.presigner = p
+	}
+}
+
+func NewService(store Store, opts ...Option) *Service {
+	svc := &Service{store: store}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // CreateNarrationRevision creates a new narration revision for a chapter.
@@ -124,4 +154,21 @@ func (s *Service) ActivateAudioAsset(ctx context.Context, chapterID, assetID str
 // GetActiveAudioAsset returns the currently active audio asset for a chapter.
 func (s *Service) GetActiveAudioAsset(ctx context.Context, chapterID string) (AudioAsset, error) {
 	return s.store.GetActiveAudioAsset(ctx, chapterID)
+}
+
+// PresignExpiry is how long a presigned audio URL stays valid (spec default: 2 hours).
+const PresignExpiry = 2 * time.Hour
+
+// GetAudioURL returns a presigned download URL for the active audio asset.
+func (s *Service) GetAudioURL(ctx context.Context, chapterID string) (string, error) {
+	if s.presigner == nil {
+		return "", errors.New("presigner not configured")
+	}
+
+	asset, err := s.store.GetActiveAudioAsset(ctx, chapterID)
+	if err != nil {
+		return "", err
+	}
+
+	return s.presigner.PresignedGetObject(ctx, asset.StorageKey, PresignExpiry)
 }

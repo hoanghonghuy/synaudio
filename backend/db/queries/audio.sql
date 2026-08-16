@@ -21,6 +21,34 @@ FROM narration_revisions
 WHERE id = $1;
 
 -- ============================================================
+-- TTS Segments
+-- ============================================================
+
+-- name: CreateTTSSegment :one
+INSERT INTO tts_segments (id, narration_revision_id, segment_no, text, direction,
+                          status, provider, model, voice_id, duration_ms, temp_storage_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, narration_revision_id, segment_no, text, direction, status, provider,
+          model, voice_id, duration_ms, temp_storage_key, generation_job_id, created_at;
+
+-- name: GetTTSSegment :one
+SELECT id, narration_revision_id, segment_no, text, direction, status, provider,
+       model, voice_id, duration_ms, temp_storage_key, generation_job_id, created_at
+FROM tts_segments
+WHERE id = $1;
+
+-- name: UpdateTTSSegment :one
+UPDATE tts_segments
+SET status = $2,
+    provider = $3,
+    model = $4,
+    duration_ms = $5,
+    temp_storage_key = $6
+WHERE id = $1
+RETURNING id, narration_revision_id, segment_no, text, direction, status, provider,
+          model, voice_id, duration_ms, temp_storage_key, generation_job_id, created_at;
+
+-- ============================================================
 -- Audio Assets
 -- ============================================================
 
