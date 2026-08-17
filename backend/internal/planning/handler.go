@@ -23,6 +23,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Get("/admin/stories/{storyID}/characters", h.listCharacters)
 	r.Post("/admin/stories/{storyID}/chapters", h.createChapter)
 	r.Get("/admin/stories/{storyID}/chapters", h.listChapters)
+	r.Get("/stories/{storyID}/chapters", h.listPublishedChapters)
 	r.Post("/admin/chapters/{chapterID}/plans", h.createPlanRevision)
 	r.Post("/admin/stories/{storyID}/facts", h.createFact)
 	r.Get("/admin/stories/{storyID}/facts", h.listFacts)
@@ -153,6 +154,25 @@ func (h *Handler) listChapters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"chapters": chapters})
+}
+
+func (h *Handler) listPublishedChapters(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	chapters, err := h.svc.ListChapters(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	published := make([]Chapter, 0, len(chapters))
+	for _, c := range chapters {
+		if c.Status == "PUBLISHED" {
+			published = append(published, c)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"chapters": published})
 }
 
 type createPlanRequest struct {

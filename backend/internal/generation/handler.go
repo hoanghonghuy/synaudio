@@ -18,6 +18,7 @@ func NewHandler(svc *Service) http.Handler {
 	r := chi.NewRouter()
 	r.Post("/admin/chapters/{chapterID}/content", h.writeChapter)
 	r.Get("/admin/chapters/{chapterID}/content", h.listContentRevisions)
+	r.Get("/chapters/{chapterID}/content", h.getPublishedContent)
 	r.Post("/admin/chapters/{chapterID}/approve", h.approveContent)
 	r.Post("/admin/chapters/{chapterID}/reviews", h.createReview)
 	r.Get("/admin/chapters/{chapterID}/reviews", h.listReviews)
@@ -68,6 +69,27 @@ func (h *Handler) listContentRevisions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"revisions": revisions})
+}
+
+func (h *Handler) getPublishedContent(w http.ResponseWriter, r *http.Request) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	revisions, err := h.svc.ListContentRevisions(r.Context(), chapterID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+	if len(revisions) == 0 {
+		writeError(w, http.StatusNotFound, "CONTENT_NOT_FOUND", "content not found")
+		return
+	}
+
+	latest := revisions[len(revisions)-1]
+	writeJSON(w, http.StatusOK, map[string]any{
+		"chapter_id": latest.ChapterID,
+		"revision_id": latest.ID,
+		"content_text": latest.ContentText,
+	})
 }
 
 type approveContentRequest struct {

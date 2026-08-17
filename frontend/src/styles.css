@@ -241,3 +241,83 @@ h1 {
 .success {
   color: var(--accent);
 }
+
+.read-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.read-link:hover {
+  text-decoration: underline;
+}
+
+.chapter-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.chapter-tab {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fffdf8;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chapter-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.reader-body h2 {
+  margin: 0 0 1rem;
+}
+
+.reader-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.reader-head h1 {
+  margin-bottom: 1rem;
+}
+
+.fav-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffdf8;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fav-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.player {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+.prose {
+  line-height: 1.8;
+  font-size: 1.05rem;
+}
+
+.prose p {
+  margin: 0 0 1rem;
+}

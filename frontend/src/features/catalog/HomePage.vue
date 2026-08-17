@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { listGenres, listPublicStories } from '../../api/client'
 import type { Genre, Story } from '../../api/types'
 
@@ -64,6 +65,7 @@ onMounted(load)
           <span class="badge">{{ s.status }}</span>
           <span class="badge">{{ s.visibility }}</span>
         </div>
+        <RouterLink class="read-link" :to="`/stories/${s.id}/read`">Đọc & nghe</RouterLink>
       </li>
     </ul>
   </section>

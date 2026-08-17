@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../features/catalog/HomePage.vue'
 import AdminShell from '../features/admin/AdminShell.vue'
+import StoryReader from '../features/reader/StoryReader.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -14,6 +15,11 @@ export const router = createRouter({
       path: '/admin',
       name: 'admin',
       component: AdminShell,
+    },
+    {
+      path: '/stories/:storyID/read',
+      name: 'reader',
+      component: StoryReader,
     },
   ],
 })

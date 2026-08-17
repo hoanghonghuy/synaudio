@@ -45,3 +45,60 @@ export interface ApiError {
     message: string
   }
 }
+
+export interface Chapter {
+  ID: string
+  StoryID: string
+  ChapterNumber: number
+  Title: string
+  Status: string
+  ArcID: string
+}
+
+export interface ChapterListResponse {
+  chapters: Chapter[]
+}
+
+export interface ChapterContent {
+  chapter_id: string
+  revision_id: string
+  content_text: string
+}
+
+export interface AudioAsset {
+  ID: string
+  ChapterID: string
+  VersionNo: number
+  SourceNarrationRevisionID: string
+  Status: string
+  StorageKey: string
+  MimeType: string
+  SizeBytes: number
+  DurationMs: number
+  BitrateKbps: number
+  Checksum: string
+  IsActive: boolean
+}
+
+export interface AudioURLResponse {
+  url: string
+}
+
+export interface Favorite {
+  UserID: string
+  StoryID: string
+}
+
+export interface FavoriteListResponse {
+  favorites: Favorite[]
+}
+
+export interface ListeningProgress {
+  UserID: string
+  ChapterID: string
+  PositionMs: number
+  CompletedAt: string
+  LastAudioAssetID: string
+  LastPlaybackSessionID: string
+  Version: number
+}

@@ -69,6 +69,7 @@ type Service struct {
 	store     Store
 	tts       TTSProvider
 	presigner Presigner
+	processor AudioProcessor
 }
 
 type Option func(*Service)
@@ -82,6 +83,12 @@ func WithTTS(p TTSProvider) Option {
 func WithPresigner(p Presigner) Option {
 	return func(svc *Service) {
 		svc.presigner = p
+	}
+}
+
+func WithAudioProcessor(p AudioProcessor) Option {
+	return func(svc *Service) {
+		svc.processor = p
 	}
 }
 
