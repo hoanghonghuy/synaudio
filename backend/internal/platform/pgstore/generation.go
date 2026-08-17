@@ -140,6 +140,7 @@ func (s *GenerationStore) GetGenerationRun(ctx context.Context, runID string) (g
 }
 
 func (s *GenerationStore) CreateGenerationJob(ctx context.Context, j generation.GenerationJob) (generation.GenerationJob, error) {
+	outputRef, _ := json.Marshal(j.OutputRef)
 	row, err := s.q.CreateGenerationJob(ctx, db.CreateGenerationJobParams{
 		ID:               toUUID(j.ID),
 		RunID:            toUUID(j.RunID),
@@ -149,11 +150,24 @@ func (s *GenerationStore) CreateGenerationJob(ctx context.Context, j generation.
 		InputFingerprint: toText(j.InputFingerprint),
 		AttemptCount:     int32(j.AttemptCount),
 		MaxAttempts:      int32(j.MaxAttempts),
+		OutputRef:        outputRef,
 	})
 	if err != nil {
 		return generation.GenerationJob{}, err
 	}
 	return toGenerationJob(row), nil
+}
+
+func (s *GenerationStore) ListJobsByRun(ctx context.Context, runID string) ([]generation.GenerationJob, error) {
+	rows, err := s.q.ListJobsByRun(ctx, toUUID(runID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]generation.GenerationJob, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toGenerationJob(r))
+	}
+	return out, nil
 }
 
 func (s *GenerationStore) NextAttemptNo(ctx context.Context, jobID string) (int, error) {
@@ -214,6 +228,33 @@ func (s *GenerationStore) UpdateJobAttemptStatus(ctx context.Context, attemptID,
 		return generation.JobAttempt{}, err
 	}
 	return toJobAttempt(row), nil
+}
+
+func (s *GenerationStore) UpdateJobAttemptUsage(ctx context.Context, attemptID string, usage map[string]any) (generation.JobAttempt, error) {
+	usageJSON, _ := json.Marshal(usage)
+	row, err := s.q.UpdateJobAttemptUsage(ctx, db.UpdateJobAttemptUsageParams{
+		ID:    toUUID(attemptID),
+		Usage: usageJSON,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return generation.JobAttempt{}, generation.ErrJobAttemptNotFound
+		}
+		return generation.JobAttempt{}, err
+	}
+	return toJobAttempt(row), nil
+}
+
+func (s *GenerationStore) ListUsageByStory(ctx context.Context, storyID string) ([]generation.JobAttempt, error) {
+	rows, err := s.q.ListUsageByStory(ctx, toUUID(storyID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]generation.JobAttempt, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toJobAttempt(r))
+	}
+	return out, nil
 }
 
 func (s *GenerationStore) ReclaimStaleJobs(ctx context.Context, olderThan string) ([]generation.GenerationJob, error) {

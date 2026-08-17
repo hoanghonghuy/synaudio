@@ -130,6 +130,7 @@ onMounted(load)
         <div class="meta">
           <span class="badge">{{ s.status }}</span>
           <span class="badge">{{ s.visibility }}</span>
+          <RouterLink class="control-link" :to="`/admin/stories/${s.id}/control`">Điều khiển</RouterLink>
         </div>
       </li>
     </ul>

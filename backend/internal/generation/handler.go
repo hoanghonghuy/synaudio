@@ -33,6 +33,10 @@ func NewHandler(svc *Service) http.Handler {
 	r.Post("/admin/runs", h.createRun)
 	r.Get("/admin/runs/{runID}", h.getRun)
 	r.Post("/admin/runs/{runID}/jobs", h.createJob)
+	r.Post("/admin/stories/{storyID}/batch-generate", h.startBatchGeneration)
+	r.Post("/admin/runs/{runID}/mark-stale", h.markDownstreamStale)
+	r.Post("/admin/attempts/{attemptID}/usage", h.recordUsage)
+	r.Get("/admin/stories/{storyID}/usage", h.listUsage)
 	return r
 }
 
@@ -396,4 +400,87 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 			"message": message,
 		},
 	})
+}
+
+type startBatchRequest struct {
+	ChapterIDs  []string `json:"chapter_ids"`
+	RequestedBy string   `json:"requested_by"`
+}
+
+func (h *Handler) startBatchGeneration(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	var req startBatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	run, err := h.svc.StartBatchGeneration(r.Context(), storyID, req.ChapterIDs, req.RequestedBy)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, run)
+}
+
+type markStaleRequest struct {
+	ChapterID string `json:"chapter_id"`
+}
+
+func (h *Handler) markDownstreamStale(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runID")
+
+	var req markStaleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	stale, err := h.svc.MarkDownstreamStale(r.Context(), runID, req.ChapterID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"stale_jobs": stale})
+}
+
+type recordUsageRequest struct {
+	Usage map[string]any `json:"usage"`
+}
+
+func (h *Handler) recordUsage(w http.ResponseWriter, r *http.Request) {
+	attemptID := chi.URLParam(r, "attemptID")
+
+	var req recordUsageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	attempt, err := h.svc.RecordUsage(r.Context(), attemptID, req.Usage)
+	if err != nil {
+		if errors.Is(err, ErrJobAttemptNotFound) {
+			writeError(w, http.StatusNotFound, "ATTEMPT_NOT_FOUND", "attempt not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, attempt)
+}
+
+func (h *Handler) listUsage(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	usage, err := h.svc.ListUsageByStory(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"usage": usage})
 }

@@ -102,3 +102,72 @@ export interface ListeningProgress {
   LastPlaybackSessionID: string
   Version: number
 }
+
+export interface CreativeDecision {
+  ID: string
+  StoryID: string
+  ChapterID: string
+  ArcID: string
+  Origin: string
+  DecisionType: string
+  Severity: string
+  Status: string
+  BlockingLevel: string
+  Question: string
+  ContextSummary: string
+  SelectedBy: string
+}
+
+export interface CreativeDecisionListResponse {
+  decisions: CreativeDecision[]
+}
+
+export interface AttentionItem {
+  ID: string
+  StoryID: string
+  ChapterID: string
+  Priority: string
+  Kind: string
+  Title: string
+  Detail: string
+  Action: string
+  Resolved: boolean
+}
+
+export interface AttentionListResponse {
+  items: AttentionItem[]
+}
+
+export interface ArcCompletionResult {
+  ArcID: string
+  Complete: boolean
+  TotalChapters: number
+  CompletedChapters: number
+  PendingChapters: string[]
+}
+
+export interface ThreadInactivity {
+  ThreadID: string
+  Title: string
+  Importance: string
+  EventCount: number
+}
+
+export interface ThreadInactivityResponse {
+  inactive_threads: ThreadInactivity[]
+}
+
+export interface UsageRecord {
+  ID: string
+  JobID: string
+  AttemptNo: number
+  Provider: string
+  Model: string
+  Status: string
+  Usage: Record<string, unknown>
+  LatencyMs: number
+}
+
+export interface UsageListResponse {
+  usage: UsageRecord[]
+}

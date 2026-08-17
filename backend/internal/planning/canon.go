@@ -22,6 +22,8 @@ type CanonVersion struct {
 	SequenceNo     int
 	ParentVersionID string
 	SourceChapterID string
+	SourceContentRevisionID string
+	SourceProvisionalVersionID string
 	Status         string
 	CommittedBy    string
 }

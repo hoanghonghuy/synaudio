@@ -8,6 +8,7 @@ import (
 var (
 	ErrNoRunnableJob       = errors.New("no runnable job")
 	ErrGenerationJobNotFound = errors.New("generation job not found")
+	ErrJobAttemptNotFound  = errors.New("job attempt not found")
 )
 
 // ClaimNextJob claims the next PENDING job for a worker.

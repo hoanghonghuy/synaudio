@@ -11,6 +11,7 @@ type fakeStore struct {
 	runs      map[string][]GenerationRun
 	jobs      map[string][]GenerationJob
 	nextAttempt map[string]int
+	attempts  map[string][]JobAttempt
 	reviews   map[string][]ChapterReview
 }
 
@@ -22,6 +23,7 @@ func newFakeStore() *fakeStore {
 		runs:      map[string][]GenerationRun{},
 		jobs:      map[string][]GenerationJob{},
 		nextAttempt: map[string]int{},
+		attempts:  map[string][]JobAttempt{},
 		reviews:   map[string][]ChapterReview{},
 	}
 }
@@ -96,6 +98,7 @@ func (s *fakeStore) NextAttemptNo(_ context.Context, jobID string) (int, error) 
 }
 
 func (s *fakeStore) CreateJobAttempt(_ context.Context, a JobAttempt) (JobAttempt, error) {
+	s.attempts[a.JobID] = append(s.attempts[a.JobID], a)
 	return a, nil
 }
 
@@ -167,4 +170,33 @@ func (s *fakeStore) CancelJob(_ context.Context, jobID string) (GenerationJob, e
 		}
 	}
 	return GenerationJob{}, ErrGenerationJobNotFound
+}
+
+func (s *fakeStore) ListJobsByRun(_ context.Context, runID string) ([]GenerationJob, error) {
+	return s.jobs[runID], nil
+}
+
+func (s *fakeStore) UpdateJobAttemptUsage(_ context.Context, attemptID string, usage map[string]any) (JobAttempt, error) {
+	for jobID, as := range s.attempts {
+		for i, a := range as {
+			if a.ID == attemptID {
+				a.Usage = usage
+				s.attempts[jobID][i] = a
+				return a, nil
+			}
+		}
+	}
+	return JobAttempt{}, ErrJobAttemptNotFound
+}
+
+func (s *fakeStore) ListUsageByStory(_ context.Context, storyID string) ([]JobAttempt, error) {
+	out := []JobAttempt{}
+	for _, as := range s.attempts {
+		for _, a := range as {
+			if a.Usage != nil {
+				out = append(out, a)
+			}
+		}
+	}
+	return out, nil
 }

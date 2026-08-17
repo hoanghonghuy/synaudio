@@ -379,6 +379,18 @@ func (s *PlanningStore) CreatePlotThreadEvent(ctx context.Context, e planning.Pl
 	return toPlotThreadEvent(row), nil
 }
 
+func (s *PlanningStore) ListPlotThreadEvents(ctx context.Context, threadID string) ([]planning.PlotThreadEvent, error) {
+	rows, err := s.q.ListPlotThreadEvents(ctx, toUUID(threadID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]planning.PlotThreadEvent, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toPlotThreadEvent(r))
+	}
+	return out, nil
+}
+
 // ============================================================
 // Canon branches + versions
 // ============================================================
@@ -403,13 +415,16 @@ func (s *PlanningStore) NextCanonSequence(ctx context.Context, branchID string) 
 
 func (s *PlanningStore) CreateCanonVersion(ctx context.Context, v planning.CanonVersion) (planning.CanonVersion, error) {
 	row, err := s.q.CreateCanonVersion(ctx, db.CreateCanonVersionParams{
-		ID:              toUUID(v.ID),
-		StoryID:         toUUID(v.StoryID),
-		BranchID:        toUUID(v.BranchID),
-		SequenceNo:      int32(v.SequenceNo),
-		SourceChapterID: toUUID(v.SourceChapterID),
-		Status:          v.Status,
-		CommittedBy:     toUUID(v.CommittedBy),
+		ID:                       toUUID(v.ID),
+		StoryID:                  toUUID(v.StoryID),
+		BranchID:                 toUUID(v.BranchID),
+		SequenceNo:               int32(v.SequenceNo),
+		ParentVersionID:          toUUID(v.ParentVersionID),
+		SourceChapterID:          toUUID(v.SourceChapterID),
+		SourceContentRevisionID:  toUUID(v.SourceContentRevisionID),
+		SourceProvisionalVersionID: toUUID(v.SourceProvisionalVersionID),
+		Status:                   v.Status,
+		CommittedBy:              toUUID(v.CommittedBy),
 	})
 	if err != nil {
 		return planning.CanonVersion{}, err
@@ -427,6 +442,32 @@ func (s *PlanningStore) ListCanonVersions(ctx context.Context, branchID string) 
 		out = append(out, toCanonVersion(r))
 	}
 	return out, nil
+}
+
+func (s *PlanningStore) GetCanonVersion(ctx context.Context, id string) (planning.CanonVersion, error) {
+	row, err := s.q.GetCanonVersion(ctx, toUUID(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return planning.CanonVersion{}, planning.ErrCanonVersionNotFound
+		}
+		return planning.CanonVersion{}, err
+	}
+	return toCanonVersion(row), nil
+}
+
+func (s *PlanningStore) UpdateCanonVersion(ctx context.Context, v planning.CanonVersion) (planning.CanonVersion, error) {
+	row, err := s.q.UpdateCanonVersion(ctx, db.UpdateCanonVersionParams{
+		ID:          toUUID(v.ID),
+		Status:      v.Status,
+		CommittedBy: toUUID(v.CommittedBy),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return planning.CanonVersion{}, planning.ErrCanonVersionNotFound
+		}
+		return planning.CanonVersion{}, err
+	}
+	return toCanonVersion(row), nil
 }
 
 func (s *PlanningStore) CreateCanonChangeItem(ctx context.Context, c planning.CanonChangeItem) (planning.CanonChangeItem, error) {
@@ -491,6 +532,141 @@ func (s *PlanningStore) ListContextSnapshots(ctx context.Context, storyID string
 		out = append(out, toContextSnapshot(r))
 	}
 	return out, nil
+}
+
+func (s *PlanningStore) GetContextSnapshot(ctx context.Context, id string) (planning.ContextSnapshot, error) {
+	row, err := s.q.GetContextSnapshot(ctx, toUUID(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return planning.ContextSnapshot{}, planning.ErrContextSnapshotNotFound
+		}
+		return planning.ContextSnapshot{}, err
+	}
+	return toContextSnapshot(row), nil
+}
+
+// ============================================================
+// Creative Decisions
+// ============================================================
+
+func (s *PlanningStore) CreateCreativeDecision(ctx context.Context, d planning.CreativeDecision) (planning.CreativeDecision, error) {
+	row, err := s.q.CreateCreativeDecision(ctx, db.CreateCreativeDecisionParams{
+		ID:             toUUID(d.ID),
+		StoryID:        toUUID(d.StoryID),
+		ChapterID:      toUUID(d.ChapterID),
+		ArcID:          toUUID(d.ArcID),
+		Origin:         d.Origin,
+		DecisionType:   d.DecisionType,
+		Severity:       d.Severity,
+		Status:         d.Status,
+		BlockingLevel:  d.BlockingLevel,
+		Question:       d.Question,
+		ContextSummary: toText(d.ContextSummary),
+		CreatedBy:      toUUID(d.CreatedBy),
+	})
+	if err != nil {
+		return planning.CreativeDecision{}, err
+	}
+	return toCreativeDecision(row), nil
+}
+
+func (s *PlanningStore) GetCreativeDecision(ctx context.Context, id string) (planning.CreativeDecision, error) {
+	row, err := s.q.GetCreativeDecision(ctx, toUUID(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return planning.CreativeDecision{}, planning.ErrCreativeDecisionNotFound
+		}
+		return planning.CreativeDecision{}, err
+	}
+	return toCreativeDecision(row), nil
+}
+
+func (s *PlanningStore) ListCreativeDecisions(ctx context.Context, storyID string) ([]planning.CreativeDecision, error) {
+	rows, err := s.q.ListCreativeDecisions(ctx, toUUID(storyID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]planning.CreativeDecision, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toCreativeDecision(r))
+	}
+	return out, nil
+}
+
+func (s *PlanningStore) UpdateCreativeDecision(ctx context.Context, d planning.CreativeDecision) (planning.CreativeDecision, error) {
+	row, err := s.q.UpdateCreativeDecision(ctx, db.UpdateCreativeDecisionParams{
+		ID:                 toUUID(d.ID),
+		Status:             d.Status,
+		SelectedOptionID:   toUUID(d.SelectedOptionID),
+		CustomSelectedText: toText(d.CustomSelectedText),
+		RejectionScope:     toText(d.RejectionScope),
+		SelectedBy:         toUUID(d.SelectedBy),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return planning.CreativeDecision{}, planning.ErrCreativeDecisionNotFound
+		}
+		return planning.CreativeDecision{}, err
+	}
+	return toCreativeDecision(row), nil
+}
+
+// ============================================================
+// Attention Items
+// ============================================================
+
+func (s *PlanningStore) CreateAttentionItem(ctx context.Context, a planning.AttentionItem) (planning.AttentionItem, error) {
+	row, err := s.q.CreateAttentionItem(ctx, db.CreateAttentionItemParams{
+		ID:        toUUID(a.ID),
+		StoryID:   toUUID(a.StoryID),
+		ChapterID: toUUID(a.ChapterID),
+		Priority:  a.Priority,
+		Kind:      a.Kind,
+		Title:     a.Title,
+		Detail:    toText(a.Detail),
+		Action:    toText(a.Action),
+	})
+	if err != nil {
+		return planning.AttentionItem{}, err
+	}
+	return toAttentionItem(row), nil
+}
+
+func (s *PlanningStore) ListAttentionItems(ctx context.Context, storyID string) ([]planning.AttentionItem, error) {
+	rows, err := s.q.ListAttentionItems(ctx, toUUID(storyID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]planning.AttentionItem, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toAttentionItem(r))
+	}
+	return out, nil
+}
+
+func (s *PlanningStore) GetAttentionItem(ctx context.Context, id string) (planning.AttentionItem, error) {
+	row, err := s.q.GetAttentionItem(ctx, toUUID(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return planning.AttentionItem{}, planning.ErrAttentionItemNotFound
+		}
+		return planning.AttentionItem{}, err
+	}
+	return toAttentionItem(row), nil
+}
+
+func (s *PlanningStore) UpdateAttentionItem(ctx context.Context, a planning.AttentionItem) (planning.AttentionItem, error) {
+	row, err := s.q.UpdateAttentionItem(ctx, db.UpdateAttentionItemParams{
+		ID:       toUUID(a.ID),
+		Resolved: a.Resolved,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return planning.AttentionItem{}, planning.ErrAttentionItemNotFound
+		}
+		return planning.AttentionItem{}, err
+	}
+	return toAttentionItem(row), nil
 }
 
 // ============================================================
@@ -646,6 +822,8 @@ func toCanonVersion(row db.CanonVersion) planning.CanonVersion {
 		SequenceNo:      int(row.SequenceNo),
 		ParentVersionID: fromUUID(row.ParentVersionID),
 		SourceChapterID: fromUUID(row.SourceChapterID),
+		SourceContentRevisionID: fromUUID(row.SourceContentRevisionID),
+		SourceProvisionalVersionID: fromUUID(row.SourceProvisionalVersionID),
 		Status:          row.Status,
 		CommittedBy:     fromUUID(row.CommittedBy),
 	}
@@ -677,5 +855,45 @@ func toContextSnapshot(row db.ContextSnapshot) planning.ContextSnapshot {
 		WorkflowVersion:         fromText(row.WorkflowVersion),
 		Provider:                fromText(row.Provider),
 		Model:                   fromText(row.Model),
+	}
+}
+
+func toCreativeDecision(row db.CreativeDecision) planning.CreativeDecision {
+	var revisit map[string]any
+	_ = json.Unmarshal(row.RevisitCondition, &revisit)
+	return planning.CreativeDecision{
+		ID:                  fromUUID(row.ID),
+		StoryID:             fromUUID(row.StoryID),
+		ChapterID:           fromUUID(row.ChapterID),
+		ArcID:               fromUUID(row.ArcID),
+		Origin:              row.Origin,
+		DecisionType:        row.DecisionType,
+		Severity:            row.Severity,
+		Status:              row.Status,
+		BlockingLevel:       row.BlockingLevel,
+		Question:            row.Question,
+		ContextSummary:      fromText(row.ContextSummary),
+		RecommendedOptionID: fromUUID(row.RecommendedOptionID),
+		SelectedOptionID:    fromUUID(row.SelectedOptionID),
+		CustomSelectedText:  fromText(row.CustomSelectedText),
+		RejectionScope:      fromText(row.RejectionScope),
+		RevisitCondition:    revisit,
+		TriggeredByRunID:    fromUUID(row.TriggeredByRunID),
+		CreatedBy:           fromUUID(row.CreatedBy),
+		SelectedBy:          fromUUID(row.SelectedBy),
+	}
+}
+
+func toAttentionItem(row db.AttentionItem) planning.AttentionItem {
+	return planning.AttentionItem{
+		ID:        fromUUID(row.ID),
+		StoryID:   fromUUID(row.StoryID),
+		ChapterID: fromUUID(row.ChapterID),
+		Priority:  row.Priority,
+		Kind:      row.Kind,
+		Title:     row.Title,
+		Detail:    fromText(row.Detail),
+		Action:    fromText(row.Action),
+		Resolved:  row.Resolved,
 	}
 }

@@ -33,11 +33,23 @@ func NewHandler(svc *Service) http.Handler {
 	r.Post("/admin/stories/{storyID}/canon-branches", h.createCanonBranch)
 	r.Post("/admin/canon-branches/{branchID}/versions", h.createCanonVersion)
 	r.Get("/admin/canon-branches/{branchID}/versions", h.listCanonVersions)
+	r.Post("/admin/canon-branches/{branchID}/provisional-versions", h.createProvisionalCanonVersion)
+	r.Post("/admin/canon-versions/{versionID}/promote", h.promoteProvisionalVersion)
 	r.Post("/admin/stories/{storyID}/context-snapshots", h.createContextSnapshot)
 	r.Get("/admin/stories/{storyID}/context-snapshots", h.listContextSnapshots)
 	r.Post("/admin/canon-branches/{branchID}/commit", h.commitCanon)
 	r.Post("/admin/chapters/{chapterID}/publish", h.publishChapter)
 	r.Post("/admin/chapters/{chapterID}/unpublish", h.unpublishChapter)
+	r.Get("/admin/stories/{storyID}/creative-decisions", h.listCreativeDecisions)
+	r.Post("/admin/stories/{storyID}/creative-decisions", h.createCreativeDecision)
+	r.Post("/admin/creative-decisions/{decisionID}/select", h.selectCreativeDecision)
+	r.Post("/admin/creative-decisions/{decisionID}/reject", h.rejectCreativeDecision)
+	r.Get("/admin/stories/{storyID}/arcs/{arcID}/completion", h.reviewArcCompletion)
+	r.Get("/admin/stories/{storyID}/attention", h.listAttentionItems)
+	r.Post("/admin/stories/{storyID}/attention", h.createAttentionItem)
+	r.Post("/admin/attention/{itemID}/resolve", h.resolveAttentionItem)
+	r.Get("/admin/context-snapshots/{snapshotID}", h.getContextSnapshot)
+	r.Get("/admin/stories/{storyID}/thread-inactivity", h.analyzeThreadInactivity)
 	return r
 }
 
@@ -354,6 +366,56 @@ func (h *Handler) listCanonVersions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"versions": versions})
 }
 
+type createProvisionalCanonVersionRequest struct {
+	StoryID              string `json:"story_id"`
+	SourceChapterID      string `json:"source_chapter_id"`
+	SourceContentRevisionID string `json:"source_content_revision_id"`
+}
+
+func (h *Handler) createProvisionalCanonVersion(w http.ResponseWriter, r *http.Request) {
+	branchID := chi.URLParam(r, "branchID")
+
+	var req createProvisionalCanonVersionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	v, err := h.svc.CreateProvisionalCanonVersion(r.Context(), req.StoryID, branchID, req.SourceChapterID, req.SourceContentRevisionID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, v)
+}
+
+type promoteProvisionalVersionRequest struct {
+	CommittedBy string `json:"committed_by"`
+}
+
+func (h *Handler) promoteProvisionalVersion(w http.ResponseWriter, r *http.Request) {
+	versionID := chi.URLParam(r, "versionID")
+
+	var req promoteProvisionalVersionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	v, err := h.svc.PromoteProvisionalVersion(r.Context(), versionID, req.CommittedBy)
+	if err != nil {
+		if errors.Is(err, ErrCanonVersionNotFound) {
+			writeError(w, http.StatusNotFound, "VERSION_NOT_FOUND", "version not found")
+			return
+		}
+		writeError(w, http.StatusConflict, "PROMOTE_FAILED", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, v)
+}
+
 type createContextSnapshotRequest struct {
 	ChapterID               string `json:"chapter_id"`
 	BibleVersionID          string `json:"bible_version_id"`
@@ -466,4 +528,218 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 			"message": message,
 		},
 	})
+}
+
+type createCreativeDecisionRequest struct {
+	ChapterID      string `json:"chapter_id"`
+	ArcID          string `json:"arc_id"`
+	Origin         string `json:"origin"`
+	DecisionType   string `json:"decision_type"`
+	Severity       string `json:"severity"`
+	BlockingLevel  string `json:"blocking_level"`
+	Question       string `json:"question"`
+	ContextSummary string `json:"context_summary"`
+	CreatedBy      string `json:"created_by"`
+}
+
+func (h *Handler) createCreativeDecision(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	var req createCreativeDecisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	d, err := h.svc.CreateCreativeDecision(r.Context(), CreateCreativeDecisionInput{
+		StoryID:        storyID,
+		ChapterID:      req.ChapterID,
+		ArcID:          req.ArcID,
+		Origin:         req.Origin,
+		DecisionType:   req.DecisionType,
+		Severity:       req.Severity,
+		BlockingLevel:  req.BlockingLevel,
+		Question:       req.Question,
+		ContextSummary: req.ContextSummary,
+		CreatedBy:      req.CreatedBy,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, d)
+}
+
+func (h *Handler) listCreativeDecisions(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	decisions, err := h.svc.ListCreativeDecisions(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"decisions": decisions})
+}
+
+type selectCreativeDecisionRequest struct {
+	SelectedBy string `json:"selected_by"`
+}
+
+func (h *Handler) selectCreativeDecision(w http.ResponseWriter, r *http.Request) {
+	decisionID := chi.URLParam(r, "decisionID")
+
+	var req selectCreativeDecisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	d, err := h.svc.SelectCreativeDecision(r.Context(), decisionID, req.SelectedBy)
+	if err != nil {
+		if errors.Is(err, ErrCreativeDecisionNotFound) {
+			writeError(w, http.StatusNotFound, "DECISION_NOT_FOUND", "decision not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, d)
+}
+
+type rejectCreativeDecisionRequest struct {
+	RejectedBy string `json:"rejected_by"`
+	Scope      string `json:"scope"`
+}
+
+func (h *Handler) rejectCreativeDecision(w http.ResponseWriter, r *http.Request) {
+	decisionID := chi.URLParam(r, "decisionID")
+
+	var req rejectCreativeDecisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	d, err := h.svc.RejectCreativeDecision(r.Context(), decisionID, req.RejectedBy, req.Scope)
+	if err != nil {
+		if errors.Is(err, ErrCreativeDecisionNotFound) {
+			writeError(w, http.StatusNotFound, "DECISION_NOT_FOUND", "decision not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *Handler) reviewArcCompletion(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+	arcID := chi.URLParam(r, "arcID")
+
+	res, err := h.svc.ReviewArcCompletion(r.Context(), storyID, arcID)
+	if err != nil {
+		if errors.Is(err, ErrArcNotFound) {
+			writeError(w, http.StatusNotFound, "ARC_NOT_FOUND", "arc not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, res)
+}
+
+type createAttentionItemRequest struct {
+	ChapterID string `json:"chapter_id"`
+	Priority  string `json:"priority"`
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
+	Detail    string `json:"detail"`
+	Action    string `json:"action"`
+}
+
+func (h *Handler) createAttentionItem(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	var req createAttentionItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	item, err := h.svc.CreateAttentionItem(r.Context(), AttentionItemInput{
+		StoryID:   storyID,
+		ChapterID: req.ChapterID,
+		Priority:  req.Priority,
+		Kind:      req.Kind,
+		Title:     req.Title,
+		Detail:    req.Detail,
+		Action:    req.Action,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) listAttentionItems(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	items, err := h.svc.ListAttentionItems(r.Context(), storyID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) resolveAttentionItem(w http.ResponseWriter, r *http.Request) {
+	itemID := chi.URLParam(r, "itemID")
+
+	item, err := h.svc.ResolveAttentionItem(r.Context(), itemID)
+	if err != nil {
+		if errors.Is(err, ErrAttentionItemNotFound) {
+			writeError(w, http.StatusNotFound, "ATTENTION_NOT_FOUND", "attention item not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) getContextSnapshot(w http.ResponseWriter, r *http.Request) {
+	snapshotID := chi.URLParam(r, "snapshotID")
+
+	sn, err := h.svc.GetContextSnapshot(r.Context(), snapshotID)
+	if err != nil {
+		if errors.Is(err, ErrContextSnapshotNotFound) {
+			writeError(w, http.StatusNotFound, "SNAPSHOT_NOT_FOUND", "snapshot not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, sn)
+}
+
+func (h *Handler) analyzeThreadInactivity(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	res, err := h.svc.AnalyzeThreadInactivity(r.Context(), storyID, 1)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"inactive_threads": res})
 }

@@ -321,3 +321,51 @@ h1 {
 .prose p {
   margin: 0 0 1rem;
 }
+
+.control-link {
+  color: var(--accent);
+  font-weight: 600;
+  margin-left: 0.75rem;
+}
+
+.control-link:hover {
+  text-decoration: underline;
+}
+
+.control-center .panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.control-center .panel h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item-row {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.item-row:last-child {
+  border-bottom: none;
+}
+
+.item-row .badge {
+  margin-left: 0.5rem;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0;
+}

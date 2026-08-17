@@ -30,6 +30,8 @@ type fakeStore struct {
 	nextSeq     map[string]int
 	snapshots   map[string][]ContextSnapshot
 	changeItems map[string][]CanonChangeItem
+	decisions   map[string][]CreativeDecision
+	attention   map[string][]AttentionItem
 }
 
 func newFakeStore() *fakeStore {
@@ -57,6 +59,8 @@ func newFakeStore() *fakeStore {
 		nextSeq:     map[string]int{},
 		snapshots:   map[string][]ContextSnapshot{},
 		changeItems: map[string][]CanonChangeItem{},
+		decisions:   map[string][]CreativeDecision{},
+		attention:   map[string][]AttentionItem{},
 	}
 }
 
@@ -232,6 +236,10 @@ func (s *fakeStore) CreatePlotThreadEvent(ctx context.Context, e PlotThreadEvent
 	return e, nil
 }
 
+func (s *fakeStore) ListPlotThreadEvents(ctx context.Context, threadID string) ([]PlotThreadEvent, error) {
+	return s.events[threadID], nil
+}
+
 func (s *fakeStore) CreateCanonBranch(ctx context.Context, b CanonBranch) (CanonBranch, error) {
 	s.branches[b.StoryID] = append(s.branches[b.StoryID], b)
 	return b, nil
@@ -251,6 +259,29 @@ func (s *fakeStore) ListCanonVersions(ctx context.Context, branchID string) ([]C
 	return s.versions[branchID], nil
 }
 
+func (s *fakeStore) GetCanonVersion(ctx context.Context, id string) (CanonVersion, error) {
+	for _, vs := range s.versions {
+		for _, v := range vs {
+			if v.ID == id {
+				return v, nil
+			}
+		}
+	}
+	return CanonVersion{}, ErrCanonVersionNotFound
+}
+
+func (s *fakeStore) UpdateCanonVersion(ctx context.Context, v CanonVersion) (CanonVersion, error) {
+	for branchID, vs := range s.versions {
+		for i, existing := range vs {
+			if existing.ID == v.ID {
+				s.versions[branchID][i] = v
+				return v, nil
+			}
+		}
+	}
+	return CanonVersion{}, ErrCanonVersionNotFound
+}
+
 func (s *fakeStore) CreateContextSnapshot(ctx context.Context, sn ContextSnapshot) (ContextSnapshot, error) {
 	s.snapshots[sn.StoryID] = append(s.snapshots[sn.StoryID], sn)
 	return sn, nil
@@ -260,6 +291,17 @@ func (s *fakeStore) ListContextSnapshots(ctx context.Context, storyID string) ([
 	return s.snapshots[storyID], nil
 }
 
+func (s *fakeStore) GetContextSnapshot(ctx context.Context, id string) (ContextSnapshot, error) {
+	for _, ss := range s.snapshots {
+		for _, sn := range ss {
+			if sn.ID == id {
+				return sn, nil
+			}
+		}
+	}
+	return ContextSnapshot{}, ErrContextSnapshotNotFound
+}
+
 func (s *fakeStore) CreateCanonChangeItem(ctx context.Context, c CanonChangeItem) (CanonChangeItem, error) {
 	s.changeItems[c.CanonVersionID] = append(s.changeItems[c.CanonVersionID], c)
 	return c, nil
@@ -267,6 +309,70 @@ func (s *fakeStore) CreateCanonChangeItem(ctx context.Context, c CanonChangeItem
 
 func (s *fakeStore) ListCanonChangeItems(ctx context.Context, canonVersionID string) ([]CanonChangeItem, error) {
 	return s.changeItems[canonVersionID], nil
+}
+
+func (s *fakeStore) CreateCreativeDecision(ctx context.Context, d CreativeDecision) (CreativeDecision, error) {
+	s.decisions[d.StoryID] = append(s.decisions[d.StoryID], d)
+	return d, nil
+}
+
+func (s *fakeStore) GetCreativeDecision(ctx context.Context, id string) (CreativeDecision, error) {
+	for _, ds := range s.decisions {
+		for _, d := range ds {
+			if d.ID == id {
+				return d, nil
+			}
+		}
+	}
+	return CreativeDecision{}, ErrCreativeDecisionNotFound
+}
+
+func (s *fakeStore) ListCreativeDecisions(ctx context.Context, storyID string) ([]CreativeDecision, error) {
+	return s.decisions[storyID], nil
+}
+
+func (s *fakeStore) UpdateCreativeDecision(ctx context.Context, d CreativeDecision) (CreativeDecision, error) {
+	for storyID, ds := range s.decisions {
+		for i, existing := range ds {
+			if existing.ID == d.ID {
+				s.decisions[storyID][i] = d
+				return d, nil
+			}
+		}
+	}
+	return CreativeDecision{}, ErrCreativeDecisionNotFound
+}
+
+func (s *fakeStore) CreateAttentionItem(ctx context.Context, a AttentionItem) (AttentionItem, error) {
+	s.attention[a.StoryID] = append(s.attention[a.StoryID], a)
+	return a, nil
+}
+
+func (s *fakeStore) ListAttentionItems(ctx context.Context, storyID string) ([]AttentionItem, error) {
+	return s.attention[storyID], nil
+}
+
+func (s *fakeStore) GetAttentionItem(ctx context.Context, id string) (AttentionItem, error) {
+	for _, as := range s.attention {
+		for _, a := range as {
+			if a.ID == id {
+				return a, nil
+			}
+		}
+	}
+	return AttentionItem{}, ErrAttentionItemNotFound
+}
+
+func (s *fakeStore) UpdateAttentionItem(ctx context.Context, a AttentionItem) (AttentionItem, error) {
+	for storyID, as := range s.attention {
+		for i, existing := range as {
+			if existing.ID == a.ID {
+				s.attention[storyID][i] = a
+				return a, nil
+			}
+		}
+	}
+	return AttentionItem{}, ErrAttentionItemNotFound
 }
 
 func TestCreateBibleVersionAssignsSequentialVersion(t *testing.T) {

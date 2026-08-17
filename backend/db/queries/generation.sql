@@ -24,11 +24,19 @@ WHERE id = $1;
 
 -- name: CreateGenerationJob :one
 INSERT INTO generation_jobs (id, run_id, job_type, status, priority, available_at,
-                             input_fingerprint, attempt_count, max_attempts)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                             input_fingerprint, attempt_count, max_attempts, output_ref)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
           attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
           completed_at, last_error_class, last_error_code, output_ref, created_at;
+
+-- name: ListJobsByRun :many
+SELECT id, run_id, job_type, status, priority, available_at, input_fingerprint,
+       attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+       completed_at, last_error_class, last_error_code, output_ref, created_at
+FROM generation_jobs
+WHERE run_id = $1
+ORDER BY created_at;
 
 -- name: NextAttemptNo :one
 SELECT COALESCE(MAX(attempt_no), 0) + 1
@@ -83,6 +91,23 @@ SET status = $2,
 WHERE id = $1
 RETURNING id, job_id, attempt_no, provider, model, status, error_class, error_code,
           safe_error_detail, usage, latency_ms, started_at, completed_at;
+
+-- name: UpdateJobAttemptUsage :one
+UPDATE generation_job_attempts
+SET usage = $2
+WHERE id = $1
+RETURNING id, job_id, attempt_no, provider, model, status, error_class, error_code,
+          safe_error_detail, usage, latency_ms, started_at, completed_at;
+
+-- name: ListUsageByStory :many
+SELECT a.id, a.job_id, a.attempt_no, a.provider, a.model, a.status, a.error_class,
+       a.error_code, a.safe_error_detail, a.usage, a.latency_ms, a.started_at, a.completed_at
+FROM generation_job_attempts a
+JOIN generation_jobs j ON j.id = a.job_id
+JOIN generation_runs r ON r.id = j.run_id
+WHERE r.story_id = $1
+  AND a.usage IS NOT NULL
+ORDER BY a.started_at;
 
 -- name: ReclaimStaleJobs :many
 UPDATE generation_jobs

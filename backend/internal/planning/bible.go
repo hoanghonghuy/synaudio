@@ -57,18 +57,32 @@ type Store interface {
 	CreatePlotThread(ctx context.Context, t PlotThread) (PlotThread, error)
 	ListPlotThreads(ctx context.Context, storyID string) ([]PlotThread, error)
 	CreatePlotThreadEvent(ctx context.Context, e PlotThreadEvent) (PlotThreadEvent, error)
+	ListPlotThreadEvents(ctx context.Context, threadID string) ([]PlotThreadEvent, error)
 
 	CreateCanonBranch(ctx context.Context, b CanonBranch) (CanonBranch, error)
 	NextCanonSequence(ctx context.Context, branchID string) (int, error)
 	CreateCanonVersion(ctx context.Context, v CanonVersion) (CanonVersion, error)
 	ListCanonVersions(ctx context.Context, branchID string) ([]CanonVersion, error)
+	GetCanonVersion(ctx context.Context, id string) (CanonVersion, error)
+	UpdateCanonVersion(ctx context.Context, v CanonVersion) (CanonVersion, error)
 	CreateCanonChangeItem(ctx context.Context, c CanonChangeItem) (CanonChangeItem, error)
 	ListCanonChangeItems(ctx context.Context, canonVersionID string) ([]CanonChangeItem, error)
 
 	CreateContextSnapshot(ctx context.Context, sn ContextSnapshot) (ContextSnapshot, error)
 	ListContextSnapshots(ctx context.Context, storyID string) ([]ContextSnapshot, error)
+	GetContextSnapshot(ctx context.Context, id string) (ContextSnapshot, error)
 
 	UpdateChapterStatus(ctx context.Context, chapterID, status string) (Chapter, error)
+
+	CreateCreativeDecision(ctx context.Context, d CreativeDecision) (CreativeDecision, error)
+	GetCreativeDecision(ctx context.Context, id string) (CreativeDecision, error)
+	ListCreativeDecisions(ctx context.Context, storyID string) ([]CreativeDecision, error)
+	UpdateCreativeDecision(ctx context.Context, d CreativeDecision) (CreativeDecision, error)
+
+	CreateAttentionItem(ctx context.Context, a AttentionItem) (AttentionItem, error)
+	ListAttentionItems(ctx context.Context, storyID string) ([]AttentionItem, error)
+	GetAttentionItem(ctx context.Context, id string) (AttentionItem, error)
+	UpdateAttentionItem(ctx context.Context, a AttentionItem) (AttentionItem, error)
 }
 
 type Service struct {

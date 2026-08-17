@@ -197,6 +197,12 @@ INSERT INTO plot_thread_events (id, plot_thread_id, canon_version_id, chapter_id
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, plot_thread_id, canon_version_id, chapter_id, event_type, detail, created_at;
 
+-- name: ListPlotThreadEvents :many
+SELECT id, plot_thread_id, canon_version_id, chapter_id, event_type, detail, created_at
+FROM plot_thread_events
+WHERE plot_thread_id = $1
+ORDER BY created_at;
+
 -- ============================================================
 -- Canon branches + versions
 -- ============================================================
@@ -212,8 +218,8 @@ FROM canon_versions
 WHERE branch_id = $1;
 
 -- name: CreateCanonVersion :one
-INSERT INTO canon_versions (id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id, status, committed_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO canon_versions (id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id, source_content_revision_id, source_provisional_version_id, status, committed_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id,
           source_content_revision_id, source_provisional_version_id, generation_run_id,
           retcon_request_id, status, committed_by, created_at;
@@ -225,6 +231,22 @@ SELECT id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_i
 FROM canon_versions
 WHERE branch_id = $1
 ORDER BY sequence_no;
+
+-- name: GetCanonVersion :one
+SELECT id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id,
+       source_content_revision_id, source_provisional_version_id, generation_run_id,
+       retcon_request_id, status, committed_by, created_at
+FROM canon_versions
+WHERE id = $1;
+
+-- name: UpdateCanonVersion :one
+UPDATE canon_versions
+SET status = $2,
+    committed_by = $3
+WHERE id = $1
+RETURNING id, story_id, branch_id, sequence_no, parent_version_id, source_chapter_id,
+          source_content_revision_id, source_provisional_version_id, generation_run_id,
+          retcon_request_id, status, committed_by, created_at;
 
 -- name: CreateCanonChangeItem :one
 INSERT INTO canon_change_items (id, canon_version_id, entity_type, entity_id, change_type, metadata)
@@ -259,6 +281,87 @@ SELECT id, run_id, story_id, chapter_id, canon_version_id, bible_version_id,
 FROM context_snapshots
 WHERE story_id = $1
 ORDER BY created_at;
+
+-- name: GetContextSnapshot :one
+SELECT id, run_id, story_id, chapter_id, canon_version_id, bible_version_id,
+       ending_plan_version_id, arc_version_id, content_profile_version_id,
+       prompt_version, workflow_version, provider, model, included_refs,
+       historical_hits, admin_instruction, created_at
+FROM context_snapshots
+WHERE id = $1;
+
+-- ============================================================
+-- Creative Decisions
+-- ============================================================
+
+-- name: CreateCreativeDecision :one
+INSERT INTO creative_decisions (id, story_id, chapter_id, arc_id, origin, decision_type,
+                                severity, status, blocking_level, question, context_summary,
+                                created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, story_id, chapter_id, arc_id, origin, decision_type, severity, status,
+          blocking_level, question, context_summary, recommended_option_id, selected_option_id,
+          custom_selected_text, rejection_scope, revisit_condition, triggered_by_run_id,
+          created_by, selected_by, created_at, selected_at, applied_at;
+
+-- name: GetCreativeDecision :one
+SELECT id, story_id, chapter_id, arc_id, origin, decision_type, severity, status,
+       blocking_level, question, context_summary, recommended_option_id, selected_option_id,
+       custom_selected_text, rejection_scope, revisit_condition, triggered_by_run_id,
+       created_by, selected_by, created_at, selected_at, applied_at
+FROM creative_decisions
+WHERE id = $1;
+
+-- name: ListCreativeDecisions :many
+SELECT id, story_id, chapter_id, arc_id, origin, decision_type, severity, status,
+       blocking_level, question, context_summary, recommended_option_id, selected_option_id,
+       custom_selected_text, rejection_scope, revisit_condition, triggered_by_run_id,
+       created_by, selected_by, created_at, selected_at, applied_at
+FROM creative_decisions
+WHERE story_id = $1
+ORDER BY created_at;
+
+-- name: UpdateCreativeDecision :one
+UPDATE creative_decisions
+SET status = $2,
+    selected_option_id = $3,
+    custom_selected_text = $4,
+    rejection_scope = $5,
+    selected_by = $6,
+    selected_at = CASE WHEN $2 = 'SELECTED' THEN NOW() ELSE selected_at END,
+    applied_at = CASE WHEN $2 = 'APPLIED' THEN NOW() ELSE applied_at END
+WHERE id = $1
+RETURNING id, story_id, chapter_id, arc_id, origin, decision_type, severity, status,
+          blocking_level, question, context_summary, recommended_option_id, selected_option_id,
+          custom_selected_text, rejection_scope, revisit_condition, triggered_by_run_id,
+          created_by, selected_by, created_at, selected_at, applied_at;
+
+-- ============================================================
+-- Attention Items
+-- ============================================================
+
+-- name: CreateAttentionItem :one
+INSERT INTO attention_items (id, story_id, chapter_id, priority, kind, title, detail, action)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, story_id, chapter_id, priority, kind, title, detail, action, resolved, created_at, resolved_at;
+
+-- name: ListAttentionItems :many
+SELECT id, story_id, chapter_id, priority, kind, title, detail, action, resolved, created_at, resolved_at
+FROM attention_items
+WHERE story_id = $1
+ORDER BY created_at;
+
+-- name: GetAttentionItem :one
+SELECT id, story_id, chapter_id, priority, kind, title, detail, action, resolved, created_at, resolved_at
+FROM attention_items
+WHERE id = $1;
+
+-- name: UpdateAttentionItem :one
+UPDATE attention_items
+SET resolved = $2,
+    resolved_at = CASE WHEN $2 = TRUE THEN NOW() ELSE resolved_at END
+WHERE id = $1
+RETURNING id, story_id, chapter_id, priority, kind, title, detail, action, resolved, created_at, resolved_at;
 
 
 

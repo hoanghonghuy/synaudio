@@ -60,6 +60,10 @@ type Store interface {
 	UpdateJobAttemptStatus(ctx context.Context, attemptID, status, errorClass, errorCode string) (JobAttempt, error)
 	ReclaimStaleJobs(ctx context.Context, olderThan string) ([]GenerationJob, error)
 	CancelJob(ctx context.Context, jobID string) (GenerationJob, error)
+	ListJobsByRun(ctx context.Context, runID string) ([]GenerationJob, error)
+
+	UpdateJobAttemptUsage(ctx context.Context, attemptID string, usage map[string]any) (JobAttempt, error)
+	ListUsageByStory(ctx context.Context, storyID string) ([]JobAttempt, error)
 }
 
 // Service orchestrates Chapter content generation and review.

@@ -1,14 +1,19 @@
 import type {
   ApiError,
+  ArcCompletionResult,
+  AttentionListResponse,
   AudioURLResponse,
   ChapterContent,
   ChapterListResponse,
   CreateStoryInput,
+  CreativeDecisionListResponse,
   FavoriteListResponse,
   GenreListResponse,
   ListeningProgress,
   Story,
   StoryListResponse,
+  ThreadInactivityResponse,
+  UsageListResponse,
 } from './types'
 
 const BASE = '/api/v1'
@@ -109,4 +114,24 @@ export function saveProgress(
     headers: { 'X-User-ID': userID },
     body: JSON.stringify(input),
   })
+}
+
+export function listCreativeDecisions(storyID: string): Promise<CreativeDecisionListResponse> {
+  return request<CreativeDecisionListResponse>(`/admin/stories/${storyID}/creative-decisions`)
+}
+
+export function listAttentionItems(storyID: string): Promise<AttentionListResponse> {
+  return request<AttentionListResponse>(`/admin/stories/${storyID}/attention`)
+}
+
+export function reviewArcCompletion(storyID: string, arcID: string): Promise<ArcCompletionResult> {
+  return request<ArcCompletionResult>(`/admin/stories/${storyID}/arcs/${arcID}/completion`)
+}
+
+export function analyzeThreadInactivity(storyID: string): Promise<ThreadInactivityResponse> {
+  return request<ThreadInactivityResponse>(`/admin/stories/${storyID}/thread-inactivity`)
+}
+
+export function listUsage(storyID: string): Promise<UsageListResponse> {
+  return request<UsageListResponse>(`/admin/stories/${storyID}/usage`)
 }
