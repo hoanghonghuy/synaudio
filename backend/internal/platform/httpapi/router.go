@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,7 @@ var ErrDependencyUnavailable = errors.New("dependency unavailable")
 type Dependencies struct {
 	ReadyCheck       func() error
 	DependencyChecks map[string]func() error
+	Logger           *slog.Logger
 	AuthHandler      http.Handler
 	StoryHandler     http.Handler
 	PlanningHandler  http.Handler
@@ -28,6 +30,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	if deps.Logger != nil {
+		r.Use(WithRequestLogger(deps.Logger))
+	}
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

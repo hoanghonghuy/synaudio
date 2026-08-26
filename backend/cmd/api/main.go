@@ -109,6 +109,7 @@ func main() {
 				return objStorage.Ping(pingCtx)
 			},
 		},
+		Logger:           log,
 		AuthHandler:      authHandler,
 		StoryHandler:     storyHandler,
 		PlanningHandler:  planningHandler,
