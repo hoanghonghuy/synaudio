@@ -13,6 +13,7 @@ var ErrDependencyUnavailable = errors.New("dependency unavailable")
 
 type Dependencies struct {
 	ReadyCheck       func() error
+	DependencyChecks map[string]func() error
 	AuthHandler      http.Handler
 	StoryHandler     http.Handler
 	PlanningHandler  http.Handler
@@ -33,16 +34,40 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	r.Get("/ready", func(w http.ResponseWriter, _ *http.Request) {
+		status := http.StatusOK
+		body := map[string]any{"status": "ready"}
+
 		if deps.ReadyCheck != nil {
 			if err := deps.ReadyCheck(); err != nil {
-				writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-					"status": "unavailable",
-					"error":  "dependency_unavailable",
-				})
-				return
+				status = http.StatusServiceUnavailable
+				body["status"] = "unavailable"
+				body["error"] = "dependency_unavailable"
 			}
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+
+		if len(deps.DependencyChecks) > 0 {
+			depStatus := map[string]string{}
+			allOK := true
+			for name, check := range deps.DependencyChecks {
+				if check == nil {
+					depStatus[name] = "ok"
+					continue
+				}
+				if err := check(); err != nil {
+					depStatus[name] = "unavailable"
+					allOK = false
+				} else {
+					depStatus[name] = "ok"
+				}
+			}
+			body["dependencies"] = depStatus
+			if !allOK {
+				status = http.StatusServiceUnavailable
+				body["status"] = "degraded"
+			}
+		}
+
+		writeJSON(w, status, body)
 	})
 
 	if deps.AuthHandler != nil {

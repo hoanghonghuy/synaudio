@@ -52,3 +52,12 @@ func (m *MinIO) PresignedGetObject(ctx context.Context, key string, expiry time.
 	}
 	return url.String(), nil
 }
+
+// Ping verifies the storage backend is reachable.
+func (m *MinIO) Ping(ctx context.Context) error {
+	_, err := m.client.BucketExists(ctx, m.bucket)
+	if err != nil {
+		return fmt.Errorf("storage ping: %w", err)
+	}
+	return nil
+}

@@ -97,6 +97,18 @@ func main() {
 			}
 			return nil
 		},
+		DependencyChecks: map[string]func() error{
+			"database": func() error {
+				pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				return pool.Ping(pingCtx)
+			},
+			"storage": func() error {
+				pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				return objStorage.Ping(pingCtx)
+			},
+		},
 		AuthHandler:      authHandler,
 		StoryHandler:     storyHandler,
 		PlanningHandler:  planningHandler,
