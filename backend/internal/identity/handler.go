@@ -27,6 +27,8 @@ func NewAuthHandler(svc *AuthService) http.Handler {
 	r.Post("/mfa/totp/setup", h.mfaSetup)
 	r.Post("/mfa/totp/confirm", h.mfaConfirm)
 	r.Post("/mfa/totp/disable", h.mfaDisable)
+	r.Post("/account/deletion/request", h.requestDeletion)
+	r.Post("/account/deletion/cancel", h.cancelDeletion)
 	return r
 }
 
@@ -245,6 +247,48 @@ func (h *AuthHandler) mfaDisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type accountDeletionRequest struct {
+	UserID string `json:"user_id"`
+}
+
+func (h *AuthHandler) requestDeletion(w http.ResponseWriter, r *http.Request) {
+	var req accountDeletionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.svc.RequestAccountDeletion(r.Context(), req.UserID); err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			writeError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deactivated"})
+}
+
+func (h *AuthHandler) cancelDeletion(w http.ResponseWriter, r *http.Request) {
+	var req accountDeletionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.svc.CancelAccountDeletion(r.Context(), req.UserID); err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			writeError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "active"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

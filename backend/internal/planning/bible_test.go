@@ -222,6 +222,29 @@ func (s *fakeStore) ListFacts(ctx context.Context, storyID string) ([]StoryFact,
 	return s.facts[storyID], nil
 }
 
+func (s *fakeStore) GetFact(ctx context.Context, id string) (StoryFact, error) {
+	for _, fs := range s.facts {
+		for _, f := range fs {
+			if f.ID == id {
+				return f, nil
+			}
+		}
+	}
+	return StoryFact{}, errors.New("fact not found")
+}
+
+func (s *fakeStore) UpdateFact(ctx context.Context, f StoryFact) (StoryFact, error) {
+	for storyID, fs := range s.facts {
+		for i, existing := range fs {
+			if existing.ID == f.ID {
+				s.facts[storyID][i] = f
+				return f, nil
+			}
+		}
+	}
+	return StoryFact{}, errors.New("fact not found")
+}
+
 func (s *fakeStore) CreatePlotThread(ctx context.Context, t PlotThread) (PlotThread, error) {
 	s.threads[t.StoryID] = append(s.threads[t.StoryID], t)
 	return t, nil

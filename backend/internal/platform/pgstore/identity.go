@@ -177,6 +177,18 @@ func (s *IdentityStore) CountActiveAdmins(ctx context.Context) (int, error) {
 	return int(n), err
 }
 
+func (s *IdentityStore) DeactivateUser(ctx context.Context, userID string) error {
+	return s.q.DeactivateUser(ctx, toUUID(userID))
+}
+
+func (s *IdentityStore) ReactivateUser(ctx context.Context, userID string) error {
+	return s.q.ReactivateUser(ctx, toUUID(userID))
+}
+
+func (s *IdentityStore) PurgeUser(ctx context.Context, userID string) error {
+	return s.q.PurgeUser(ctx, toUUID(userID))
+}
+
 func toIdentityUser(row db.User) identity.User {
 	return identity.User{
 		ID:              fromUUID(row.ID),

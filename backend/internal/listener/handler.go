@@ -21,6 +21,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Get("/me/progress/{chapterID}", h.getProgress)
 	r.Put("/me/progress/{chapterID}", h.saveProgress)
 	r.Post("/me/progress/{chapterID}/complete", h.markCompleted)
+	r.Post("/admin/chapters/{chapterID}/revision-impact", h.applyRevisionImpact)
 	return r
 }
 
@@ -102,6 +103,28 @@ func (h *Handler) markCompleted(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
+}
+
+type revisionImpactRequest struct {
+	RelistenStatus string `json:"relisten_status"`
+}
+
+func (h *Handler) applyRevisionImpact(w http.ResponseWriter, r *http.Request) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	var req revisionImpactRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	affected, err := h.svc.ApplyRevisionImpact(r.Context(), chapterID, req.RelistenStatus)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"affected_listeners": affected})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

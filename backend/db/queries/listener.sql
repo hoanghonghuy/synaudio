@@ -26,7 +26,7 @@ ORDER BY created_at DESC;
 
 -- name: GetProgress :one
 SELECT user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
-       last_playback_session_id, version, last_listened_at, updated_at
+       last_playback_session_id, version, relisten_status, last_listened_at, updated_at
 FROM listening_progress
 WHERE user_id = $1 AND chapter_id = $2;
 
@@ -42,7 +42,7 @@ DO UPDATE SET position_ms = EXCLUDED.position_ms,
               last_listened_at = NOW(),
               updated_at = NOW()
 RETURNING user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
-          last_playback_session_id, version, last_listened_at, updated_at;
+          last_playback_session_id, version, relisten_status, last_listened_at, updated_at;
 
 -- name: MarkCompleted :one
 UPDATE listening_progress
@@ -50,4 +50,12 @@ SET completed_at = NOW(),
     updated_at = NOW()
 WHERE user_id = $1 AND chapter_id = $2
 RETURNING user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
-          last_playback_session_id, version, last_listened_at, updated_at;
+          last_playback_session_id, version, relisten_status, last_listened_at, updated_at;
+
+-- name: ApplyRelistenStatus :many
+UPDATE listening_progress
+SET relisten_status = $2,
+    updated_at = NOW()
+WHERE chapter_id = $1
+RETURNING user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
+          last_playback_session_id, version, relisten_status, last_listened_at, updated_at;

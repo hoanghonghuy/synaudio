@@ -15,6 +15,7 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/identity"
 	"github.com/synaudio/synaudio/backend/internal/listener"
 	"github.com/synaudio/synaudio/backend/internal/planning"
+	"github.com/synaudio/synaudio/backend/internal/retcon"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
@@ -83,6 +84,10 @@ func main() {
 	listenerService := listener.NewService(listenerStore)
 	listenerHandler := listener.NewHandler(listenerService)
 
+	retconStore := pgstore.NewRetconStore(queries)
+	retconService := retcon.NewService(retconStore)
+	retconHandler := retcon.NewHandler(retconService)
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		ReadyCheck: func() error {
 			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -98,6 +103,7 @@ func main() {
 		GenerationHandler: generationHandler,
 		AudioHandler:     audioHandler,
 		ListenerHandler:  listenerHandler,
+		RetconHandler:    retconHandler,
 	})
 
 	server := &http.Server{

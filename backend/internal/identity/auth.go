@@ -80,6 +80,10 @@ type Store interface {
 	GrantRole(ctx context.Context, userID, role string) error
 	RevokeRole(ctx context.Context, userID, role string) error
 	CountActiveAdmins(ctx context.Context) (int, error)
+
+	DeactivateUser(ctx context.Context, userID string) error
+	ReactivateUser(ctx context.Context, userID string) error
+	PurgeUser(ctx context.Context, userID string) error
 }
 
 type AuthService struct {

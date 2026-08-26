@@ -333,6 +333,26 @@ func (s *PlanningStore) ListFacts(ctx context.Context, storyID string) ([]planni
 	return out, nil
 }
 
+func (s *PlanningStore) GetFact(ctx context.Context, id string) (planning.StoryFact, error) {
+	row, err := s.q.GetFact(ctx, toUUID(id))
+	if err != nil {
+		return planning.StoryFact{}, err
+	}
+	return toFact(row), nil
+}
+
+func (s *PlanningStore) UpdateFact(ctx context.Context, f planning.StoryFact) (planning.StoryFact, error) {
+	row, err := s.q.UpdateFact(ctx, db.UpdateFactParams{
+		ID:              toUUID(f.ID),
+		Status:          f.Status,
+		SupersedesFactID: toUUID(f.SupersedesFactID),
+	})
+	if err != nil {
+		return planning.StoryFact{}, err
+	}
+	return toFact(row), nil
+}
+
 // ============================================================
 // PlotThreads
 // ============================================================
@@ -771,14 +791,15 @@ func toFact(row db.StoryFact) planning.StoryFact {
 	var value map[string]any
 	_ = json.Unmarshal(row.Value, &value)
 	return planning.StoryFact{
-		ID:          fromUUID(row.ID),
-		StoryID:     fromUUID(row.StoryID),
-		SubjectType: fromText(row.SubjectType),
-		SubjectID:   fromUUID(row.SubjectID),
-		FactType:    row.FactType,
-		Value:       value,
-		Importance:  row.Importance,
-		Status:      row.Status,
+		ID:               fromUUID(row.ID),
+		StoryID:          fromUUID(row.StoryID),
+		SubjectType:      fromText(row.SubjectType),
+		SubjectID:        fromUUID(row.SubjectID),
+		FactType:         row.FactType,
+		Value:            value,
+		Importance:       row.Importance,
+		Status:           row.Status,
+		SupersedesFactID: fromUUID(row.SupersedesFactID),
 	}
 }
 

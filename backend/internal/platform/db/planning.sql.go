@@ -1023,6 +1023,37 @@ func (q *Queries) GetCurrentEnding(ctx context.Context, storyID pgtype.UUID) (St
 	return i, err
 }
 
+const getFact = `-- name: GetFact :one
+SELECT id, story_id, subject_type, subject_id, fact_type, value, importance, status,
+       valid_from_canon_version_id, invalidated_at_canon_version_id, supersedes_fact_id,
+       source_chapter_id, source_content_revision_id, generation_run_id, created_at
+FROM story_facts
+WHERE id = $1
+`
+
+func (q *Queries) GetFact(ctx context.Context, id pgtype.UUID) (StoryFact, error) {
+	row := q.db.QueryRow(ctx, getFact, id)
+	var i StoryFact
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.SubjectType,
+		&i.SubjectID,
+		&i.FactType,
+		&i.Value,
+		&i.Importance,
+		&i.Status,
+		&i.ValidFromCanonVersionID,
+		&i.InvalidatedAtCanonVersionID,
+		&i.SupersedesFactID,
+		&i.SourceChapterID,
+		&i.SourceContentRevisionID,
+		&i.GenerationRunID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listArcs = `-- name: ListArcs :many
 SELECT id, story_id, ordinal, status, current_version_id, created_at
 FROM story_arcs
@@ -1759,6 +1790,45 @@ func (q *Queries) UpdateCreativeDecision(ctx context.Context, arg UpdateCreative
 		&i.CreatedAt,
 		&i.SelectedAt,
 		&i.AppliedAt,
+	)
+	return i, err
+}
+
+const updateFact = `-- name: UpdateFact :one
+UPDATE story_facts
+SET status = $2,
+    supersedes_fact_id = $3
+WHERE id = $1
+RETURNING id, story_id, subject_type, subject_id, fact_type, value, importance, status,
+          valid_from_canon_version_id, invalidated_at_canon_version_id, supersedes_fact_id,
+          source_chapter_id, source_content_revision_id, generation_run_id, created_at
+`
+
+type UpdateFactParams struct {
+	ID               pgtype.UUID `json:"id"`
+	Status           string      `json:"status"`
+	SupersedesFactID pgtype.UUID `json:"supersedes_fact_id"`
+}
+
+func (q *Queries) UpdateFact(ctx context.Context, arg UpdateFactParams) (StoryFact, error) {
+	row := q.db.QueryRow(ctx, updateFact, arg.ID, arg.Status, arg.SupersedesFactID)
+	var i StoryFact
+	err := row.Scan(
+		&i.ID,
+		&i.StoryID,
+		&i.SubjectType,
+		&i.SubjectID,
+		&i.FactType,
+		&i.Value,
+		&i.Importance,
+		&i.Status,
+		&i.ValidFromCanonVersionID,
+		&i.InvalidatedAtCanonVersionID,
+		&i.SupersedesFactID,
+		&i.SourceChapterID,
+		&i.SourceContentRevisionID,
+		&i.GenerationRunID,
+		&i.CreatedAt,
 	)
 	return i, err
 }

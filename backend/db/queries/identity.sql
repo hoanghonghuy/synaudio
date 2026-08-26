@@ -92,3 +92,12 @@ FROM user_roles ur
 JOIN roles r ON r.id = ur.role_id
 JOIN users u ON u.id = ur.user_id
 WHERE r.code = 'ADMIN' AND u.status = 'ACTIVE';
+
+-- name: DeactivateUser :exec
+UPDATE users SET status = 'DEACTIVATED', deactivated_at = NOW(), updated_at = NOW() WHERE id = $1;
+
+-- name: ReactivateUser :exec
+UPDATE users SET status = 'ACTIVE', deactivated_at = NULL, updated_at = NOW() WHERE id = $1;
+
+-- name: PurgeUser :exec
+UPDATE users SET email = 'deleted-' || id::text || '@deleted.invalid', password_hash = NULL, display_name = NULL, updated_at = NOW() WHERE id = $1;

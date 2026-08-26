@@ -31,10 +31,68 @@ func (q *Queries) AddFavorite(ctx context.Context, arg AddFavoriteParams) error 
 	return err
 }
 
+const applyRelistenStatus = `-- name: ApplyRelistenStatus :many
+UPDATE listening_progress
+SET relisten_status = $2,
+    updated_at = NOW()
+WHERE chapter_id = $1
+RETURNING user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
+          last_playback_session_id, version, relisten_status, last_listened_at, updated_at
+`
+
+type ApplyRelistenStatusParams struct {
+	ChapterID      pgtype.UUID `json:"chapter_id"`
+	RelistenStatus string      `json:"relisten_status"`
+}
+
+type ApplyRelistenStatusRow struct {
+	UserID                pgtype.UUID        `json:"user_id"`
+	ChapterID             pgtype.UUID        `json:"chapter_id"`
+	PositionMs            int64              `json:"position_ms"`
+	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	LastAudioAssetID      pgtype.UUID        `json:"last_audio_asset_id"`
+	LastPlaybackSessionID pgtype.UUID        `json:"last_playback_session_id"`
+	Version               int64              `json:"version"`
+	RelistenStatus        string             `json:"relisten_status"`
+	LastListenedAt        pgtype.Timestamptz `json:"last_listened_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ApplyRelistenStatus(ctx context.Context, arg ApplyRelistenStatusParams) ([]ApplyRelistenStatusRow, error) {
+	rows, err := q.db.Query(ctx, applyRelistenStatus, arg.ChapterID, arg.RelistenStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplyRelistenStatusRow{}
+	for rows.Next() {
+		var i ApplyRelistenStatusRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.ChapterID,
+			&i.PositionMs,
+			&i.CompletedAt,
+			&i.LastAudioAssetID,
+			&i.LastPlaybackSessionID,
+			&i.Version,
+			&i.RelistenStatus,
+			&i.LastListenedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getProgress = `-- name: GetProgress :one
 
 SELECT user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
-       last_playback_session_id, version, last_listened_at, updated_at
+       last_playback_session_id, version, relisten_status, last_listened_at, updated_at
 FROM listening_progress
 WHERE user_id = $1 AND chapter_id = $2
 `
@@ -44,12 +102,25 @@ type GetProgressParams struct {
 	ChapterID pgtype.UUID `json:"chapter_id"`
 }
 
+type GetProgressRow struct {
+	UserID                pgtype.UUID        `json:"user_id"`
+	ChapterID             pgtype.UUID        `json:"chapter_id"`
+	PositionMs            int64              `json:"position_ms"`
+	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	LastAudioAssetID      pgtype.UUID        `json:"last_audio_asset_id"`
+	LastPlaybackSessionID pgtype.UUID        `json:"last_playback_session_id"`
+	Version               int64              `json:"version"`
+	RelistenStatus        string             `json:"relisten_status"`
+	LastListenedAt        pgtype.Timestamptz `json:"last_listened_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
 // ============================================================
 // Listening Progress
 // ============================================================
-func (q *Queries) GetProgress(ctx context.Context, arg GetProgressParams) (ListeningProgress, error) {
+func (q *Queries) GetProgress(ctx context.Context, arg GetProgressParams) (GetProgressRow, error) {
 	row := q.db.QueryRow(ctx, getProgress, arg.UserID, arg.ChapterID)
-	var i ListeningProgress
+	var i GetProgressRow
 	err := row.Scan(
 		&i.UserID,
 		&i.ChapterID,
@@ -58,6 +129,7 @@ func (q *Queries) GetProgress(ctx context.Context, arg GetProgressParams) (Liste
 		&i.LastAudioAssetID,
 		&i.LastPlaybackSessionID,
 		&i.Version,
+		&i.RelistenStatus,
 		&i.LastListenedAt,
 		&i.UpdatedAt,
 	)
@@ -113,7 +185,7 @@ SET completed_at = NOW(),
     updated_at = NOW()
 WHERE user_id = $1 AND chapter_id = $2
 RETURNING user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
-          last_playback_session_id, version, last_listened_at, updated_at
+          last_playback_session_id, version, relisten_status, last_listened_at, updated_at
 `
 
 type MarkCompletedParams struct {
@@ -121,9 +193,22 @@ type MarkCompletedParams struct {
 	ChapterID pgtype.UUID `json:"chapter_id"`
 }
 
-func (q *Queries) MarkCompleted(ctx context.Context, arg MarkCompletedParams) (ListeningProgress, error) {
+type MarkCompletedRow struct {
+	UserID                pgtype.UUID        `json:"user_id"`
+	ChapterID             pgtype.UUID        `json:"chapter_id"`
+	PositionMs            int64              `json:"position_ms"`
+	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	LastAudioAssetID      pgtype.UUID        `json:"last_audio_asset_id"`
+	LastPlaybackSessionID pgtype.UUID        `json:"last_playback_session_id"`
+	Version               int64              `json:"version"`
+	RelistenStatus        string             `json:"relisten_status"`
+	LastListenedAt        pgtype.Timestamptz `json:"last_listened_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) MarkCompleted(ctx context.Context, arg MarkCompletedParams) (MarkCompletedRow, error) {
 	row := q.db.QueryRow(ctx, markCompleted, arg.UserID, arg.ChapterID)
-	var i ListeningProgress
+	var i MarkCompletedRow
 	err := row.Scan(
 		&i.UserID,
 		&i.ChapterID,
@@ -132,6 +217,7 @@ func (q *Queries) MarkCompleted(ctx context.Context, arg MarkCompletedParams) (L
 		&i.LastAudioAssetID,
 		&i.LastPlaybackSessionID,
 		&i.Version,
+		&i.RelistenStatus,
 		&i.LastListenedAt,
 		&i.UpdatedAt,
 	)
@@ -165,7 +251,7 @@ DO UPDATE SET position_ms = EXCLUDED.position_ms,
               last_listened_at = NOW(),
               updated_at = NOW()
 RETURNING user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
-          last_playback_session_id, version, last_listened_at, updated_at
+          last_playback_session_id, version, relisten_status, last_listened_at, updated_at
 `
 
 type SaveProgressParams struct {
@@ -177,7 +263,20 @@ type SaveProgressParams struct {
 	Version               int64       `json:"version"`
 }
 
-func (q *Queries) SaveProgress(ctx context.Context, arg SaveProgressParams) (ListeningProgress, error) {
+type SaveProgressRow struct {
+	UserID                pgtype.UUID        `json:"user_id"`
+	ChapterID             pgtype.UUID        `json:"chapter_id"`
+	PositionMs            int64              `json:"position_ms"`
+	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	LastAudioAssetID      pgtype.UUID        `json:"last_audio_asset_id"`
+	LastPlaybackSessionID pgtype.UUID        `json:"last_playback_session_id"`
+	Version               int64              `json:"version"`
+	RelistenStatus        string             `json:"relisten_status"`
+	LastListenedAt        pgtype.Timestamptz `json:"last_listened_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) SaveProgress(ctx context.Context, arg SaveProgressParams) (SaveProgressRow, error) {
 	row := q.db.QueryRow(ctx, saveProgress,
 		arg.UserID,
 		arg.ChapterID,
@@ -186,7 +285,7 @@ func (q *Queries) SaveProgress(ctx context.Context, arg SaveProgressParams) (Lis
 		arg.LastPlaybackSessionID,
 		arg.Version,
 	)
-	var i ListeningProgress
+	var i SaveProgressRow
 	err := row.Scan(
 		&i.UserID,
 		&i.ChapterID,
@@ -195,6 +294,7 @@ func (q *Queries) SaveProgress(ctx context.Context, arg SaveProgressParams) (Lis
 		&i.LastAudioAssetID,
 		&i.LastPlaybackSessionID,
 		&i.Version,
+		&i.RelistenStatus,
 		&i.LastListenedAt,
 		&i.UpdatedAt,
 	)

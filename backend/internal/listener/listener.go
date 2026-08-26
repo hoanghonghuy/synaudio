@@ -24,6 +24,7 @@ type ListeningProgress struct {
 	LastAudioAssetID     string
 	LastPlaybackSessionID string
 	Version              int64
+	RelistenStatus       string
 }
 
 // Store is the persistence boundary for the listener service.
@@ -36,6 +37,8 @@ type Store interface {
 	GetProgress(ctx context.Context, userID, chapterID string) (ListeningProgress, error)
 	SaveProgress(ctx context.Context, p ListeningProgress) (ListeningProgress, error)
 	MarkCompleted(ctx context.Context, userID, chapterID string) (ListeningProgress, error)
+
+	ApplyRelistenStatus(ctx context.Context, chapterID, status string) (int64, error)
 }
 
 // Service orchestrates listener-facing features.
@@ -94,4 +97,10 @@ func (s *Service) GetProgress(ctx context.Context, userID, chapterID string) (Li
 // MarkCompleted marks a chapter as completed for a user.
 func (s *Service) MarkCompleted(ctx context.Context, userID, chapterID string) (ListeningProgress, error) {
 	return s.store.MarkCompleted(ctx, userID, chapterID)
+}
+
+// ApplyRevisionImpact marks all listeners of a chapter with a relisten status
+// after a retcon changes the published content. Completion is preserved.
+func (s *Service) ApplyRevisionImpact(ctx context.Context, chapterID, relistenStatus string) (int64, error) {
+	return s.store.ApplyRelistenStatus(ctx, chapterID, relistenStatus)
 }

@@ -53,6 +53,8 @@ type Store interface {
 
 	CreateFact(ctx context.Context, f StoryFact) (StoryFact, error)
 	ListFacts(ctx context.Context, storyID string) ([]StoryFact, error)
+	GetFact(ctx context.Context, id string) (StoryFact, error)
+	UpdateFact(ctx context.Context, f StoryFact) (StoryFact, error)
 
 	CreatePlotThread(ctx context.Context, t PlotThread) (PlotThread, error)
 	ListPlotThreads(ctx context.Context, storyID string) ([]PlotThread, error)

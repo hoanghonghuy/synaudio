@@ -74,7 +74,16 @@ func (s *ListenerStore) GetProgress(ctx context.Context, userID, chapterID strin
 		}
 		return listener.ListeningProgress{}, err
 	}
-	return toListeningProgress(row), nil
+	return listener.ListeningProgress{
+		UserID:                fromUUID(row.UserID),
+		ChapterID:             fromUUID(row.ChapterID),
+		PositionMs:            row.PositionMs,
+		CompletedAt:           fromTimestamptz(row.CompletedAt),
+		LastAudioAssetID:      fromUUID(row.LastAudioAssetID),
+		LastPlaybackSessionID: fromUUID(row.LastPlaybackSessionID),
+		Version:               row.Version,
+		RelistenStatus:        row.RelistenStatus,
+	}, nil
 }
 
 func (s *ListenerStore) SaveProgress(ctx context.Context, p listener.ListeningProgress) (listener.ListeningProgress, error) {
@@ -89,7 +98,16 @@ func (s *ListenerStore) SaveProgress(ctx context.Context, p listener.ListeningPr
 	if err != nil {
 		return listener.ListeningProgress{}, err
 	}
-	return toListeningProgress(row), nil
+	return listener.ListeningProgress{
+		UserID:                fromUUID(row.UserID),
+		ChapterID:             fromUUID(row.ChapterID),
+		PositionMs:            row.PositionMs,
+		CompletedAt:           fromTimestamptz(row.CompletedAt),
+		LastAudioAssetID:      fromUUID(row.LastAudioAssetID),
+		LastPlaybackSessionID: fromUUID(row.LastPlaybackSessionID),
+		Version:               row.Version,
+		RelistenStatus:        row.RelistenStatus,
+	}, nil
 }
 
 func (s *ListenerStore) MarkCompleted(ctx context.Context, userID, chapterID string) (listener.ListeningProgress, error) {
@@ -103,14 +121,6 @@ func (s *ListenerStore) MarkCompleted(ctx context.Context, userID, chapterID str
 		}
 		return listener.ListeningProgress{}, err
 	}
-	return toListeningProgress(row), nil
-}
-
-// ============================================================
-// Converters
-// ============================================================
-
-func toListeningProgress(row db.ListeningProgress) listener.ListeningProgress {
 	return listener.ListeningProgress{
 		UserID:                fromUUID(row.UserID),
 		ChapterID:             fromUUID(row.ChapterID),
@@ -119,5 +129,22 @@ func toListeningProgress(row db.ListeningProgress) listener.ListeningProgress {
 		LastAudioAssetID:      fromUUID(row.LastAudioAssetID),
 		LastPlaybackSessionID: fromUUID(row.LastPlaybackSessionID),
 		Version:               row.Version,
-	}
+		RelistenStatus:        row.RelistenStatus,
+	}, nil
 }
+
+func (s *ListenerStore) ApplyRelistenStatus(ctx context.Context, chapterID, status string) (int64, error) {
+	rows, err := s.q.ApplyRelistenStatus(ctx, db.ApplyRelistenStatusParams{
+		ChapterID:     toUUID(chapterID),
+		RelistenStatus: status,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(rows)), nil
+}
+
+// ============================================================
+// Converters
+// ============================================================
+

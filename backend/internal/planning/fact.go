@@ -10,14 +10,15 @@ import (
 
 // StoryFact is a canonical fact with provenance and status.
 type StoryFact struct {
-	ID          string
-	StoryID     string
-	SubjectType string
-	SubjectID   string
-	FactType    string
-	Value       map[string]any
-	Importance  string
-	Status      string
+	ID               string
+	StoryID          string
+	SubjectType      string
+	SubjectID        string
+	FactType         string
+	Value            map[string]any
+	Importance       string
+	Status           string
+	SupersedesFactID string
 }
 
 // CreateFact creates a new ACTIVE StoryFact.

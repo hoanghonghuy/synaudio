@@ -175,6 +175,22 @@ FROM story_facts
 WHERE story_id = $1
 ORDER BY created_at;
 
+-- name: GetFact :one
+SELECT id, story_id, subject_type, subject_id, fact_type, value, importance, status,
+       valid_from_canon_version_id, invalidated_at_canon_version_id, supersedes_fact_id,
+       source_chapter_id, source_content_revision_id, generation_run_id, created_at
+FROM story_facts
+WHERE id = $1;
+
+-- name: UpdateFact :one
+UPDATE story_facts
+SET status = $2,
+    supersedes_fact_id = $3
+WHERE id = $1
+RETURNING id, story_id, subject_type, subject_id, fact_type, value, importance, status,
+          valid_from_canon_version_id, invalidated_at_canon_version_id, supersedes_fact_id,
+          source_chapter_id, source_content_revision_id, generation_run_id, created_at;
+
 -- ============================================================
 -- PlotThreads
 -- ============================================================

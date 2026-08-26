@@ -38,6 +38,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Post("/admin/stories/{storyID}/context-snapshots", h.createContextSnapshot)
 	r.Get("/admin/stories/{storyID}/context-snapshots", h.listContextSnapshots)
 	r.Post("/admin/canon-branches/{branchID}/commit", h.commitCanon)
+	r.Post("/admin/stories/{storyID}/canon-repair", h.repairCanonData)
 	r.Post("/admin/chapters/{chapterID}/publish", h.publishChapter)
 	r.Post("/admin/chapters/{chapterID}/unpublish", h.unpublishChapter)
 	r.Get("/admin/stories/{storyID}/creative-decisions", h.listCreativeDecisions)
@@ -475,6 +476,37 @@ func (h *Handler) commitCanon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.svc.CommitCanon(r.Context(), req.StoryID, branchID, req.SourceChapterID, req.ContentRevisionID, req.CommittedBy)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, res)
+}
+
+type repairCanonRequest struct {
+	BranchID          string `json:"branch_id"`
+	SourceChapterID   string `json:"source_chapter_id"`
+	ContentRevisionID string `json:"content_revision_id"`
+	CommittedBy       string `json:"committed_by"`
+}
+
+func (h *Handler) repairCanonData(w http.ResponseWriter, r *http.Request) {
+	storyID := chi.URLParam(r, "storyID")
+
+	var req repairCanonRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	res, err := h.svc.RepairCanonData(r.Context(), RepairCanonInput{
+		StoryID:           storyID,
+		BranchID:          req.BranchID,
+		SourceChapterID:   req.SourceChapterID,
+		ContentRevisionID: req.ContentRevisionID,
+		CommittedBy:       req.CommittedBy,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return

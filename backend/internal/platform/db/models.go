@@ -351,6 +351,7 @@ type ListeningProgress struct {
 	Version               int64              `json:"version"`
 	LastListenedAt        pgtype.Timestamptz `json:"last_listened_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	RelistenStatus        string             `json:"relisten_status"`
 }
 
 type NarrationRevision struct {
@@ -413,6 +414,47 @@ type PlotThreadEvent struct {
 	EventType      string             `json:"event_type"`
 	Detail         []byte             `json:"detail"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type RetconImpact struct {
+	ID              pgtype.UUID `json:"id"`
+	RetconRequestID pgtype.UUID `json:"retcon_request_id"`
+	EntityType      string      `json:"entity_type"`
+	EntityID        pgtype.UUID `json:"entity_id"`
+	ImpactType      string      `json:"impact_type"`
+	Detail          []byte      `json:"detail"`
+}
+
+type RetconRepairTask struct {
+	ID              pgtype.UUID        `json:"id"`
+	RetconRequestID pgtype.UUID        `json:"retcon_request_id"`
+	TaskType        string             `json:"task_type"`
+	EntityType      pgtype.Text        `json:"entity_type"`
+	EntityID        pgtype.UUID        `json:"entity_id"`
+	Status          string             `json:"status"`
+	GenerationRunID pgtype.UUID        `json:"generation_run_id"`
+	Detail          []byte             `json:"detail"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+}
+
+type RetconRequest struct {
+	ID                         pgtype.UUID        `json:"id"`
+	StoryID                    pgtype.UUID        `json:"story_id"`
+	TargetChapterID            pgtype.UUID        `json:"target_chapter_id"`
+	Status                     string             `json:"status"`
+	ImpactScope                string             `json:"impact_scope"`
+	ProposedChange             pgtype.Text        `json:"proposed_change"`
+	Reason                     string             `json:"reason"`
+	RequestedBy                pgtype.UUID        `json:"requested_by"`
+	ApprovedBy                 pgtype.UUID        `json:"approved_by"`
+	AppliedBy                  pgtype.UUID        `json:"applied_by"`
+	BaseOfficialCanonVersionID pgtype.UUID        `json:"base_official_canon_version_id"`
+	WorkspaceBranchID          pgtype.UUID        `json:"workspace_branch_id"`
+	ListenerImpact             []byte             `json:"listener_impact"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	ApprovedAt                 pgtype.Timestamptz `json:"approved_at"`
+	AppliedAt                  pgtype.Timestamptz `json:"applied_at"`
 }
 
 type Role struct {

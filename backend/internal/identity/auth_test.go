@@ -227,6 +227,41 @@ func (s *fakeStore) CountActiveAdmins(_ context.Context) (int, error) {
 	return count, nil
 }
 
+func (s *fakeStore) DeactivateUser(_ context.Context, userID string) error {
+	for email, u := range s.users {
+		if u.ID == userID {
+			u.Status = identity.StatusDeactivated
+			s.users[email] = u
+			return nil
+		}
+	}
+	return identity.ErrUserNotFound
+}
+
+func (s *fakeStore) ReactivateUser(_ context.Context, userID string) error {
+	for email, u := range s.users {
+		if u.ID == userID {
+			u.Status = identity.StatusActive
+			s.users[email] = u
+			return nil
+		}
+	}
+	return identity.ErrUserNotFound
+}
+
+func (s *fakeStore) PurgeUser(_ context.Context, userID string) error {
+	for email, u := range s.users {
+		if u.ID == userID {
+			u.Email = ""
+			u.PasswordHash = ""
+			u.DisplayName = ""
+			s.users[email] = u
+			return nil
+		}
+	}
+	return identity.ErrUserNotFound
+}
+
 func TestRegisterCreatesActiveUserWithHashedPassword(t *testing.T) {
 	store := newFakeStore()
 	svc := identity.NewAuthService(store)

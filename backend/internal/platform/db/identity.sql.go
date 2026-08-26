@@ -94,6 +94,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deactivateUser = `-- name: DeactivateUser :exec
+UPDATE users SET status = 'DEACTIVATED', deactivated_at = NOW(), updated_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) DeactivateUser(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deactivateUser, id)
+	return err
+}
+
 const disableMFAMethod = `-- name: DisableMFAMethod :exec
 UPDATE user_mfa_methods SET disabled_at = NOW() WHERE user_id = $1 AND disabled_at IS NULL
 `
@@ -277,6 +286,24 @@ UPDATE users SET email_verified_at = NOW(), updated_at = NOW() WHERE id = $1
 
 func (q *Queries) MarkEmailVerified(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, markEmailVerified, id)
+	return err
+}
+
+const purgeUser = `-- name: PurgeUser :exec
+UPDATE users SET email = 'deleted-' || id::text || '@deleted.invalid', password_hash = NULL, display_name = NULL, updated_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) PurgeUser(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, purgeUser, id)
+	return err
+}
+
+const reactivateUser = `-- name: ReactivateUser :exec
+UPDATE users SET status = 'ACTIVE', deactivated_at = NULL, updated_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) ReactivateUser(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, reactivateUser, id)
 	return err
 }
 

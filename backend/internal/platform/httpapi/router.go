@@ -19,6 +19,7 @@ type Dependencies struct {
 	GenerationHandler http.Handler
 	AudioHandler     http.Handler
 	ListenerHandler  http.Handler
+	RetconHandler    http.Handler
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -55,6 +56,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		deps.GenerationHandler,
 		deps.AudioHandler,
 		deps.ListenerHandler,
+		deps.RetconHandler,
 	} {
 		if h == nil {
 			continue

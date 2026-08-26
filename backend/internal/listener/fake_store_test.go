@@ -72,3 +72,17 @@ func (s *fakeStore) MarkCompleted(_ context.Context, userID, chapterID string) (
 	s.progress[userID][chapterID] = p
 	return p, nil
 }
+
+func (s *fakeStore) ApplyRelistenStatus(_ context.Context, chapterID, status string) (int64, error) {
+	var affected int64
+	for userID, chapters := range s.progress {
+		for cid, p := range chapters {
+			if cid == chapterID {
+				p.RelistenStatus = status
+				s.progress[userID][cid] = p
+				affected++
+			}
+		}
+	}
+	return affected, nil
+}
