@@ -47,6 +47,88 @@ services:
       exit 0;
       "
 
+  backend-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: synaudio-backend-api
+    environment:
+      - APP_ENV=development
+      - HTTP_ADDR=:8080
+      - DATABASE_URL=postgres://synaudio:synaudio@postgres:5432/synaudio?sslmode=disable
+      - STORAGE_PROVIDER=minio
+      - STORAGE_ENDPOINT=http://minio:9000
+      - STORAGE_BUCKET=synaudio
+      - STORAGE_ACCESS_KEY=minio
+      - STORAGE_SECRET_KEY=minio12345
+      - SIGNED_AUDIO_URL_TTL=15m
+      - AI_MODE=mock
+      - TTS_MODE=mock
+      - TEXT_AI_PROVIDER=mock
+      - TTS_PROVIDER=mock
+      - APP_PUBLIC_URL=http://localhost:8080
+      - API_PUBLIC_URL=http://localhost:8080
+      - CORS_ALLOWED_ORIGINS=http://localhost
+      - ALLOW_REMOTE_DATABASE_IN_DEV=false
+      - ALLOW_REMOTE_STORAGE_IN_DEV=false
+      - ACCESS_TOKEN_TTL=15m
+      - REFRESH_SESSION_TTL=720h
+      - RECENT_AUTH_WINDOW=10m
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  backend-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: synaudio-backend-worker
+    command: ["/app/worker"]
+    environment:
+      - APP_ENV=development
+      - HTTP_ADDR=:8080
+      - DATABASE_URL=postgres://synaudio:synaudio@postgres:5432/synaudio?sslmode=disable
+      - STORAGE_PROVIDER=minio
+      - STORAGE_ENDPOINT=http://minio:9000
+      - STORAGE_BUCKET=synaudio
+      - STORAGE_ACCESS_KEY=minio
+      - STORAGE_SECRET_KEY=minio12345
+      - SIGNED_AUDIO_URL_TTL=15m
+      - AI_MODE=mock
+      - TTS_MODE=mock
+      - TEXT_AI_PROVIDER=mock
+      - TTS_PROVIDER=mock
+      - APP_PUBLIC_URL=http://localhost:8080
+      - API_PUBLIC_URL=http://localhost:8080
+      - CORS_ALLOWED_ORIGINS=http://localhost
+      - ALLOW_REMOTE_DATABASE_IN_DEV=false
+      - ALLOW_REMOTE_STORAGE_IN_DEV=false
+      - ACCESS_TOKEN_TTL=15m
+      - REFRESH_SESSION_TTL=720h
+      - RECENT_AUTH_WINDOW=10m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: synaudio-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend-api
+    restart: unless-stopped
+
 volumes:
   synaudio_postgres_data:
   synaudio_minio_data:

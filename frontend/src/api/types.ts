@@ -101,6 +101,7 @@ export interface ListeningProgress {
   LastAudioAssetID: string
   LastPlaybackSessionID: string
   Version: number
+  RelistenStatus?: 'NO_RELISTEN_NEEDED' | 'RELISTEN_RECOMMENDED' | 'RELISTEN_REQUIRED'
 }
 
 export interface CreativeDecision {

@@ -99,6 +99,7 @@ export const useListenerStore = defineStore('listener', {
             LastAudioAssetID: g.audioAssetID,
             LastPlaybackSessionID: '',
             Version: 0,
+            RelistenStatus: 'NO_RELISTEN_NEEDED',
           }
         }
         return
@@ -120,6 +121,7 @@ export const useListenerStore = defineStore('listener', {
           LastAudioAssetID: audioAssetID,
           LastPlaybackSessionID: '',
           Version: 0,
+          RelistenStatus: 'NO_RELISTEN_NEEDED',
         }
         return
       }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import {
   getAudioURL,
   getChapterContent,
@@ -18,7 +18,11 @@ const activeChapter = ref<Chapter | null>(null)
 const content = ref<ChapterContent | null>(null)
 const audioURL = ref('')
 const loading = ref(false)
+const contentLoading = ref(false)
+const audioLoading = ref(false)
 const error = ref('')
+const contentError = ref('')
+const audioError = ref('')
 
 const audioEl = ref<HTMLAudioElement | null>(null)
 
@@ -42,24 +46,49 @@ async function selectChapter(chapter: Chapter) {
   activeChapter.value = chapter
   content.value = null
   audioURL.value = ''
+  contentError.value = ''
+  audioError.value = ''
+  contentLoading.value = true
+  audioLoading.value = true
+
+  const contentRequest = getChapterContent(chapter.ID)
+    .then((result) => {
+      content.value = result
+    })
+    .catch((e) => {
+      contentError.value = e instanceof Error ? e.message : 'Không thể tải nội dung chương.'
+    })
+    .finally(() => {
+      contentLoading.value = false
+    })
+
+  const audioRequest = getAudioURL(chapter.ID)
+    .then((result) => {
+      audioURL.value = result.url
+    })
+    .catch((e) => {
+      audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
+    })
+    .finally(() => {
+      audioLoading.value = false
+    })
+
+  await Promise.all([contentRequest, audioRequest])
+
   try {
-    const [c, a] = await Promise.all([
-      getChapterContent(chapter.ID),
-      getAudioURL(chapter.ID),
-    ])
-    content.value = c
-    audioURL.value = a.url
     await listener.loadProgress(chapter.ID)
     const saved = listener.progress[chapter.ID]
     if (saved && saved.PositionMs > 0) {
       // resume position after audio metadata loads
+      await nextTick()
       const el = audioEl.value
       if (el) {
         el.currentTime = saved.PositionMs / 1000
       }
     }
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Không thể tải nội dung chương.'
+  } catch {
+    // Guest progress remains local; an unavailable progress endpoint should
+    // not prevent the reader from opening.
   }
 }
 
@@ -86,25 +115,40 @@ onMounted(async () => {
 
 <template>
   <section class="page reader">
-    <p class="eyebrow">Đọc & nghe</p>
+    <RouterLink class="back-link" :to="`/stories/${storyID}`">← Về chi tiết truyện</RouterLink>
     <div class="reader-head">
-      <h1>Chương truyện</h1>
-      <button class="fav-btn" :class="{ active: listener.isFavorite(storyID) }" @click="toggleFavorite">
+      <div>
+        <p class="eyebrow">Đọc & nghe · Synaudio</p>
+        <h1>{{ activeChapter?.Title || 'Chọn một chương để bắt đầu' }}</h1>
+      </div>
+      <button
+        class="fav-btn"
+        :class="{ active: listener.isFavorite(storyID) }"
+        type="button"
+        :aria-pressed="listener.isFavorite(storyID)"
+        @click="toggleFavorite"
+      >
         {{ listener.isFavorite(storyID) ? '★ Đã yêu thích' : '☆ Yêu thích' }}
       </button>
     </div>
 
-    <p v-if="loading" class="note">Đang tải...</p>
-    <p v-else-if="error" class="error">{{ error }}</p>
+    <p v-if="loading" class="status-state" role="status" aria-live="polite">Đang mở thư viện chương...</p>
+    <div v-else-if="error" class="status-state error" role="alert">
+      <strong>Không thể tải các chương.</strong>
+      <p>{{ error }}</p>
+      <button class="secondary-link" type="button" @click="loadChapters">Thử lại</button>
+    </div>
     <p v-else-if="chapters.length === 0" class="note">Chưa có chương nào được xuất bản.</p>
 
     <template v-else>
-      <nav class="chapter-nav">
+      <nav class="chapter-nav" aria-label="Danh sách chương">
         <button
           v-for="c in chapters"
           :key="c.ID"
           class="chapter-tab"
           :class="{ active: activeChapter?.ID === c.ID }"
+          type="button"
+          :aria-current="activeChapter?.ID === c.ID ? 'page' : undefined"
           @click="selectChapter(c)"
         >
           {{ c.ChapterNumber }}. {{ c.Title }}
@@ -112,7 +156,9 @@ onMounted(async () => {
       </nav>
 
       <div v-if="activeChapter" class="reader-body">
-        <h2>{{ activeChapter.Title }}</h2>
+        <p v-if="contentLoading || audioLoading" class="muted" role="status" aria-live="polite">
+          {{ contentLoading ? 'Đang tải nội dung' : '' }}{{ contentLoading && audioLoading ? ' · ' : '' }}{{ audioLoading ? 'Đang chuẩn bị audio' : '' }}...
+        </p>
 
         <audio
           v-if="audioURL"
@@ -124,8 +170,27 @@ onMounted(async () => {
           @timeupdate="onTimeUpdate"
           @pause="onPause"
         />
+        <div
+          v-if="listener.progress[activeChapter.ID]?.RelistenStatus && listener.progress[activeChapter.ID]?.RelistenStatus !== 'NO_RELISTEN_NEEDED'"
+          class="relisten-notice"
+          role="status"
+        >
+          <strong>
+            {{ listener.progress[activeChapter.ID]?.RelistenStatus === 'RELISTEN_REQUIRED' ? 'Nên nghe lại chương này' : 'Có bản cập nhật cho chương này' }}
+          </strong>
+          <span>Tiến độ nghe trước đây vẫn được giữ nguyên.</span>
+        </div>
+        <div v-if="audioError" class="status-state audio-state" role="status">
+          <strong>Audio tạm thời chưa sẵn sàng.</strong>
+          <p>{{ audioError }}</p>
+          <span class="muted">Bạn vẫn có thể đọc nội dung chương này.</span>
+        </div>
 
-        <article v-if="content" class="prose">
+        <div v-if="contentError" class="status-state error" role="alert">
+          <strong>Không thể tải nội dung chương.</strong>
+          <p>{{ contentError }}</p>
+        </div>
+        <article v-else-if="content" class="prose">
           <p v-for="(para, i) in content.content_text.split(/\n+/)" :key="i">{{ para }}</p>
         </article>
       </div>

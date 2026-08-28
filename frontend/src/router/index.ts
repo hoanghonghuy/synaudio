@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../features/catalog/HomePage.vue'
+import StoryDetail from '../features/catalog/StoryDetail.vue'
 import AdminShell from '../features/admin/AdminShell.vue'
 import StoryReader from '../features/reader/StoryReader.vue'
 import StoryControlCenter from '../features/admin/StoryControlCenter.vue'
@@ -21,6 +22,11 @@ export const router = createRouter({
       path: '/stories/:storyID/read',
       name: 'reader',
       component: StoryReader,
+    },
+    {
+      path: '/stories/:storyID',
+      name: 'story-detail',
+      component: StoryDetail,
     },
     {
       path: '/admin/stories/:storyID/control',
