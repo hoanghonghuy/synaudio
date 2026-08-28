@@ -19,6 +19,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Post("/admin/stories", h.createStory)
 	r.Get("/admin/stories", h.listAdminStories)
 	r.Get("/stories", h.listPublicStories)
+	r.Get("/stories/{storyID}", h.getPublicStory)
 	r.Get("/genres", h.listGenres)
 	r.Get("/admin/stories/{storyID}/workflow-settings", h.getWorkflowSettings)
 	r.Put("/admin/stories/{storyID}/workflow-settings", h.updateWorkflowSettings)
@@ -77,6 +78,27 @@ func (h *Handler) listPublicStories(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.listStories(w, r, true)
+}
+
+func (h *Handler) getPublicStory(w http.ResponseWriter, r *http.Request) {
+	st, err := h.svc.GetPublicStory(r.Context(), chi.URLParam(r, "storyID"))
+	if err != nil {
+		if errors.Is(err, ErrStoryNotFound) {
+			writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, storyResponse{
+		ID:          st.ID,
+		Slug:        st.Slug,
+		Title:       st.Title,
+		Description: st.Description,
+		Status:      st.Status,
+		Visibility:  st.Visibility,
+	})
 }
 
 func writeStoryList(w http.ResponseWriter, stories []Story) {

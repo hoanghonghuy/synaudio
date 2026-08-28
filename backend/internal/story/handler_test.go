@@ -141,6 +141,54 @@ func TestListStoriesPublicHandlerReturnsPublicOnly(t *testing.T) {
 	}
 }
 
+func TestGetPublicStoryHandlerReturnsStory(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{
+		ID:         "s1",
+		Slug:       "the-long-road",
+		Title:      "The Long Road",
+		Description: "A journey across the continent.",
+		Status:     story.StatusActive,
+		Visibility: story.VisibilityPublic,
+	}
+	svc := story.NewService(store)
+	h := wrapHandler(svc)
+
+	rec := doJSON(t, h, http.MethodGet, "/api/v1/stories/s1", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["id"] != "s1" {
+		t.Fatalf("expected story s1, got %v", resp["id"])
+	}
+	if resp["title"] != "The Long Road" {
+		t.Fatalf("expected story title, got %v", resp["title"])
+	}
+}
+
+func TestGetPrivateStoryHandlerReturnsNotFound(t *testing.T) {
+	store := newFakeStore()
+	store.stories["s1"] = story.Story{
+		ID:         "s1",
+		Title:      "Private Draft",
+		Visibility: story.VisibilityPrivate,
+	}
+	svc := story.NewService(store)
+	h := wrapHandler(svc)
+
+	rec := doJSON(t, h, http.MethodGet, "/api/v1/stories/s1", nil)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestListStoriesAdminHandlerReturnsAll(t *testing.T) {
 	store := newFakeStore()
 	store.stories["s1"] = story.Story{ID: "s1", Slug: "a", Title: "A", Visibility: story.VisibilityPublic}

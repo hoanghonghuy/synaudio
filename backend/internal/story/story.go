@@ -281,6 +281,18 @@ func (s *Service) ListStories(ctx context.Context, in ListStoriesInput) ([]Story
 	return s.store.ListStories(ctx, in.PublicOnly)
 }
 
+// GetPublicStory returns a story only when it belongs to the public catalog.
+func (s *Service) GetPublicStory(ctx context.Context, storyID string) (Story, error) {
+	st, err := s.store.GetStory(ctx, storyID)
+	if err != nil {
+		return Story{}, err
+	}
+	if st.Visibility != VisibilityPublic {
+		return Story{}, ErrStoryNotFound
+	}
+	return st, nil
+}
+
 // SearchStories searches public stories by query, genre, and sort.
 func (s *Service) SearchStories(ctx context.Context, in SearchStoriesInput) ([]Story, error) {
 	return s.store.SearchStories(ctx, in)

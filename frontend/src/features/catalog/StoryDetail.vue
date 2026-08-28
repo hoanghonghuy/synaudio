@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { listPublicStories } from '../../api/client'
+import { getPublicStory } from '../../api/client'
 import type { Story } from '../../api/types'
 
 const route = useRoute()
@@ -14,8 +14,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await listPublicStories()
-    story.value = response.stories.find((item) => item.id === storyID.value) ?? null
+    story.value = await getPublicStory(storyID.value)
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Không thể tải thông tin truyện.'
   } finally {

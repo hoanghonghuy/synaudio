@@ -59,6 +59,10 @@ export function listAdminStories(): Promise<StoryListResponse> {
   return request<StoryListResponse>('/admin/stories')
 }
 
+export function getPublicStory(storyID: string): Promise<Story> {
+  return request<Story>(`/stories/${storyID}`)
+}
+
 export function createStory(input: CreateStoryInput): Promise<Story> {
   return request<Story>('/admin/stories', {
     method: 'POST',

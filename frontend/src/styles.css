@@ -18,7 +18,7 @@
   --radius-lg: 16px;
   --content-max: 1280px;
   --gutter: 24px;
-  font-family: "Be Vietnam Pro", "Segoe UI", sans-serif;
+  font-family: "Segoe UI", "Noto Sans", Arial, sans-serif;
   background: var(--bg);
   color: var(--ink);
 }
