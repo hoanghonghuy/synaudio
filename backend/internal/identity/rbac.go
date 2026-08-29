@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"net/http"
 )
 
 // Authorize reports whether the user holds the given permission through any
@@ -24,6 +25,24 @@ func (s *AuthService) Authorize(ctx context.Context, userID, permission string) 
 		}
 	}
 
+	return false, nil
+}
+
+// ResolveAdmin checks the refresh-cookie session and verifies the ADMIN role.
+func (s *AuthService) ResolveAdmin(ctx context.Context, r *http.Request) (bool, error) {
+	userID, err := s.ResolveUserID(ctx, r)
+	if err != nil {
+		return false, err
+	}
+	roles, err := s.store.GetUserRoles(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, role := range roles {
+		if role == RoleAdmin {
+			return true, nil
+		}
+	}
 	return false, nil
 }
 

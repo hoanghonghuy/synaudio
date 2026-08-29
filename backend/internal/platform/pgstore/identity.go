@@ -69,6 +69,26 @@ func (s *IdentityStore) CreateSession(ctx context.Context, sess identity.Session
 	})
 }
 
+func (s *IdentityStore) GetSessionByRefreshTokenHash(ctx context.Context, tokenHash string) (identity.Session, error) {
+	row, err := s.q.GetSessionByRefreshTokenHash(ctx, tokenHash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return identity.Session{}, identity.ErrUnauthenticated
+		}
+		return identity.Session{}, err
+	}
+	return identity.Session{
+		ID:               fromUUID(row.ID),
+		UserID:           fromUUID(row.UserID),
+		RefreshTokenHash: row.RefreshTokenHash,
+		ExpiresAt:        row.ExpiresAt.Time,
+	}, nil
+}
+
+func (s *IdentityStore) RevokeSession(ctx context.Context, tokenHash string) error {
+	return s.q.RevokeSession(ctx, tokenHash)
+}
+
 func (s *IdentityStore) StoreVerificationToken(ctx context.Context, userID, tokenHash string) error {
 	return s.q.StoreVerificationToken(ctx, db.StoreVerificationTokenParams{
 		UserID:    toUUID(userID),

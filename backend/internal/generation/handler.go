@@ -1,6 +1,7 @@
 package generation
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,11 +10,12 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc       *Service
+	resolveID func(context.Context, *http.Request) (string, error)
 }
 
-func NewHandler(svc *Service) http.Handler {
-	h := &Handler{svc: svc}
+func NewHandler(svc *Service, resolveID func(context.Context, *http.Request) (string, error)) http.Handler {
+	h := &Handler{svc: svc, resolveID: resolveID}
 
 	r := chi.NewRouter()
 	r.Post("/admin/chapters/{chapterID}/content", h.writeChapter)
@@ -47,6 +49,10 @@ type writeChapterRequest struct {
 
 func (h *Handler) writeChapter(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
 
 	var req writeChapterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -54,7 +60,7 @@ func (h *Handler) writeChapter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rev, err := h.svc.WriteChapter(r.Context(), chapterID, req.Prompt, req.CreatedBy)
+	rev, err := h.svc.WriteChapter(r.Context(), chapterID, req.Prompt, actorID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
@@ -75,6 +81,19 @@ func (h *Handler) listContentRevisions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"revisions": revisions})
 }
 
+func (h *Handler) actorID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if h.resolveID == nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return "", false
+	}
+	actorID, err := h.resolveID(r.Context(), r)
+	if err != nil || actorID == "" {
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return "", false
+	}
+	return actorID, true
+}
+
 func (h *Handler) getPublishedContent(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
 
@@ -90,8 +109,8 @@ func (h *Handler) getPublishedContent(w http.ResponseWriter, r *http.Request) {
 
 	latest := revisions[len(revisions)-1]
 	writeJSON(w, http.StatusOK, map[string]any{
-		"chapter_id": latest.ChapterID,
-		"revision_id": latest.ID,
+		"chapter_id":   latest.ChapterID,
+		"revision_id":  latest.ID,
 		"content_text": latest.ContentText,
 	})
 }
@@ -103,6 +122,10 @@ type approveContentRequest struct {
 
 func (h *Handler) approveContent(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
 
 	var req approveContentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -110,7 +133,7 @@ func (h *Handler) approveContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a, err := h.svc.ApproveContent(r.Context(), chapterID, req.RevisionID, req.ApprovedBy)
+	a, err := h.svc.ApproveContent(r.Context(), chapterID, req.RevisionID, actorID)
 	if err != nil {
 		if errors.Is(err, ErrContentRevisionNotFound) {
 			writeError(w, http.StatusNotFound, "CONTENT_REVISION_NOT_FOUND", "content revision not found")
@@ -168,13 +191,17 @@ type createRunRequest struct {
 }
 
 func (h *Handler) createRun(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
 	var req createRunRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
 		return
 	}
 
-	run, err := h.svc.CreateGenerationRun(r.Context(), req.RunType, req.StoryID, req.ChapterID, req.RequestedBy)
+	run, err := h.svc.CreateGenerationRun(r.Context(), req.RunType, req.StoryID, req.ChapterID, actorID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_RUN", "invalid run")
 		return
@@ -297,6 +324,10 @@ type rewriteRequest struct {
 
 func (h *Handler) rewriteChapter(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
 
 	var req rewriteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -304,7 +335,7 @@ func (h *Handler) rewriteChapter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rev, err := h.svc.RewriteChapter(r.Context(), chapterID, req.BasedOnRevisionID, req.Feedback, req.CreatedBy)
+	rev, err := h.svc.RewriteChapter(r.Context(), chapterID, req.BasedOnRevisionID, req.Feedback, actorID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
@@ -321,6 +352,10 @@ type editRequest struct {
 
 func (h *Handler) editContent(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
 
 	var req editRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -328,7 +363,7 @@ func (h *Handler) editContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rev, err := h.svc.EditContent(r.Context(), chapterID, req.BasedOnRevisionID, req.Text, req.EditedBy)
+	rev, err := h.svc.EditContent(r.Context(), chapterID, req.BasedOnRevisionID, req.Text, actorID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
@@ -344,6 +379,10 @@ type regenerateRequest struct {
 
 func (h *Handler) regenerateContent(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
 
 	var req regenerateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -351,7 +390,7 @@ func (h *Handler) regenerateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rev, err := h.svc.RegenerateContent(r.Context(), chapterID, req.BasedOnRevisionID, req.RequestedBy)
+	rev, err := h.svc.RegenerateContent(r.Context(), chapterID, req.BasedOnRevisionID, actorID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
@@ -367,6 +406,10 @@ type rejectRequest struct {
 
 func (h *Handler) rejectContent(w http.ResponseWriter, r *http.Request) {
 	revisionID := chi.URLParam(r, "revisionID")
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
 
 	var req rejectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -374,7 +417,7 @@ func (h *Handler) rejectContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rev, err := h.svc.RejectContent(r.Context(), revisionID, req.RejectedBy, req.Reason)
+	rev, err := h.svc.RejectContent(r.Context(), revisionID, actorID, req.Reason)
 	if err != nil {
 		if errors.Is(err, ErrContentRevisionNotFound) {
 			writeError(w, http.StatusNotFound, "CONTENT_REVISION_NOT_FOUND", "content revision not found")
@@ -409,6 +452,10 @@ type startBatchRequest struct {
 
 func (h *Handler) startBatchGeneration(w http.ResponseWriter, r *http.Request) {
 	storyID := chi.URLParam(r, "storyID")
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
 
 	var req startBatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -416,7 +463,7 @@ func (h *Handler) startBatchGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, err := h.svc.StartBatchGeneration(r.Context(), storyID, req.ChapterIDs, req.RequestedBy)
+	run, err := h.svc.StartBatchGeneration(r.Context(), storyID, req.ChapterIDs, actorID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return

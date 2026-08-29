@@ -1,6 +1,7 @@
 package listener
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -8,11 +9,12 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc       *Service
+	resolveID func(context.Context, *http.Request) (string, error)
 }
 
-func NewHandler(svc *Service) http.Handler {
-	h := &Handler{svc: svc}
+func NewHandler(svc *Service, resolveID func(context.Context, *http.Request) (string, error)) http.Handler {
+	h := &Handler{svc: svc, resolveID: resolveID}
 
 	r := chi.NewRouter()
 	r.Get("/me/favorites", h.listFavorites)
@@ -26,7 +28,10 @@ func NewHandler(svc *Service) http.Handler {
 }
 
 func (h *Handler) listFavorites(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := h.resolveUser(w, r)
+	if !ok {
+		return
+	}
 	favs, err := h.svc.ListFavorites(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
@@ -36,7 +41,10 @@ func (h *Handler) listFavorites(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) addFavorite(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := h.resolveUser(w, r)
+	if !ok {
+		return
+	}
 	storyID := chi.URLParam(r, "storyID")
 
 	if err := h.svc.AddFavorite(r.Context(), userID, storyID); err != nil {
@@ -47,7 +55,10 @@ func (h *Handler) addFavorite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) removeFavorite(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := h.resolveUser(w, r)
+	if !ok {
+		return
+	}
 	storyID := chi.URLParam(r, "storyID")
 
 	if err := h.svc.RemoveFavorite(r.Context(), userID, storyID); err != nil {
@@ -58,7 +69,10 @@ func (h *Handler) removeFavorite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getProgress(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := h.resolveUser(w, r)
+	if !ok {
+		return
+	}
 	chapterID := chi.URLParam(r, "chapterID")
 
 	p, err := h.svc.GetProgress(r.Context(), userID, chapterID)
@@ -70,13 +84,16 @@ func (h *Handler) getProgress(w http.ResponseWriter, r *http.Request) {
 }
 
 type saveProgressRequest struct {
-	PositionMs           int64  `json:"position_ms"`
-	AudioAssetID         string `json:"audio_asset_id"`
-	PlaybackSessionID    string `json:"playback_session_id"`
+	PositionMs        int64  `json:"position_ms"`
+	AudioAssetID      string `json:"audio_asset_id"`
+	PlaybackSessionID string `json:"playback_session_id"`
 }
 
 func (h *Handler) saveProgress(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := h.resolveUser(w, r)
+	if !ok {
+		return
+	}
 	chapterID := chi.URLParam(r, "chapterID")
 
 	var req saveProgressRequest
@@ -94,7 +111,10 @@ func (h *Handler) saveProgress(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) markCompleted(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := h.resolveUser(w, r)
+	if !ok {
+		return
+	}
 	chapterID := chi.URLParam(r, "chapterID")
 
 	p, err := h.svc.MarkCompleted(r.Context(), userID, chapterID)
@@ -103,6 +123,19 @@ func (h *Handler) markCompleted(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
+}
+
+func (h *Handler) resolveUser(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if h.resolveID == nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return "", false
+	}
+	userID, err := h.resolveID(r.Context(), r)
+	if err != nil || userID == "" {
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return "", false
+	}
+	return userID, true
 }
 
 type revisionImpactRequest struct {

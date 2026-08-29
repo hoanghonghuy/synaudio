@@ -17,6 +17,19 @@ WHERE id = $1;
 INSERT INTO user_sessions (id, user_id, refresh_token_hash, expires_at)
 VALUES ($1, $2, $3, $4);
 
+-- name: GetSessionByRefreshTokenHash :one
+SELECT id, user_id, refresh_token_hash, expires_at
+FROM user_sessions
+WHERE refresh_token_hash = $1
+  AND revoked_at IS NULL
+  AND expires_at > NOW();
+
+-- name: RevokeSession :exec
+UPDATE user_sessions
+SET revoked_at = NOW()
+WHERE refresh_token_hash = $1
+  AND revoked_at IS NULL;
+
 -- name: StoreVerificationToken :exec
 INSERT INTO email_verification_tokens (id, user_id, token_hash, expires_at)
 VALUES (gen_random_uuid(), $1, $2, NOW() + INTERVAL '24 hours');

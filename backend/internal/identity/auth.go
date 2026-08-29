@@ -3,14 +3,15 @@ package identity
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 const (
-	StatusActive     = "ACTIVE"
-	StatusSuspended  = "SUSPENDED"
+	StatusActive      = "ACTIVE"
+	StatusSuspended   = "SUSPENDED"
 	StatusDeactivated = "DEACTIVATED"
 )
 
@@ -22,6 +23,7 @@ var (
 	ErrInvalidToken       = errors.New("invalid token")
 	ErrLastAdmin          = errors.New("cannot remove last active admin")
 	ErrForbidden          = errors.New("forbidden")
+	ErrUnauthenticated    = errors.New("authentication required")
 )
 
 const (
@@ -60,6 +62,8 @@ type Store interface {
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id string) (User, error)
 	CreateSession(ctx context.Context, s Session) error
+	GetSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (Session, error)
+	RevokeSession(ctx context.Context, refreshTokenHash string) error
 
 	StoreVerificationToken(ctx context.Context, userID, tokenHash string) error
 	GetVerificationToken(ctx context.Context, userID string) (string, error)
@@ -156,4 +160,53 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (Sessio
 	}
 
 	return sess, nil
+}
+
+// RefreshSession rotates a valid refresh token and creates a new session.
+func (s *AuthService) RefreshSession(ctx context.Context, token string) (Session, error) {
+	if token == "" {
+		return Session{}, ErrUnauthenticated
+	}
+
+	current, err := s.store.GetSessionByRefreshTokenHash(ctx, HashToken(token))
+	if err != nil {
+		return Session{}, ErrUnauthenticated
+	}
+	if err := s.store.RevokeSession(ctx, current.RefreshTokenHash); err != nil {
+		return Session{}, err
+	}
+
+	raw, err := NewRefreshToken()
+	if err != nil {
+		return Session{}, err
+	}
+	next := Session{
+		UserID:           current.UserID,
+		RefreshToken:     raw,
+		RefreshTokenHash: HashToken(raw),
+		ExpiresAt:        time.Now().Add(30 * 24 * time.Hour),
+	}
+	if err := s.store.CreateSession(ctx, next); err != nil {
+		return Session{}, err
+	}
+	return next, nil
+}
+
+// ResolveUserID returns the active user associated with the refresh cookie.
+// Callers must not accept a user ID from request headers or bodies instead.
+func (s *AuthService) ResolveUserID(ctx context.Context, r *http.Request) (string, error) {
+	cookie, err := r.Cookie(RefreshCookieName)
+	if err != nil || cookie.Value == "" {
+		return "", ErrUnauthenticated
+	}
+
+	session, err := s.store.GetSessionByRefreshTokenHash(ctx, HashToken(cookie.Value))
+	if err != nil {
+		return "", ErrUnauthenticated
+	}
+	user, err := s.store.GetUserByID(ctx, session.UserID)
+	if err != nil || user.Status != StatusActive {
+		return "", ErrUnauthenticated
+	}
+	return session.UserID, nil
 }

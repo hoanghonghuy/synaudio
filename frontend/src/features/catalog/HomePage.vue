@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { listGenres, listPublicStories } from '../../api/client'
 import type { Genre, Story } from '../../api/types'
@@ -12,6 +12,7 @@ const error = ref('')
 const q = ref('')
 const genre = ref('')
 const sort = ref('')
+const isSearching = computed(() => Boolean(q.value || genre.value || sort.value))
 
 async function load() {
   loading.value = true
@@ -35,13 +36,13 @@ onMounted(load)
 
 <template>
   <section class="page catalog">
-    <div class="hero">
+    <div class="catalog-intro">
       <div class="hero-copy">
-        <p class="eyebrow">Sách nói AI · Thư viện công khai</p>
-        <h1>Những câu chuyện đáng để lắng nghe.</h1>
+        <p class="eyebrow">Thư viện sách nói tiếng Việt</p>
+        <h1>Một câu chuyện hay có thể thay đổi nhịp của một ngày.</h1>
         <p class="lede">
-          Khám phá thế giới truyện nói bằng tiếng Việt — được kể chậm rãi, giàu cảm xúc
-          và sẵn sàng đồng hành cùng bạn ở bất cứ đâu.
+          Khám phá những truyện nói được tạo ra để đọc chậm, nghe sâu và quay lại bất cứ
+          lúc nào.
         </p>
       </div>
       <aside class="hero-note" aria-label="Giới thiệu Synaudio">
@@ -51,26 +52,32 @@ onMounted(load)
     </div>
 
     <form class="searchbar" role="search" @submit.prevent="load">
-      <label class="sr-only" for="story-search">Tìm kiếm truyện</label>
-      <input id="story-search" v-model="q" type="search" placeholder="Tìm theo tiêu đề, mô tả..." />
-      <label class="sr-only" for="story-genre">Lọc theo thể loại</label>
-      <select id="story-genre" v-model="genre">
-        <option value="">Tất cả thể loại</option>
-        <option v-for="g in genres" :key="g.id" :value="g.slug">{{ g.name }}</option>
-      </select>
-      <label class="sr-only" for="story-sort">Sắp xếp truyện</label>
-      <select id="story-sort" v-model="sort">
-        <option value="">Mặc định</option>
-        <option value="NEW">Mới nhất</option>
-        <option value="UPDATED">Cập nhật gần đây</option>
-        <option value="TITLE">Theo tiêu đề</option>
-      </select>
+      <label class="search-field search-field-wide" for="story-search">
+        <span>Tìm kiếm trong thư viện</span>
+        <input id="story-search" v-model="q" type="search" placeholder="Tìm theo tiêu đề hoặc mô tả…" />
+      </label>
+      <label class="search-field" for="story-genre">
+        <span>Thể loại</span>
+        <select id="story-genre" v-model="genre">
+          <option value="">Tất cả thể loại</option>
+          <option v-for="g in genres" :key="g.id" :value="g.slug">{{ g.name }}</option>
+        </select>
+      </label>
+      <label class="search-field" for="story-sort">
+        <span>Sắp xếp</span>
+        <select id="story-sort" v-model="sort">
+          <option value="">Mới cập nhật</option>
+          <option value="NEW">Mới nhất</option>
+          <option value="RECENTLY_UPDATED">Cập nhật gần đây</option>
+          <option value="TITLE">Theo tiêu đề</option>
+        </select>
+      </label>
       <button type="submit" :disabled="loading">Tìm truyện</button>
     </form>
 
     <div class="section-heading">
       <h2>Đang được khám phá</h2>
-      <span class="muted">{{ stories.length }} truyện</span>
+      <span class="muted">{{ stories.length }} truyện{{ isSearching ? ' phù hợp' : '' }}</span>
     </div>
 
     <p v-if="loading" class="status-state" role="status" aria-live="polite">Đang tìm những câu chuyện phù hợp...</p>
@@ -84,13 +91,13 @@ onMounted(load)
       <p>Hãy thử một từ khóa hoặc bộ lọc khác.</p>
     </div>
 
-    <ul v-else class="story-grid">
+    <ul v-else class="story-grid catalog-results" :class="{ 'search-mode': isSearching }">
       <li v-for="s in stories" :key="s.id" class="story-card">
         <div class="story-card-cover" aria-hidden="true">
           <span>{{ s.title.slice(0, 1).toUpperCase() }}</span>
         </div>
         <div class="story-card-content">
-          <div class="story-card-kicker">Sách nói · {{ s.status }}</div>
+          <div class="story-card-kicker">{{ s.status }}</div>
           <h2>
             <RouterLink :to="`/stories/${s.id}`">{{ s.title }}</RouterLink>
           </h2>
@@ -98,8 +105,8 @@ onMounted(load)
           <div class="meta">
             <span class="badge">{{ s.status }}</span>
           </div>
-          <RouterLink class="read-link" :to="`/stories/${s.id}/read`">
-            Đọc & nghe <span aria-hidden="true">→</span>
+          <RouterLink class="read-link" :to="`/stories/${s.id}`">
+            Xem truyện <span aria-hidden="true">→</span>
           </RouterLink>
         </div>
       </li>

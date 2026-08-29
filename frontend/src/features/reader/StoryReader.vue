@@ -141,58 +141,68 @@ onMounted(async () => {
     <p v-else-if="chapters.length === 0" class="note">Chưa có chương nào được xuất bản.</p>
 
     <template v-else>
-      <nav class="chapter-nav" aria-label="Danh sách chương">
-        <button
-          v-for="c in chapters"
-          :key="c.ID"
-          class="chapter-tab"
-          :class="{ active: activeChapter?.ID === c.ID }"
-          type="button"
-          :aria-current="activeChapter?.ID === c.ID ? 'page' : undefined"
-          @click="selectChapter(c)"
-        >
-          {{ c.ChapterNumber }}. {{ c.Title }}
-        </button>
-      </nav>
+      <div class="reader-layout">
+        <nav class="chapter-nav" aria-labelledby="chapter-nav-heading">
+          <h2 id="chapter-nav-heading">Các chương</h2>
+          <div class="chapter-nav-list">
+            <button
+              v-for="c in chapters"
+              :key="c.ID"
+              class="chapter-tab"
+              :class="{ active: activeChapter?.ID === c.ID }"
+              type="button"
+              :aria-current="activeChapter?.ID === c.ID ? 'page' : undefined"
+              @click="selectChapter(c)"
+            >
+              <span>{{ c.ChapterNumber }}.</span>
+              <span>{{ c.Title }}</span>
+              <span v-if="activeChapter?.ID === c.ID" class="chapter-current">Đang đọc</span>
+            </button>
+          </div>
+        </nav>
 
-      <div v-if="activeChapter" class="reader-body">
-        <p v-if="contentLoading || audioLoading" class="muted" role="status" aria-live="polite">
-          {{ contentLoading ? 'Đang tải nội dung' : '' }}{{ contentLoading && audioLoading ? ' · ' : '' }}{{ audioLoading ? 'Đang chuẩn bị audio' : '' }}...
-        </p>
+        <div v-if="activeChapter" class="reader-body">
+          <p v-if="contentLoading || audioLoading" class="muted" role="status" aria-live="polite">
+            {{ contentLoading ? 'Đang tải nội dung' : '' }}{{ contentLoading && audioLoading ? ' · ' : '' }}{{ audioLoading ? 'Đang chuẩn bị audio' : '' }}...
+          </p>
 
-        <audio
-          v-if="audioURL"
-          ref="audioEl"
-          class="player"
-          :src="audioURL"
-          controls
-          preload="metadata"
-          @timeupdate="onTimeUpdate"
-          @pause="onPause"
-        />
-        <div
-          v-if="listener.progress[activeChapter.ID]?.RelistenStatus && listener.progress[activeChapter.ID]?.RelistenStatus !== 'NO_RELISTEN_NEEDED'"
-          class="relisten-notice"
-          role="status"
-        >
-          <strong>
-            {{ listener.progress[activeChapter.ID]?.RelistenStatus === 'RELISTEN_REQUIRED' ? 'Nên nghe lại chương này' : 'Có bản cập nhật cho chương này' }}
-          </strong>
-          <span>Tiến độ nghe trước đây vẫn được giữ nguyên.</span>
-        </div>
-        <div v-if="audioError" class="status-state audio-state" role="status">
-          <strong>Audio tạm thời chưa sẵn sàng.</strong>
-          <p>{{ audioError }}</p>
-          <span class="muted">Bạn vẫn có thể đọc nội dung chương này.</span>
-        </div>
+          <div class="audio-section">
+            <h2>Nghe chương này</h2>
+            <audio
+              v-if="audioURL"
+              ref="audioEl"
+              class="player"
+              :src="audioURL"
+              controls
+              preload="metadata"
+              @timeupdate="onTimeUpdate"
+              @pause="onPause"
+            />
+          </div>
+          <div
+            v-if="listener.progress[activeChapter.ID]?.RelistenStatus && listener.progress[activeChapter.ID]?.RelistenStatus !== 'NO_RELISTEN_NEEDED'"
+            class="relisten-notice"
+            role="status"
+          >
+            <strong>
+              {{ listener.progress[activeChapter.ID]?.RelistenStatus === 'RELISTEN_REQUIRED' ? 'Nên nghe lại chương này' : 'Có bản cập nhật cho chương này' }}
+            </strong>
+            <span>Tiến độ nghe trước đây vẫn được giữ nguyên.</span>
+          </div>
+          <div v-if="audioError" class="status-state audio-state" role="status">
+            <strong>Audio tạm thời chưa sẵn sàng.</strong>
+            <p>{{ audioError }}</p>
+            <span class="muted">Bạn vẫn có thể đọc nội dung chương này.</span>
+          </div>
 
-        <div v-if="contentError" class="status-state error" role="alert">
-          <strong>Không thể tải nội dung chương.</strong>
-          <p>{{ contentError }}</p>
+          <div v-if="contentError" class="status-state error" role="alert">
+            <strong>Không thể tải nội dung chương.</strong>
+            <p>{{ contentError }}</p>
+          </div>
+          <article v-else-if="content" class="prose">
+            <p v-for="(para, i) in content.content_text.split(/\n+/)" :key="i">{{ para }}</p>
+          </article>
         </div>
-        <article v-else-if="content" class="prose">
-          <p v-for="(para, i) in content.content_text.split(/\n+/)" :key="i">{{ para }}</p>
-        </article>
       </div>
     </template>
   </section>

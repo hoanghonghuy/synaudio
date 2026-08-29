@@ -15,13 +15,13 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/identity"
 	"github.com/synaudio/synaudio/backend/internal/listener"
 	"github.com/synaudio/synaudio/backend/internal/planning"
-	"github.com/synaudio/synaudio/backend/internal/retcon"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
 	"github.com/synaudio/synaudio/backend/internal/platform/pgstore"
 	"github.com/synaudio/synaudio/backend/internal/platform/storage"
+	"github.com/synaudio/synaudio/backend/internal/retcon"
 	"github.com/synaudio/synaudio/backend/internal/story"
 )
 
@@ -71,7 +71,7 @@ func main() {
 
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(generation.NewMockTextAI()))
-	generationHandler := generation.NewHandler(generationService)
+	generationHandler := generation.NewHandler(generationService, authService.ResolveUserID)
 
 	audioStore := pgstore.NewAudioStore(queries)
 	audioService := audio.NewService(audioStore,
@@ -82,7 +82,7 @@ func main() {
 
 	listenerStore := pgstore.NewListenerStore(queries)
 	listenerService := listener.NewService(listenerStore)
-	listenerHandler := listener.NewHandler(listenerService)
+	listenerHandler := listener.NewHandler(listenerService, authService.ResolveUserID)
 
 	retconStore := pgstore.NewRetconStore(queries)
 	retconService := retcon.NewService(retconStore)
@@ -109,14 +109,16 @@ func main() {
 				return objStorage.Ping(pingCtx)
 			},
 		},
-		Logger:           log,
-		AuthHandler:      authHandler,
-		StoryHandler:     storyHandler,
-		PlanningHandler:  planningHandler,
+		Logger:            log,
+		AdminCheck:        authService.ResolveAdmin,
+		AdminActor:        authService.ResolveUserID,
+		AuthHandler:       authHandler,
+		StoryHandler:      storyHandler,
+		PlanningHandler:   planningHandler,
 		GenerationHandler: generationHandler,
-		AudioHandler:     audioHandler,
-		ListenerHandler:  listenerHandler,
-		RetconHandler:    retconHandler,
+		AudioHandler:      audioHandler,
+		ListenerHandler:   listenerHandler,
+		RetconHandler:     retconHandler,
 	})
 
 	server := &http.Server{

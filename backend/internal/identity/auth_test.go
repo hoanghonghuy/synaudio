@@ -90,6 +90,24 @@ func (s *fakeStore) CreateSession(_ context.Context, sess identity.Session) erro
 	return nil
 }
 
+func (s *fakeStore) GetSessionByRefreshTokenHash(_ context.Context, tokenHash string) (identity.Session, error) {
+	for _, sess := range s.sessions {
+		if sess.RefreshTokenHash == tokenHash {
+			return sess, nil
+		}
+	}
+	return identity.Session{}, identity.ErrUserNotFound
+}
+
+func (s *fakeStore) RevokeSession(_ context.Context, tokenHash string) error {
+	for id, sess := range s.sessions {
+		if sess.RefreshTokenHash == tokenHash {
+			delete(s.sessions, id)
+		}
+	}
+	return nil
+}
+
 func (s *fakeStore) GetUserByID(_ context.Context, id string) (identity.User, error) {
 	for _, u := range s.users {
 		if u.ID == id {

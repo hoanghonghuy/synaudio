@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 )
 
 type Handler struct {
@@ -42,12 +43,16 @@ func (h *Handler) createRetcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestedBy := req.RequestedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		requestedBy = actorID
+	}
 	ret, err := h.svc.CreateRetconRequest(r.Context(), CreateRetconInput{
 		StoryID:         req.StoryID,
 		TargetChapterID: req.TargetChapterID,
 		ProposedChange:  req.ProposedChange,
 		Reason:          req.Reason,
-		RequestedBy:     req.RequestedBy,
+		RequestedBy:     requestedBy,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
@@ -102,7 +107,11 @@ func (h *Handler) approveRetcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ret, err := h.svc.ApproveRetconRequest(r.Context(), id, req.ApprovedBy)
+	approvedBy := req.ApprovedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		approvedBy = actorID
+	}
+	ret, err := h.svc.ApproveRetconRequest(r.Context(), id, approvedBy)
 	if err != nil {
 		if errors.Is(err, ErrRetconNotFound) {
 			writeError(w, http.StatusNotFound, "RETCON_NOT_FOUND", "retcon not found")
@@ -180,7 +189,11 @@ func (h *Handler) applyRetcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ret, err := h.svc.ApplyRetconRequest(r.Context(), id, req.AppliedBy)
+	appliedBy := req.AppliedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		appliedBy = actorID
+	}
+	ret, err := h.svc.ApplyRetconRequest(r.Context(), id, appliedBy)
 	if err != nil {
 		if errors.Is(err, ErrRetconNotReady) {
 			writeError(w, http.StatusConflict, "RETCON_NOT_READY", "retcon not ready to apply")

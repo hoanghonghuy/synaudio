@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -13,16 +15,18 @@ import (
 var ErrDependencyUnavailable = errors.New("dependency unavailable")
 
 type Dependencies struct {
-	ReadyCheck       func() error
-	DependencyChecks map[string]func() error
-	Logger           *slog.Logger
-	AuthHandler      http.Handler
-	StoryHandler     http.Handler
-	PlanningHandler  http.Handler
+	ReadyCheck        func() error
+	DependencyChecks  map[string]func() error
+	Logger            *slog.Logger
+	AdminCheck        func(context.Context, *http.Request) (bool, error)
+	AdminActor        func(context.Context, *http.Request) (string, error)
+	AuthHandler       http.Handler
+	StoryHandler      http.Handler
+	PlanningHandler   http.Handler
 	GenerationHandler http.Handler
-	AudioHandler     http.Handler
-	ListenerHandler  http.Handler
-	RetconHandler    http.Handler
+	AudioHandler      http.Handler
+	ListenerHandler   http.Handler
+	RetconHandler     http.Handler
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -91,7 +95,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		if h == nil {
 			continue
 		}
-		mountRoutes(api, h)
+		mountRoutes(api, h, deps.AdminCheck, deps.AdminActor)
 	}
 	r.Mount("/api/v1", api)
 
@@ -102,19 +106,90 @@ func NewRouter(deps Dependencies) http.Handler {
 // handlers share overlapping path prefixes (e.g. /admin/chapters/...), so they
 // cannot each be chi.Mount-ed at the same base path; walking their route trees
 // and re-registering them on one router avoids the conflict.
-func mountRoutes(dst chi.Router, src http.Handler) {
+func mountRoutes(
+	dst chi.Router,
+	src http.Handler,
+	adminCheck func(context.Context, *http.Request) (bool, error),
+	adminActor func(context.Context, *http.Request) (string, error),
+) {
 	routes, ok := src.(chi.Routes)
 	if !ok {
 		return
 	}
 	_ = chi.Walk(routes, func(method, route string, handler http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if strings.HasPrefix(route, "/admin/") {
+			handler = requireAdmin(adminCheck, adminActor)(handler)
+		}
 		dst.Method(method, route, handler)
 		return nil
 	})
+}
+
+type adminActorContextKey struct{}
+
+// AdminActorID returns the authenticated admin actor attached by the router.
+func AdminActorID(ctx context.Context) string {
+	actorID, _ := ctx.Value(adminActorContextKey{}).(string)
+	return actorID
+}
+
+func withAdminActor(ctx context.Context, actorID string) context.Context {
+	return context.WithValue(ctx, adminActorContextKey{}, actorID)
+}
+
+func requireAdmin(
+	check func(context.Context, *http.Request) (bool, error),
+	actor func(context.Context, *http.Request) (string, error),
+) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if actor != nil {
+				actorID, err := actor(r.Context(), r)
+				if err != nil || actorID == "" {
+					writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+					return
+				}
+				allowed, err := check(r.Context(), r)
+				if err != nil {
+					writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+					return
+				}
+				if !allowed {
+					writeError(w, http.StatusForbidden, "FORBIDDEN", "admin access required")
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(withAdminActor(r.Context(), actorID)))
+				return
+			}
+			if check == nil {
+				writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+				return
+			}
+			allowed, err := check(r.Context(), r)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+				return
+			}
+			if !allowed {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "admin access required")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func writeError(w http.ResponseWriter, status int, code, message string) {
+	writeJSON(w, status, map[string]any{
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+	})
 }

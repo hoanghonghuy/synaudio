@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 )
 
 type Handler struct {
@@ -68,10 +69,14 @@ func (h *Handler) generateFoundation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	createdBy := req.CreatedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		createdBy = actorID
+	}
 	res, err := h.svc.GenerateFoundation(r.Context(), FoundationInput{
 		StoryID:   storyID,
 		Premise:   req.Premise,
-		CreatedBy: req.CreatedBy,
+		CreatedBy: createdBy,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
@@ -148,7 +153,11 @@ func (h *Handler) createChapter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := h.svc.CreateChapter(r.Context(), storyID, req.Title, req.CreatedBy)
+	createdBy := req.CreatedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		createdBy = actorID
+	}
+	c, err := h.svc.CreateChapter(r.Context(), storyID, req.Title, createdBy)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_TITLE", "invalid title")
 		return
@@ -202,7 +211,11 @@ func (h *Handler) createPlanRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := h.svc.CreatePlanRevision(r.Context(), chapterID, req.Plan, req.CreatedBy)
+	createdBy := req.CreatedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		createdBy = actorID
+	}
+	p, err := h.svc.CreatePlanRevision(r.Context(), chapterID, req.Plan, createdBy)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_PLAN", "invalid plan")
 		return
@@ -346,7 +359,11 @@ func (h *Handler) createCanonVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	v, err := h.svc.CreateCanonVersion(r.Context(), req.StoryID, branchID, req.SourceChapterID, req.CommittedBy)
+	committedBy := req.CommittedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		committedBy = actorID
+	}
+	v, err := h.svc.CreateCanonVersion(r.Context(), req.StoryID, branchID, req.SourceChapterID, committedBy)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
@@ -368,8 +385,8 @@ func (h *Handler) listCanonVersions(w http.ResponseWriter, r *http.Request) {
 }
 
 type createProvisionalCanonVersionRequest struct {
-	StoryID              string `json:"story_id"`
-	SourceChapterID      string `json:"source_chapter_id"`
+	StoryID                 string `json:"story_id"`
+	SourceChapterID         string `json:"source_chapter_id"`
 	SourceContentRevisionID string `json:"source_content_revision_id"`
 }
 
@@ -404,7 +421,11 @@ func (h *Handler) promoteProvisionalVersion(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	v, err := h.svc.PromoteProvisionalVersion(r.Context(), versionID, req.CommittedBy)
+	committedBy := req.CommittedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		committedBy = actorID
+	}
+	v, err := h.svc.PromoteProvisionalVersion(r.Context(), versionID, committedBy)
 	if err != nil {
 		if errors.Is(err, ErrCanonVersionNotFound) {
 			writeError(w, http.StatusNotFound, "VERSION_NOT_FOUND", "version not found")
@@ -475,7 +496,11 @@ func (h *Handler) commitCanon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.svc.CommitCanon(r.Context(), req.StoryID, branchID, req.SourceChapterID, req.ContentRevisionID, req.CommittedBy)
+	committedBy := req.CommittedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		committedBy = actorID
+	}
+	res, err := h.svc.CommitCanon(r.Context(), req.StoryID, branchID, req.SourceChapterID, req.ContentRevisionID, committedBy)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
@@ -500,12 +525,16 @@ func (h *Handler) repairCanonData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	committedBy := req.CommittedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		committedBy = actorID
+	}
 	res, err := h.svc.RepairCanonData(r.Context(), RepairCanonInput{
 		StoryID:           storyID,
 		BranchID:          req.BranchID,
 		SourceChapterID:   req.SourceChapterID,
 		ContentRevisionID: req.ContentRevisionID,
-		CommittedBy:       req.CommittedBy,
+		CommittedBy:       committedBy,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
@@ -583,6 +612,10 @@ func (h *Handler) createCreativeDecision(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	createdBy := req.CreatedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		createdBy = actorID
+	}
 	d, err := h.svc.CreateCreativeDecision(r.Context(), CreateCreativeDecisionInput{
 		StoryID:        storyID,
 		ChapterID:      req.ChapterID,
@@ -593,7 +626,7 @@ func (h *Handler) createCreativeDecision(w http.ResponseWriter, r *http.Request)
 		BlockingLevel:  req.BlockingLevel,
 		Question:       req.Question,
 		ContextSummary: req.ContextSummary,
-		CreatedBy:      req.CreatedBy,
+		CreatedBy:      createdBy,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
@@ -628,7 +661,11 @@ func (h *Handler) selectCreativeDecision(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	d, err := h.svc.SelectCreativeDecision(r.Context(), decisionID, req.SelectedBy)
+	selectedBy := req.SelectedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		selectedBy = actorID
+	}
+	d, err := h.svc.SelectCreativeDecision(r.Context(), decisionID, selectedBy)
 	if err != nil {
 		if errors.Is(err, ErrCreativeDecisionNotFound) {
 			writeError(w, http.StatusNotFound, "DECISION_NOT_FOUND", "decision not found")
@@ -655,7 +692,11 @@ func (h *Handler) rejectCreativeDecision(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	d, err := h.svc.RejectCreativeDecision(r.Context(), decisionID, req.RejectedBy, req.Scope)
+	rejectedBy := req.RejectedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		rejectedBy = actorID
+	}
+	d, err := h.svc.RejectCreativeDecision(r.Context(), decisionID, rejectedBy, req.Scope)
 	if err != nil {
 		if errors.Is(err, ErrCreativeDecisionNotFound) {
 			writeError(w, http.StatusNotFound, "DECISION_NOT_FOUND", "decision not found")

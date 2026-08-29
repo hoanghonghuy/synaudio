@@ -63,7 +63,7 @@ export const useListenerStore = defineStore('listener', {
         this.favorites = readGuestFavorites()
         return
       }
-      const res = await listFavorites(this.userID)
+      const res = await listFavorites()
       this.favorites = res.favorites.map((f: Favorite) => f.StoryID)
     },
 
@@ -79,9 +79,9 @@ export const useListenerStore = defineStore('listener', {
       }
 
       if (this.favorites.includes(storyID)) {
-        await removeFavorite(this.userID, storyID)
+        await removeFavorite(storyID)
       } else {
-        await addFavorite(this.userID, storyID)
+        await addFavorite(storyID)
       }
       await this.loadFavorites()
     },
@@ -104,7 +104,7 @@ export const useListenerStore = defineStore('listener', {
         }
         return
       }
-      const p = await getProgress(this.userID, chapterID)
+      const p = await getProgress(chapterID)
       this.progress[chapterID] = p
     },
 
@@ -125,7 +125,7 @@ export const useListenerStore = defineStore('listener', {
         }
         return
       }
-      const saved = await saveProgress(this.userID, chapterID, {
+      const saved = await saveProgress(chapterID, {
         position_ms: positionMs,
         audio_asset_id: audioAssetID,
         playback_session_id: '',

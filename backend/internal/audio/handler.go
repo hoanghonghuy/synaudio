@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 )
 
 type Handler struct {
@@ -43,7 +44,11 @@ func (h *Handler) createNarration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nar, err := h.svc.CreateNarrationRevision(r.Context(), chapterID, req.SourceContentRevisionID, req.VoiceID, req.Script, req.CreatedBy)
+	createdBy := req.CreatedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		createdBy = actorID
+	}
+	nar, err := h.svc.CreateNarrationRevision(r.Context(), chapterID, req.SourceContentRevisionID, req.VoiceID, req.Script, createdBy)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_NARRATION", "invalid narration")
 		return

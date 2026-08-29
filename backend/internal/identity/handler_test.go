@@ -104,6 +104,154 @@ func TestLoginHandlerSetsRefreshCookie(t *testing.T) {
 	}
 }
 
+func TestCurrentUserHandlerReturnsAuthenticatedUser(t *testing.T) {
+	h := newTestHandler()
+	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
+		"email": "current@example.com", "password": "correct password",
+	})
+
+	login := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"email": "current@example.com", "password": "correct password",
+	})
+	cookies := login.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected login cookie")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(cookies[0])
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got := resp["email"]; got != "current@example.com" {
+		t.Fatalf("expected current user email, got %v", got)
+	}
+}
+
+func TestLogoutHandlerRevokesAuthenticatedSession(t *testing.T) {
+	h := newTestHandler()
+	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
+		"email": "logout@example.com", "password": "correct password",
+	})
+
+	login := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"email": "logout@example.com", "password": "correct password",
+	})
+	cookies := login.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected login cookie")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req.AddCookie(cookies[0])
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(cookies[0])
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected revoked session to return 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRefreshHandlerRotatesRefreshCookie(t *testing.T) {
+	h := newTestHandler()
+	registerUser(t, h, "refresh@example.com")
+	cookie := loginUser(t, h, "refresh@example.com")
+
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/refresh", nil, cookie)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	refreshedCookies := rec.Result().Cookies()
+	if len(refreshedCookies) == 0 || refreshedCookies[0].Value == cookie.Value {
+		t.Fatal("expected refresh token rotation")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(refreshedCookies[0])
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected rotated session to remain valid, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected old session to be revoked, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRefreshHandlerRequiresSession(t *testing.T) {
+	h := newTestHandler()
+
+	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/refresh", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAccountDeletionRequestUsesAuthenticatedSession(t *testing.T) {
+	h := newTestHandler()
+	registerUser(t, h, "delete@example.com")
+	cookie := loginUser(t, h, "delete@example.com")
+
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/request", nil, cookie)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAccountDeletionRequestRequiresSession(t *testing.T) {
+	h := newTestHandler()
+
+	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/request", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAccountDeletionCancelUsesExistingSession(t *testing.T) {
+	h := newTestHandler()
+	registerUser(t, h, "cancel-delete@example.com")
+	cookie := loginUser(t, h, "cancel-delete@example.com")
+
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/request", nil, cookie)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("request deletion: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/cancel", nil, cookie)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("cancel deletion: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected restored account session to remain valid, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestLoginHandlerRejectsWrongPassword(t *testing.T) {
 	h := newTestHandler()
 	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{

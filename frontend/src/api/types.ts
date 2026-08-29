@@ -35,7 +35,6 @@ export interface GenerationPolicyInput {
 export interface CreateStoryInput {
   title: string
   description: string
-  created_by: string
   policy: GenerationPolicyInput
 }
 
@@ -44,6 +43,15 @@ export interface ApiError {
     code: string
     message: string
   }
+}
+
+export interface AuthUser {
+  id: string
+  email: string
+  status: string
+  email_verified: boolean
+  roles: string[]
+  mfa_enabled: boolean
 }
 
 export interface Chapter {
@@ -57,6 +65,37 @@ export interface Chapter {
 
 export interface ChapterListResponse {
   chapters: Chapter[]
+}
+
+export interface ContentRevision {
+  ID: string
+  ChapterID: string
+  RevisionNo: number
+  ContentText: string
+  SourceType: string
+  BasedOnRevisionID: string
+  PlanRevisionID: string
+  BaseCanonVersionID: string
+  GenerationRunID: string
+  Status: string
+  CreatedBy: string
+}
+
+export interface ContentRevisionListResponse {
+  revisions: ContentRevision[]
+}
+
+export interface ChapterReview {
+  ID: string
+  ChapterID: string
+  ContentRevisionID: string
+  ReviewType: string
+  Outcome: string
+  Report: Record<string, unknown>
+}
+
+export interface ChapterReviewListResponse {
+  reviews: ChapterReview[]
 }
 
 export interface ChapterContent {

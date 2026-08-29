@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 )
 
 type Handler struct {
@@ -149,10 +150,14 @@ func (h *Handler) createStory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	createdBy := req.CreatedBy
+	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
+		createdBy = actorID
+	}
 	s, err := h.svc.CreateStory(r.Context(), CreateStoryInput{
 		Title:       req.Title,
 		Description: req.Description,
-		CreatedBy:   req.CreatedBy,
+		CreatedBy:   createdBy,
 		Policy: GenerationPolicyInput{
 			MinimumAudioDurationSec: req.Policy.MinimumAudioDurationSec,
 			TargetAudioDurationSec:  req.Policy.TargetAudioDurationSec,
@@ -190,16 +195,16 @@ type genreResponse struct {
 }
 
 type workflowSettingsResponse struct {
-	StoryID              string         `json:"story_id"`
-	BatchGenerationSize  int            `json:"batch_generation_size"`
-	CreativeAutonomy     string         `json:"creative_autonomy"`
-	PreferredTextProvider string        `json:"preferred_text_provider"`
-	PreferredTextModel    string        `json:"preferred_text_model"`
-	PreferredTTSProvider  string        `json:"preferred_tts_provider"`
-	PreferredVoiceID      string        `json:"preferred_voice_id"`
-	PauseBeforeTTS        bool          `json:"pause_before_tts"`
-	AutoAIReview          bool          `json:"auto_ai_review"`
-	PlanningHorizon       int           `json:"planning_horizon"`
+	StoryID               string         `json:"story_id"`
+	BatchGenerationSize   int            `json:"batch_generation_size"`
+	CreativeAutonomy      string         `json:"creative_autonomy"`
+	PreferredTextProvider string         `json:"preferred_text_provider"`
+	PreferredTextModel    string         `json:"preferred_text_model"`
+	PreferredTTSProvider  string         `json:"preferred_tts_provider"`
+	PreferredVoiceID      string         `json:"preferred_voice_id"`
+	PauseBeforeTTS        bool           `json:"pause_before_tts"`
+	AutoAIReview          bool           `json:"auto_ai_review"`
+	PlanningHorizon       int            `json:"planning_horizon"`
 	FallbackPolicy        map[string]any `json:"fallback_policy"`
 }
 
@@ -225,8 +230,8 @@ func (h *Handler) updateWorkflowSettings(w http.ResponseWriter, r *http.Request)
 	}
 
 	ws, err := h.svc.UpdateWorkflowSettings(r.Context(), storyID, WorkflowSettingsInput{
-		BatchGenerationSize:  req.BatchGenerationSize,
-		CreativeAutonomy:     req.CreativeAutonomy,
+		BatchGenerationSize:   req.BatchGenerationSize,
+		CreativeAutonomy:      req.CreativeAutonomy,
 		PreferredTextProvider: req.PreferredTextProvider,
 		PreferredTextModel:    req.PreferredTextModel,
 		PreferredTTSProvider:  req.PreferredTTSProvider,
@@ -245,23 +250,23 @@ func (h *Handler) updateWorkflowSettings(w http.ResponseWriter, r *http.Request)
 }
 
 type workflowSettingsInput struct {
-	BatchGenerationSize  int            `json:"batch_generation_size"`
-	CreativeAutonomy     string         `json:"creative_autonomy"`
-	PreferredTextProvider string        `json:"preferred_text_provider"`
-	PreferredTextModel    string        `json:"preferred_text_model"`
-	PreferredTTSProvider  string        `json:"preferred_tts_provider"`
-	PreferredVoiceID      string        `json:"preferred_voice_id"`
-	PauseBeforeTTS        bool          `json:"pause_before_tts"`
-	AutoAIReview          bool          `json:"auto_ai_review"`
-	PlanningHorizon       int           `json:"planning_horizon"`
+	BatchGenerationSize   int            `json:"batch_generation_size"`
+	CreativeAutonomy      string         `json:"creative_autonomy"`
+	PreferredTextProvider string         `json:"preferred_text_provider"`
+	PreferredTextModel    string         `json:"preferred_text_model"`
+	PreferredTTSProvider  string         `json:"preferred_tts_provider"`
+	PreferredVoiceID      string         `json:"preferred_voice_id"`
+	PauseBeforeTTS        bool           `json:"pause_before_tts"`
+	AutoAIReview          bool           `json:"auto_ai_review"`
+	PlanningHorizon       int            `json:"planning_horizon"`
 	FallbackPolicy        map[string]any `json:"fallback_policy"`
 }
 
 func toWorkflowSettingsResponse(ws WorkflowSettings) workflowSettingsResponse {
 	return workflowSettingsResponse{
-		StoryID:              ws.StoryID,
-		BatchGenerationSize:  ws.BatchGenerationSize,
-		CreativeAutonomy:     ws.CreativeAutonomy,
+		StoryID:               ws.StoryID,
+		BatchGenerationSize:   ws.BatchGenerationSize,
+		CreativeAutonomy:      ws.CreativeAutonomy,
 		PreferredTextProvider: ws.PreferredTextProvider,
 		PreferredTextModel:    ws.PreferredTextModel,
 		PreferredTTSProvider:  ws.PreferredTTSProvider,
@@ -300,13 +305,13 @@ func (h *Handler) createContentProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cp, err := h.svc.CreateContentProfileVersion(r.Context(), storyID, ContentProfileInput{
-		MaturityTarget:    req.MaturityTarget,
-		AllowedThemes:     req.AllowedThemes,
-		DisallowedThemes:  req.DisallowedThemes,
-		ViolenceLevel:     req.ViolenceLevel,
-		LanguageLimits:    req.LanguageLimits,
-		RomanceLimits:     req.RomanceLimits,
-		Constraints:       req.Constraints,
+		MaturityTarget:   req.MaturityTarget,
+		AllowedThemes:    req.AllowedThemes,
+		DisallowedThemes: req.DisallowedThemes,
+		ViolenceLevel:    req.ViolenceLevel,
+		LanguageLimits:   req.LanguageLimits,
+		RomanceLimits:    req.RomanceLimits,
+		Constraints:      req.Constraints,
 	})
 	if err != nil {
 		writeError(w, http.StatusNotFound, "STORY_NOT_FOUND", "story not found")
@@ -422,13 +427,13 @@ func (h *Handler) makePrivate(w http.ResponseWriter, r *http.Request) {
 }
 
 type storyAssetResponse struct {
-	ID          string `json:"id"`
-	StoryID     string `json:"story_id"`
-	Type        string `json:"type"`
-	StorageKey  string `json:"storage_key"`
-	MimeType    string `json:"mime_type"`
-	SizeBytes   int64  `json:"size_bytes"`
-	Status      string `json:"status"`
+	ID         string `json:"id"`
+	StoryID    string `json:"story_id"`
+	Type       string `json:"type"`
+	StorageKey string `json:"storage_key"`
+	MimeType   string `json:"mime_type"`
+	SizeBytes  int64  `json:"size_bytes"`
+	Status     string `json:"status"`
 }
 
 func (h *Handler) uploadCover(w http.ResponseWriter, r *http.Request) {

@@ -176,6 +176,33 @@ func (q *Queries) GetRolePermissions(ctx context.Context, code string) ([]string
 	return items, nil
 }
 
+const getSessionByRefreshTokenHash = `-- name: GetSessionByRefreshTokenHash :one
+SELECT id, user_id, refresh_token_hash, expires_at
+FROM user_sessions
+WHERE refresh_token_hash = $1
+  AND revoked_at IS NULL
+  AND expires_at > NOW()
+`
+
+type GetSessionByRefreshTokenHashRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	RefreshTokenHash string             `json:"refresh_token_hash"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) GetSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (GetSessionByRefreshTokenHashRow, error) {
+	row := q.db.QueryRow(ctx, getSessionByRefreshTokenHash, refreshTokenHash)
+	var i GetSessionByRefreshTokenHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RefreshTokenHash,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, password_hash, display_name, status, email_verified_at, created_at, updated_at, deactivated_at
 FROM users
@@ -319,6 +346,18 @@ type RevokeRoleParams struct {
 
 func (q *Queries) RevokeRole(ctx context.Context, arg RevokeRoleParams) error {
 	_, err := q.db.Exec(ctx, revokeRole, arg.UserID, arg.Code)
+	return err
+}
+
+const revokeSession = `-- name: RevokeSession :exec
+UPDATE user_sessions
+SET revoked_at = NOW()
+WHERE refresh_token_hash = $1
+  AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeSession(ctx context.Context, refreshTokenHash string) error {
+	_, err := q.db.Exec(ctx, revokeSession, refreshTokenHash)
 	return err
 }
 
