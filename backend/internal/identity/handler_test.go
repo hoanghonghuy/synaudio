@@ -92,7 +92,7 @@ func TestLoginHandlerSetsRefreshCookie(t *testing.T) {
 	}
 	var found bool
 	for _, c := range cookies {
-		if c.Name == identity.RefreshCookieName {
+		if c.Name == identity.DevelopmentRefreshCookieName {
 			found = true
 			if !c.HttpOnly {
 				t.Fatal("refresh cookie must be HttpOnly")
@@ -100,7 +100,60 @@ func TestLoginHandlerSetsRefreshCookie(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("expected cookie %q, got %v", identity.RefreshCookieName, cookies)
+		t.Fatalf("expected cookie %q, got %v", identity.DevelopmentRefreshCookieName, cookies)
+	}
+}
+
+func TestHTTPLoginUsesBrowserCompatibleRefreshCookie(t *testing.T) {
+	h := newTestHandler()
+	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
+		"email": "http-cookie@example.com", "password": "correct password",
+	})
+
+	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"email": "http-cookie@example.com", "password": "correct password",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	cookies := rec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected refresh cookie to be set")
+	}
+	cookie := cookies[0]
+	if cookie.Name != identity.DevelopmentRefreshCookieName {
+		t.Fatalf("expected development cookie %q, got %q", identity.DevelopmentRefreshCookieName, cookie.Name)
+	}
+	if cookie.Secure {
+		t.Fatal("development HTTP cookie must not require Secure transport")
+	}
+}
+
+func TestHTTPSLoginUsesSecureHostRefreshCookie(t *testing.T) {
+	h := newTestHandler()
+	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
+		"email": "https-cookie@example.com", "password": "correct password",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "https://example.com/api/v1/auth/login", bytes.NewBufferString(`{"email":"https-cookie@example.com","password":"correct password"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected refresh cookie to be set")
+	}
+	cookie := cookies[0]
+	if cookie.Name != identity.RefreshCookieName {
+		t.Fatalf("expected secure cookie %q, got %q", identity.RefreshCookieName, cookie.Name)
+	}
+	if !cookie.Secure {
+		t.Fatal("HTTPS refresh cookie must require Secure transport")
 	}
 }
 

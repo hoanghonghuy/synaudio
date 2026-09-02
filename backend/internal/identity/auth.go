@@ -195,12 +195,12 @@ func (s *AuthService) RefreshSession(ctx context.Context, token string) (Session
 // ResolveUserID returns the active user associated with the refresh cookie.
 // Callers must not accept a user ID from request headers or bodies instead.
 func (s *AuthService) ResolveUserID(ctx context.Context, r *http.Request) (string, error) {
-	cookie, err := r.Cookie(RefreshCookieName)
-	if err != nil || cookie.Value == "" {
+	token, err := refreshTokenFromRequest(r)
+	if err != nil || token == "" {
 		return "", ErrUnauthenticated
 	}
 
-	session, err := s.store.GetSessionByRefreshTokenHash(ctx, HashToken(cookie.Value))
+	session, err := s.store.GetSessionByRefreshTokenHash(ctx, HashToken(token))
 	if err != nil {
 		return "", ErrUnauthenticated
 	}

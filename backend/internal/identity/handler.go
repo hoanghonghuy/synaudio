@@ -8,7 +8,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const RefreshCookieName = "__Host-refresh_token"
+const (
+	RefreshCookieName            = "__Host-refresh_token"
+	DevelopmentRefreshCookieName = "refresh_token"
+)
 
 type AuthHandler struct {
 	svc *AuthService
@@ -100,7 +103,7 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefreshCookie(w, sess)
+	setRefreshCookie(w, r, sess)
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
@@ -133,10 +136,8 @@ func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: RefreshCookieName, Value: "", Path: "/", HttpOnly: true,
-		Secure: true, SameSite: http.SameSiteLaxMode, MaxAge: -1,
-	})
+	clearRefreshCookie(w, RefreshCookieName)
+	clearRefreshCookie(w, DevelopmentRefreshCookieName)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
 }
 
@@ -153,19 +154,31 @@ func (h *AuthHandler) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefreshCookie(w, sess)
+	setRefreshCookie(w, r, sess)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "refreshed"})
 }
 
-func setRefreshCookie(w http.ResponseWriter, sess Session) {
+func setRefreshCookie(w http.ResponseWriter, r *http.Request, sess Session) {
+	secure := isSecureRequest(r)
+	name := RefreshCookieName
+	if !secure {
+		name = DevelopmentRefreshCookieName
+	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     RefreshCookieName,
+		Name:     name,
 		Value:    sess.RefreshToken,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  sess.ExpiresAt,
+	})
+}
+
+func clearRefreshCookie(w http.ResponseWriter, name string) {
+	http.SetCookie(w, &http.Cookie{
+		Name: name, Value: "", Path: "/", HttpOnly: true,
+		Secure: name == RefreshCookieName, SameSite: http.SameSiteLaxMode, MaxAge: -1,
 	})
 }
 
@@ -186,11 +199,24 @@ func (h *AuthHandler) authenticatedUser(r *http.Request) (Session, User, error) 
 }
 
 func refreshTokenFromRequest(r *http.Request) (string, error) {
-	cookie, err := r.Cookie(RefreshCookieName)
-	if err != nil || cookie.Value == "" {
-		return "", ErrUnauthenticated
+	names := []string{RefreshCookieName, DevelopmentRefreshCookieName}
+	if !isSecureRequest(r) {
+		names = []string{DevelopmentRefreshCookieName, RefreshCookieName}
 	}
-	return cookie.Value, nil
+	for _, name := range names {
+		cookie, err := r.Cookie(name)
+		if err == nil && cookie.Value != "" {
+			return cookie.Value, nil
+		}
+	}
+	return "", ErrUnauthenticated
+}
+
+func isSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return r.Header.Get("X-Forwarded-Proto") == "https"
 }
 
 type emailVerifyRequest struct {
