@@ -59,6 +59,12 @@ type Store interface {
 	SetActiveAudioAsset(ctx context.Context, chapterID, assetID string) (AudioAsset, error)
 }
 
+// ObjectStorage persists and loads private audio objects by key.
+type ObjectStorage interface {
+	Put(ctx context.Context, key string, data []byte) error
+	Get(ctx context.Context, key string) ([]byte, error)
+}
+
 // Presigner generates presigned download URLs for object storage.
 type Presigner interface {
 	PresignedGetObject(ctx context.Context, key string, expiry time.Duration) (string, error)
@@ -66,10 +72,11 @@ type Presigner interface {
 
 // Service orchestrates narration and audio asset production.
 type Service struct {
-	store     Store
-	tts       TTSProvider
-	presigner Presigner
-	processor AudioProcessor
+	store         Store
+	tts           TTSProvider
+	objectStorage ObjectStorage
+	presigner     Presigner
+	processor     AudioProcessor
 }
 
 type Option func(*Service)
@@ -77,6 +84,12 @@ type Option func(*Service)
 func WithTTS(p TTSProvider) Option {
 	return func(svc *Service) {
 		svc.tts = p
+	}
+}
+
+func WithObjectStorage(storage ObjectStorage) Option {
+	return func(svc *Service) {
+		svc.objectStorage = storage
 	}
 }
 

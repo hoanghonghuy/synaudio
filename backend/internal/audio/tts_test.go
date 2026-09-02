@@ -28,7 +28,7 @@ func TestCreateTTSSegmentsSplitsScript(t *testing.T) {
 
 func TestSynthesizeSegmentProducesAudio(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, WithTTS(NewMockTTS()))
+	svc := NewService(store, WithTTS(NewMockTTS()), WithObjectStorage(newFakeObjectStorage()))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello world.", "u1")
 	segments, _ := svc.CreateTTSSegments(context.Background(), nar.ID)
@@ -50,7 +50,7 @@ func TestSynthesizeSegmentProducesAudio(t *testing.T) {
 
 func TestSynthesizeSegmentWithoutTTSFails(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := NewService(store, WithObjectStorage(newFakeObjectStorage()))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello world.", "u1")
 	segments, _ := svc.CreateTTSSegments(context.Background(), nar.ID)

@@ -7,7 +7,7 @@ import (
 
 func TestSynthesizeNarrationProducesAudioAsset(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, WithTTS(NewMockTTS()))
+	svc := NewService(store, WithTTS(NewMockTTS()), WithObjectStorage(newFakeObjectStorage()))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "First sentence. Second sentence.", "u1")
 
@@ -31,7 +31,7 @@ func TestSynthesizeNarrationProducesAudioAsset(t *testing.T) {
 
 func TestSynthesizeNarrationWithoutTTSFails(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := NewService(store, WithObjectStorage(newFakeObjectStorage()))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello.", "u1")
 

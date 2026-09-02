@@ -3,6 +3,7 @@ package audio
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -100,6 +101,9 @@ func (s *Service) SynthesizeSegment(ctx context.Context, segmentID string) (TTSS
 	if s.tts == nil {
 		return TTSSegment{}, errors.New("tts not configured")
 	}
+	if s.objectStorage == nil {
+		return TTSSegment{}, errors.New("object storage not configured")
+	}
 
 	seg, err := s.store.GetTTSSegment(ctx, segmentID)
 	if err != nil {
@@ -111,11 +115,16 @@ func (s *Service) SynthesizeSegment(ctx context.Context, segmentID string) (TTSS
 		return TTSSegment{}, err
 	}
 
+	storageKey := "tts/" + seg.ID + ".mp3"
+	if err := s.objectStorage.Put(ctx, storageKey, out.AudioData); err != nil {
+		return TTSSegment{}, fmt.Errorf("persist synthesized audio: %w", err)
+	}
+
 	seg.Status = "SYNTHESIZED"
 	seg.Provider = out.Provider
 	seg.Model = out.Model
 	seg.DurationMs = out.DurationMs
-	seg.TempStorageKey = "tts/" + seg.ID + ".mp3"
+	seg.TempStorageKey = storageKey
 
 	return s.store.UpdateTTSSegment(ctx, seg)
 }

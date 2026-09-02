@@ -76,6 +76,7 @@ func main() {
 	audioStore := pgstore.NewAudioStore(queries)
 	audioService := audio.NewService(audioStore,
 		audio.WithTTS(audio.NewMockTTS()),
+		audio.WithObjectStorage(objStorage),
 		audio.WithPresigner(objStorage),
 	)
 	audioHandler := audio.NewHandler(audioService)

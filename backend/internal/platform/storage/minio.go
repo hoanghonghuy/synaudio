@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -42,6 +43,21 @@ func (m *MinIO) Put(ctx context.Context, key string, data []byte) error {
 		return fmt.Errorf("put object %q: %w", key, err)
 	}
 	return nil
+}
+
+// Get loads the complete object bytes for an object key.
+func (m *MinIO) Get(ctx context.Context, key string) ([]byte, error) {
+	obj, err := m.client.GetObject(ctx, m.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get object %q: %w", key, err)
+	}
+	defer obj.Close()
+
+	data, err := io.ReadAll(obj)
+	if err != nil {
+		return nil, fmt.Errorf("read object %q: %w", key, err)
+	}
+	return data, nil
 }
 
 // PresignedGetObject returns a presigned URL for downloading an object.
