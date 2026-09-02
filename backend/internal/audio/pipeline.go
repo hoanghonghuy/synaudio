@@ -15,6 +15,9 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 	if s.tts == nil {
 		return AudioAsset{}, errors.New("tts not configured")
 	}
+	if s.objectStorage == nil {
+		return AudioAsset{}, errors.New("object storage not configured")
+	}
 
 	nar, err := s.store.GetNarrationRevision(ctx, narrationRevisionID)
 	if err != nil {
@@ -37,8 +40,12 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		if err != nil {
 			return AudioAsset{}, fmt.Errorf("synthesize segment %d: %w", seg.SegmentNo, err)
 		}
+		data, err := s.objectStorage.Get(ctx, synthesized.TempStorageKey)
+		if err != nil {
+			return AudioAsset{}, fmt.Errorf("load synthesized segment %d: %w", seg.SegmentNo, err)
+		}
 		segAudio = append(segAudio, SegmentAudio{
-			Data:       []byte(synthesized.TempStorageKey),
+			Data:       data,
 			DurationMs: synthesized.DurationMs,
 		})
 	}
@@ -53,13 +60,18 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		return AudioAsset{}, err
 	}
 
+	storageKey := fmt.Sprintf("chapters/%s/audio/v%d/chapter.mp3", nar.ChapterID, versionNo)
+	if err := s.objectStorage.Put(ctx, storageKey, processed.Data); err != nil {
+		return AudioAsset{}, fmt.Errorf("persist final audio: %w", err)
+	}
+
 	asset := AudioAsset{
 		ID:                        uuid.NewString(),
 		ChapterID:                 nar.ChapterID,
 		VersionNo:                 versionNo,
 		SourceNarrationRevisionID: narrationRevisionID,
 		Status:                    "READY",
-		StorageKey:                fmt.Sprintf("chapters/%s/audio/v%d/chapter.mp3", nar.ChapterID, versionNo),
+		StorageKey:                storageKey,
 		MimeType:                  "audio/mpeg",
 		SizeBytes:                 int64(len(processed.Data)),
 		DurationMs:                processed.DurationMs,
