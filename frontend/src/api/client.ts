@@ -6,6 +6,7 @@ import type {
   ArcCompletionResult,
   AttentionListResponse,
   AudioURLResponse,
+  Chapter,
   ChapterContent,
   ChapterListResponse,
   ChapterReview,
@@ -112,9 +113,29 @@ export type PlanningCharacter = {
   CurrentProfileVersionID: string
 }
 
+export type PolicySnapshot = {
+  story_id: string
+  minimum_audio_duration_sec: number
+  target_audio_duration_sec: number
+  content_origin: string
+  language: string
+  narration_language: string
+  policy_version: number
+}
+
+export type StoryWorkspaceSnapshot = {
+  planning_mode: string
+  planning_phase: string
+  public_rating: string
+  public_warnings: string[]
+  cover_asset_id: string
+}
+
 export type ActivationReadiness = {
   ready: boolean
   missing: string[]
+  generation_policy?: PolicySnapshot
+  story_workspace?: StoryWorkspaceSnapshot
 }
 
 export type FoundationResult = {
@@ -132,6 +153,25 @@ export type ContentProfileInput = {
   language_limits: string
   romance_limits: string
   constraints: Record<string, unknown>
+}
+
+export type ChapterPlanRevision = {
+  ID: string
+  ChapterID: string
+  RevisionNo: number
+  Plan: Record<string, unknown>
+  BasedOnRevisionID: string
+  CreatedBy: string
+}
+
+export type StoryAssetResponse = {
+  id: string
+  story_id: string
+  type: string
+  storage_key: string
+  mime_type: string
+  size_bytes: number
+  status: string
 }
 
 let accessToken: string | null = null
@@ -194,7 +234,8 @@ async function refreshAccessToken(): Promise<string | null> {
 
 async function request<T>(path: string, init?: RequestInit, retryAuth = true): Promise<T> {
   const headers = new Headers(init?.headers)
-  if (init?.body != null && !headers.has('Content-Type')) {
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData
+  if (init?.body != null && !isFormData && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
   if (accessToken) {
@@ -254,6 +295,25 @@ export function createStory(input: CreateStoryInput): Promise<Story> {
   })
 }
 
+export function updateStoryMetadata(
+  storyID: string,
+  input: { title: string; description: string },
+): Promise<Story> {
+  return request<Story>(`/admin/stories/${storyID}/metadata`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export function uploadStoryCover(storyID: string, file: File): Promise<StoryAssetResponse> {
+  const body = new FormData()
+  body.append('file', file)
+  return request<StoryAssetResponse>(`/admin/stories/${storyID}/cover`, {
+    method: 'POST',
+    body,
+  })
+}
+
 export function getStoryWorkflowSettings(storyID: string): Promise<StoryWorkflowSettings> {
   return request<StoryWorkflowSettings>(`/admin/stories/${storyID}/workflow-settings`)
 }
@@ -293,16 +353,53 @@ export function getStoryBible(storyID: string): Promise<StoryBibleVersion> {
   return request<StoryBibleVersion>(`/admin/stories/${storyID}/bible`)
 }
 
+export function createStoryBibleVersion(
+  storyID: string,
+  content: Record<string, unknown>,
+): Promise<StoryBibleVersion> {
+  return request<StoryBibleVersion>(`/admin/stories/${storyID}/bible/versions`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
+}
+
 export function getStoryEnding(storyID: string): Promise<EndingPlanVersion> {
   return request<EndingPlanVersion>(`/admin/stories/${storyID}/ending`)
+}
+
+export function createStoryEndingVersion(
+  storyID: string,
+  content: Record<string, unknown>,
+): Promise<EndingPlanVersion> {
+  return request<EndingPlanVersion>(`/admin/stories/${storyID}/ending/versions`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
 }
 
 export function listStoryArcs(storyID: string): Promise<{ arcs: StoryArc[] }> {
   return request<{ arcs: StoryArc[] }>(`/admin/stories/${storyID}/arcs`)
 }
 
+export function createStoryArc(storyID: string, content: Record<string, unknown>): Promise<StoryArc> {
+  return request<StoryArc>(`/admin/stories/${storyID}/arcs`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
+}
+
 export function listStoryCharacters(storyID: string): Promise<{ characters: PlanningCharacter[] }> {
   return request<{ characters: PlanningCharacter[] }>(`/admin/stories/${storyID}/characters`)
+}
+
+export function createPlanningCharacter(
+  storyID: string,
+  input: { name: string; importance: string; profile: Record<string, unknown> },
+): Promise<PlanningCharacter> {
+  return request<PlanningCharacter>(`/admin/stories/${storyID}/characters`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export function getActivationReadiness(storyID: string): Promise<ActivationReadiness> {
@@ -474,6 +571,23 @@ export function listPublishedChapters(storyID: string): Promise<ChapterListRespo
 
 export function listAdminChapters(storyID: string): Promise<ChapterListResponse> {
   return request<ChapterListResponse>(`/admin/stories/${storyID}/chapters`)
+}
+
+export function createPlanningChapter(storyID: string, title: string): Promise<Chapter> {
+  return request<Chapter>(`/admin/stories/${storyID}/chapters`, {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function createChapterPlanRevision(
+  chapterID: string,
+  plan: Record<string, unknown>,
+): Promise<ChapterPlanRevision> {
+  return request<ChapterPlanRevision>(`/admin/chapters/${chapterID}/plans`, {
+    method: 'POST',
+    body: JSON.stringify({ plan }),
+  })
 }
 
 export function listContentRevisions(chapterID: string): Promise<ContentRevisionListResponse> {
