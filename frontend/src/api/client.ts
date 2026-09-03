@@ -438,6 +438,12 @@ export function saveProgress(
   })
 }
 
+export function completeProgress(chapterID: string): Promise<ListeningProgress> {
+  return request<ListeningProgress>(`/me/progress/${chapterID}/complete`, {
+    method: 'POST',
+  })
+}
+
 export function listCreativeDecisions(storyID: string): Promise<CreativeDecisionListResponse> {
   return request<CreativeDecisionListResponse>(`/admin/stories/${storyID}/creative-decisions`)
 }
