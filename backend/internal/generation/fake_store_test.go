@@ -5,26 +5,30 @@ import (
 )
 
 type fakeStore struct {
-	revisions map[string][]ContentRevision
-	approvals map[string][]ContentApproval
-	nextRev   map[string]int
-	runs      map[string][]GenerationRun
-	jobs      map[string][]GenerationJob
-	nextAttempt map[string]int
-	attempts  map[string][]JobAttempt
-	reviews   map[string][]ChapterReview
+	revisions          map[string][]ContentRevision
+	approvals          map[string][]ContentApproval
+	nextRev            map[string]int
+	runs               map[string][]GenerationRun
+	jobs               map[string][]GenerationJob
+	nextAttempt        map[string]int
+	attempts           map[string][]JobAttempt
+	reviews            map[string][]ChapterReview
+	writerInputs       map[string]WriterJobInput
+	currentWriterPlans map[string]WriterJobInput
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		revisions: map[string][]ContentRevision{},
-		approvals: map[string][]ContentApproval{},
-		nextRev:   map[string]int{},
-		runs:      map[string][]GenerationRun{},
-		jobs:      map[string][]GenerationJob{},
-		nextAttempt: map[string]int{},
-		attempts:  map[string][]JobAttempt{},
-		reviews:   map[string][]ChapterReview{},
+		revisions:          map[string][]ContentRevision{},
+		approvals:          map[string][]ContentApproval{},
+		nextRev:            map[string]int{},
+		runs:               map[string][]GenerationRun{},
+		jobs:               map[string][]GenerationJob{},
+		nextAttempt:        map[string]int{},
+		attempts:           map[string][]JobAttempt{},
+		reviews:            map[string][]ChapterReview{},
+		writerInputs:       map[string]WriterJobInput{},
+		currentWriterPlans: map[string]WriterJobInput{},
 	}
 }
 
@@ -90,6 +94,63 @@ func (s *fakeStore) GetGenerationRun(_ context.Context, runID string) (Generatio
 func (s *fakeStore) CreateGenerationJob(_ context.Context, j GenerationJob) (GenerationJob, error) {
 	s.jobs[j.RunID] = append(s.jobs[j.RunID], j)
 	return j, nil
+}
+
+func (s *fakeStore) CreateWriterGenerationJob(_ context.Context, j GenerationJob, chapterID string) (GenerationJob, error) {
+	input, ok := s.currentWriterPlans[chapterID]
+	if !ok {
+		// Shared queue/run tests are not plan-domain tests; give them a deterministic
+		// frozen plan fixture while production pgstore requires a real current plan.
+		input = WriterJobInput{
+			ChapterID:          chapterID,
+			PlanRevisionID:     "plan-" + chapterID,
+			Plan:               map[string]any{"chapter_id": chapterID},
+			BaseCanonVersionID: "canon-" + chapterID,
+		}
+	}
+	input.JobID = j.ID
+	input.ChapterID = chapterID
+	planCopy := make(map[string]any, len(input.Plan))
+	for key, value := range input.Plan {
+		planCopy[key] = value
+	}
+	input.Plan = planCopy
+
+	s.writerInputs[j.ID] = input
+	s.jobs[j.RunID] = append(s.jobs[j.RunID], j)
+	return j, nil
+}
+
+func (s *fakeStore) GetWriterJobInput(_ context.Context, jobID string) (WriterJobInput, error) {
+	input, ok := s.writerInputs[jobID]
+	if !ok {
+		return WriterJobInput{}, ErrWriterJobInputNotFound
+	}
+	return input, nil
+}
+
+func (s *fakeStore) GetWriterOutput(_ context.Context, runID, planRevisionID string) (ContentRevision, error) {
+	for _, revisions := range s.revisions {
+		for _, revision := range revisions {
+			if revision.GenerationRunID == runID && revision.PlanRevisionID == planRevisionID && revision.SourceType == "AI_GENERATED" {
+				return revision, nil
+			}
+		}
+	}
+	return ContentRevision{}, ErrContentRevisionNotFound
+}
+
+func (s *fakeStore) UpdateWriterJobOutputRef(_ context.Context, jobID string, outputRef map[string]any) (GenerationJob, error) {
+	for runID, jobs := range s.jobs {
+		for i, job := range jobs {
+			if job.ID == jobID {
+				job.OutputRef = outputRef
+				s.jobs[runID][i] = job
+				return job, nil
+			}
+		}
+	}
+	return GenerationJob{}, ErrGenerationJobNotFound
 }
 
 func (s *fakeStore) NextAttemptNo(_ context.Context, jobID string) (int, error) {
