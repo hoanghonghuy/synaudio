@@ -133,6 +133,7 @@ func documentedRoutes(doc openAPIDocument) map[string]struct{} {
 				routes[strings.ToUpper(method)+" "+path] = struct{}{}
 			}
 		}
+	}
 	return routes
 }
 
