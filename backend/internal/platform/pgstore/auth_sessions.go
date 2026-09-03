@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/synaudio/synaudio/backend/internal/identity"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
@@ -73,20 +74,22 @@ func (s *IdentityStore) ListActiveSessions(ctx context.Context, userID string, n
 }
 
 func toIdentitySession(row db.UserSession) identity.Session {
-	sess := identity.Session{
+	return identity.Session{
 		ID:               fromUUID(row.ID),
 		UserID:           fromUUID(row.UserID),
 		RefreshTokenHash: row.RefreshTokenHash,
-		CreatedAt:        timeFromTimestamptz(row.CreatedAt),
-		LastUsedAt:       timeFromTimestamptz(row.LastUsedAt),
-		ExpiresAt:        timeFromTimestamptz(row.ExpiresAt),
-		RevokedAt:        timeFromTimestamptz(row.RevokedAt),
+		CreatedAt:        authSessionTime(row.CreatedAt),
+		LastUsedAt:       authSessionTime(row.LastUsedAt),
+		ExpiresAt:        authSessionTime(row.ExpiresAt),
+		RevokedAt:        authSessionTime(row.RevokedAt),
 		UserAgentSummary: fromText(row.UserAgentSummary),
 		SafeIPMetadata:   fromText(row.SafeIpMetadata),
 	}
-	return sess
 }
 
-func timeFromTimestamptz(value interface{ Get() time.Time }) time.Time {
-	return value.Get()
+func authSessionTime(value pgtype.Timestamptz) time.Time {
+	if !value.Valid {
+		return time.Time{}
+	}
+	return value.Time
 }
