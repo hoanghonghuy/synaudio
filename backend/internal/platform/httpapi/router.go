@@ -23,6 +23,7 @@ type Dependencies struct {
 	AdminCheck        func(context.Context, *http.Request) (bool, error)
 	AdminActor        func(context.Context, *http.Request) (string, error)
 	AuditRecord       audit.RecordFunc
+	AuditBoundary     audit.TransactionBoundary
 	AuthHandler       http.Handler
 	AuditHandler      http.Handler
 	StoryHandler      http.Handler
@@ -84,7 +85,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	if deps.AuthHandler != nil {
-		authHandler := audit.WrapAuth(deps.AuthHandler, deps.AuditRecord, deps.AdminActor)
+		authHandler := audit.WrapAuthTransactional(deps.AuthHandler, deps.AuditRecord, deps.AdminActor, deps.AuditBoundary)
 		r.Mount("/api/v1/auth", authHandler)
 	}
 
@@ -101,7 +102,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		if h == nil {
 			continue
 		}
-		mountRoutes(api, h, deps.AdminCheck, deps.AdminActor, deps.AuditRecord)
+		mountRoutes(api, h, deps.AdminCheck, deps.AdminActor, deps.AuditRecord, deps.AuditBoundary)
 	}
 	r.Mount("/api/v1", api)
 
@@ -118,6 +119,7 @@ func mountRoutes(
 	adminCheck func(context.Context, *http.Request) (bool, error),
 	adminActor func(context.Context, *http.Request) (string, error),
 	auditRecord audit.RecordFunc,
+	auditBoundary audit.TransactionBoundary,
 ) {
 	routes, ok := src.(chi.Routes)
 	if !ok {
@@ -129,7 +131,7 @@ func mountRoutes(
 		}
 		// Audit wraps authorization too, so denied security-sensitive mutations
 		// are recorded as DENIED instead of disappearing before the audit layer.
-		handler = audit.WrapRoute(handler, method, route, auditRecord, adminActor)
+		handler = audit.WrapRouteTransactional(handler, method, route, auditRecord, adminActor, auditBoundary)
 		dst.Method(method, route, handler)
 		return nil
 	})
