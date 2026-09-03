@@ -6,7 +6,10 @@ import (
 	"time"
 )
 
-const AccountDeletionGracePeriod = 30 * 24 * time.Hour
+const (
+	AccountDeletionGracePeriod = 30 * 24 * time.Hour
+	AccountDeletionRecoveryTTL = 30 * time.Minute
+)
 
 var ErrDeletionGracePeriod = errors.New("account deletion grace period has not elapsed")
 
@@ -14,6 +17,11 @@ type deletionLifecycleStore interface {
 	RequestAccountDeletion(ctx context.Context, userID string) error
 	PurgeAccountIfEligible(ctx context.Context, userID string, cutoff time.Time) error
 	ListPurgeEligibleAccounts(ctx context.Context, cutoff time.Time, limit int) ([]string, error)
+}
+
+type deletionRecoveryStore interface {
+	ReplaceDeletionRecoveryToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
+	CancelAccountDeletionWithToken(ctx context.Context, userID, tokenHash string, now time.Time) error
 }
 
 // RequestAccountDeletion deactivates the account immediately and revokes active
@@ -31,10 +39,47 @@ func (s *AuthService) RequestAccountDeletion(ctx context.Context, userID string)
 	return s.store.RevokeSessions(ctx, userID)
 }
 
-// CancelAccountDeletion remains an internal service operation for now. The
-// public ACTIVE-session route cannot safely recover a DEACTIVATED user; #20's
-// dedicated ownership-proof recovery path is wired separately once the shared
-// transactional-email capability is available on develop.
+// RequestAccountDeletionRecovery issues a short-lived, one-time ownership proof
+// only for an account that is still inside the deletion grace period. Callers
+// must keep the externally observable response enumeration-safe.
+func (s *AuthService) RequestAccountDeletionRecovery(ctx context.Context, email string) (string, error) {
+	u, err := s.store.GetUserByEmail(ctx, NormalizeEmail(email))
+	if err != nil || u.Status != "DEACTIVATED" {
+		return "", ErrUserNotFound
+	}
+	recoveryStore, ok := s.store.(deletionRecoveryStore)
+	if !ok {
+		return "", errors.New("account deletion recovery persistence not configured")
+	}
+	raw, err := NewRefreshToken()
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().UTC()
+	if err := recoveryStore.ReplaceDeletionRecoveryToken(ctx, u.ID, HashToken(raw), now.Add(AccountDeletionRecoveryTTL)); err != nil {
+		return "", err
+	}
+	return raw, nil
+}
+
+// CancelAccountDeletionByEmail proves ownership with the dedicated one-time
+// deletion-recovery token and atomically consumes it while reactivating the
+// account. No ordinary authenticated capability is granted to DEACTIVATED users.
+func (s *AuthService) CancelAccountDeletionByEmail(ctx context.Context, email, token string) error {
+	u, err := s.store.GetUserByEmail(ctx, NormalizeEmail(email))
+	if err != nil || u.Status != "DEACTIVATED" {
+		return ErrInvalidToken
+	}
+	recoveryStore, ok := s.store.(deletionRecoveryStore)
+	if !ok {
+		return ErrInvalidToken
+	}
+	return recoveryStore.CancelAccountDeletionWithToken(ctx, u.ID, HashToken(token), time.Now().UTC())
+}
+
+// CancelAccountDeletion remains an internal service operation for privileged or
+// already-authorized coordination paths. Public recovery for a DEACTIVATED user
+// must use CancelAccountDeletionByEmail instead of weakening normal Bearer auth.
 func (s *AuthService) CancelAccountDeletion(ctx context.Context, userID string) error {
 	if _, err := s.store.GetUserByID(ctx, userID); err != nil {
 		return err
