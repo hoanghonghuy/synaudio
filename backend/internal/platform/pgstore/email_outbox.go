@@ -11,6 +11,8 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 )
 
+const smtpDispatchStartedMarker = "SMTP_DISPATCH_STARTED"
+
 type EmailOutboxStore struct {
 	db db.DBTX
 }
@@ -69,16 +71,25 @@ WHERE id = (
     FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
-RETURNING id::text, purpose, recipient_email, encrypted_payload, attempt_count, max_attempts`, now, staleBefore)
+RETURNING id::text, purpose, recipient_email, encrypted_payload, attempt_count, max_attempts,
+          (last_error = '` + smtpDispatchStartedMarker + `') AS dispatch_started`, now, staleBefore)
 
 	var item notification.OutboxItem
-	if err := row.Scan(&item.ID, &item.Purpose, &item.RecipientEmail, &item.EncryptedPayload, &item.AttemptCount, &item.MaxAttempts); err != nil {
+	if err := row.Scan(&item.ID, &item.Purpose, &item.RecipientEmail, &item.EncryptedPayload, &item.AttemptCount, &item.MaxAttempts, &item.DispatchStarted); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return notification.OutboxItem{}, notification.ErrNoPendingDelivery
 		}
 		return notification.OutboxItem{}, err
 	}
 	return item, nil
+}
+
+func (s *EmailOutboxStore) MarkDispatchStarted(ctx context.Context, id string, now time.Time) error {
+	_, err := s.db.Exec(ctx, `
+UPDATE email_delivery_outbox
+SET last_error = '`+smtpDispatchStartedMarker+`', updated_at = $2
+WHERE id = $1 AND status = 'DELIVERING'`, id, now)
+	return err
 }
 
 func (s *EmailOutboxStore) MarkDelivered(ctx context.Context, id string, now time.Time) error {
@@ -98,5 +109,16 @@ SET status = CASE WHEN attempt_count >= max_attempts THEN 'DEAD_LETTER' ELSE 'PE
     last_error = $4,
     updated_at = $2
 WHERE id = $1 AND status = 'DELIVERING'`, id, now, retryAt, failure)
+	return err
+}
+
+func (s *EmailOutboxStore) MarkDeliveryUncertain(ctx context.Context, id string, now time.Time) error {
+	_, err := s.db.Exec(ctx, `
+UPDATE email_delivery_outbox
+SET status = 'DEAD_LETTER',
+    locked_at = NULL,
+    last_error = 'SMTP_DELIVERY_OUTCOME_UNCERTAIN',
+    updated_at = $2
+WHERE id = $1 AND status = 'DELIVERING'`, id, now)
 	return err
 }
