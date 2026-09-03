@@ -17,6 +17,7 @@ func NewHandler(svc *Service, resolveID func(context.Context, *http.Request) (st
 	h := &Handler{svc: svc, resolveID: resolveID}
 
 	r := chi.NewRouter()
+	r.Get("/me/library", h.library)
 	r.Get("/me/favorites", h.listFavorites)
 	r.Put("/me/favorites/{storyID}", h.addFavorite)
 	r.Delete("/me/favorites/{storyID}", h.removeFavorite)
@@ -25,6 +26,19 @@ func NewHandler(svc *Service, resolveID func(context.Context, *http.Request) (st
 	r.Post("/me/progress/{chapterID}/complete", h.markCompleted)
 	r.Post("/admin/chapters/{chapterID}/revision-impact", h.applyRevisionImpact)
 	return r
+}
+
+func (h *Handler) library(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.resolveUser(w, r)
+	if !ok {
+		return
+	}
+	library, err := h.svc.GetLibrary(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, library)
 }
 
 func (h *Handler) listFavorites(w http.ResponseWriter, r *http.Request) {
