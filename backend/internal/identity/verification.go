@@ -4,6 +4,17 @@ import (
 	"context"
 )
 
+// recoveryCredentialStore is the production-capable persistence extension for
+// one-active, single-use recovery credentials. Keeping it separate from Store
+// avoids forcing unrelated test doubles to implement PostgreSQL atomicity while
+// allowing the production store to enforce the stronger contract.
+type recoveryCredentialStore interface {
+	ReplaceVerificationToken(ctx context.Context, userID, tokenHash string) error
+	ReplaceResetToken(ctx context.Context, userID, tokenHash string) error
+	ConsumeVerificationToken(ctx context.Context, userID, tokenHash string) error
+	ResetPasswordAtomic(ctx context.Context, userID, tokenHash, passwordHash string) error
+}
+
 // RequestEmailVerification creates a one-time hashed verification token.
 func (s *AuthService) RequestEmailVerification(ctx context.Context, userID string) (string, error) {
 	if _, err := s.store.GetUserByID(ctx, userID); err != nil {
@@ -14,15 +25,22 @@ func (s *AuthService) RequestEmailVerification(ctx context.Context, userID strin
 	if err != nil {
 		return "", err
 	}
+	hash := HashToken(raw)
 
-	if err := s.store.StoreVerificationToken(ctx, userID, HashToken(raw)); err != nil {
+	if recoveryStore, ok := s.store.(recoveryCredentialStore); ok {
+		if err := recoveryStore.ReplaceVerificationToken(ctx, userID, hash); err != nil {
+			return "", err
+		}
+	} else if err := s.store.StoreVerificationToken(ctx, userID, hash); err != nil {
 		return "", err
 	}
 
 	return raw, nil
 }
 
-// VerifyEmail validates the token and marks the account email as verified.
+// VerifyEmail validates the latest token and atomically consumes it with the
+// verified-email transition when the persistence adapter supports the V1
+// recovery contract.
 func (s *AuthService) VerifyEmail(ctx context.Context, userID, token string) error {
 	stored, err := s.store.GetVerificationToken(ctx, userID)
 	if err != nil {
@@ -30,6 +48,9 @@ func (s *AuthService) VerifyEmail(ctx context.Context, userID, token string) err
 	}
 	if !VerifyTokenHash(stored, token) {
 		return ErrInvalidToken
+	}
+	if recoveryStore, ok := s.store.(recoveryCredentialStore); ok {
+		return recoveryStore.ConsumeVerificationToken(ctx, userID, stored)
 	}
 	return s.store.MarkEmailVerified(ctx, userID)
 }
@@ -80,16 +101,22 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, userID string) (
 	if err != nil {
 		return "", err
 	}
+	hash := HashToken(raw)
 
-	if err := s.store.StoreResetToken(ctx, userID, HashToken(raw)); err != nil {
+	if recoveryStore, ok := s.store.(recoveryCredentialStore); ok {
+		if err := recoveryStore.ReplaceResetToken(ctx, userID, hash); err != nil {
+			return "", err
+		}
+	} else if err := s.store.StoreResetToken(ctx, userID, hash); err != nil {
 		return "", err
 	}
 
 	return raw, nil
 }
 
-// ResetPassword validates the token, updates the password hash, and revokes
-// all existing sessions by default.
+// ResetPassword validates the latest token. Production persistence consumes the
+// credential, updates the password and revokes sessions atomically so replay or
+// a mid-transition database failure cannot leave ambiguous recovery state.
 func (s *AuthService) ResetPassword(ctx context.Context, userID, token, newPassword string) error {
 	stored, err := s.store.GetResetToken(ctx, userID)
 	if err != nil {
@@ -104,13 +131,15 @@ func (s *AuthService) ResetPassword(ctx context.Context, userID, token, newPassw
 		return err
 	}
 
+	if recoveryStore, ok := s.store.(recoveryCredentialStore); ok {
+		return recoveryStore.ResetPasswordAtomic(ctx, userID, stored, hash)
+	}
+
 	if err := s.store.UpdatePassword(ctx, userID, hash); err != nil {
 		return err
 	}
-
 	if err := s.store.RevokeSessions(ctx, userID); err != nil {
 		return err
 	}
-
 	return nil
 }

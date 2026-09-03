@@ -12,6 +12,7 @@ import (
 
 	"github.com/synaudio/synaudio/backend/internal/audit"
 	"github.com/synaudio/synaudio/backend/internal/generation"
+	"github.com/synaudio/synaudio/backend/internal/notification"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
@@ -25,6 +26,11 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Error("config load failed", "error", err)
+		os.Exit(1)
+	}
+	emailCfg, err := config.LoadEmail(cfg.AppEnv, cfg.AppPublicURL)
+	if err != nil {
+		log.Error("email config load failed", "error", err)
 		os.Exit(1)
 	}
 
@@ -48,6 +54,15 @@ func main() {
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
 	auditService := audit.NewService(pgstore.NewAuditStore(queries))
+
+	var emailService *notification.Service
+	if emailCfg.Mode != config.EmailModeDisabled {
+		emailService, err = providers.BuildEmail(emailCfg, pgstore.NewEmailOutboxStore(pool))
+		if err != nil {
+			log.Error("email provider init failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	workerID := os.Getenv("WORKER_ID")
 	if workerID == "" {
@@ -100,6 +115,11 @@ func main() {
 	auditTicker := time.NewTicker(15 * time.Second)
 	defer auditTicker.Stop()
 
+	// Deliver a bounded batch of transactional-email intents. Raw links are
+	// decrypted only in memory immediately before the SMTP send.
+	emailTicker := time.NewTicker(5 * time.Second)
+	defer emailTicker.Stop()
+
 	// Poll for new jobs.
 	pollTicker := time.NewTicker(2 * time.Second)
 	defer pollTicker.Stop()
@@ -128,6 +148,20 @@ func main() {
 				log.Error("audit delivery dead-lettered", "count", report.DeadLetter, "claimed", report.Claimed)
 			} else if report.Claimed > 0 {
 				log.Info("audit outbox reconciled", "claimed", report.Claimed, "delivered", report.Delivered, "retrying", report.Retrying)
+			}
+		case <-emailTicker.C:
+			if emailService == nil {
+				continue
+			}
+			for i := 0; i < 20; i++ {
+				didWork, err := emailService.DeliverNext(ctx)
+				if err != nil {
+					log.Error("transactional email delivery failed", "error", err)
+					break
+				}
+				if !didWork {
+					break
+				}
 			}
 		case <-pollTicker.C:
 			if err := worker.ProcessOne(ctx); err != nil {
