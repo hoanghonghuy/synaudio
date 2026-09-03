@@ -57,6 +57,83 @@ export type AuditFilters = {
   limit?: number
 }
 
+export type StoryWorkflowSettings = {
+  story_id: string
+  batch_generation_size: number
+  creative_autonomy: string
+  preferred_text_provider: string
+  preferred_text_model: string
+  preferred_tts_provider: string
+  preferred_voice_id: string
+  pause_before_tts: boolean
+  auto_ai_review: boolean
+  planning_horizon: number
+  fallback_policy: Record<string, unknown>
+}
+
+export type StoryContentProfile = {
+  id: string
+  story_id: string
+  version_no: number
+  profile: Record<string, unknown>
+}
+
+export type StoryBibleVersion = {
+  ID: string
+  StoryID: string
+  VersionNo: number
+  Content: Record<string, unknown>
+  BasedOnVersionID: string
+  CreatedBy: string
+}
+
+export type EndingPlanVersion = {
+  ID: string
+  StoryID: string
+  VersionNo: number
+  Content: Record<string, unknown>
+  BasedOnVersionID: string
+  CreatedBy: string
+}
+
+export type StoryArc = {
+  ID: string
+  StoryID: string
+  Ordinal: number
+  Status: string
+  CurrentVersionID: string
+}
+
+export type PlanningCharacter = {
+  ID: string
+  StoryID: string
+  CanonicalName: string
+  Importance: string
+  CurrentProfileVersionID: string
+}
+
+export type ActivationReadiness = {
+  ready: boolean
+  missing: string[]
+}
+
+export type FoundationResult = {
+  bible: StoryBibleVersion
+  ending: EndingPlanVersion
+  arcs: StoryArc[]
+  characters: PlanningCharacter[]
+}
+
+export type ContentProfileInput = {
+  maturity_target: string
+  allowed_themes: string[]
+  disallowed_themes: string[]
+  violence_level: string
+  language_limits: string
+  romance_limits: string
+  constraints: Record<string, unknown>
+}
+
 let accessToken: string | null = null
 let refreshInFlight: Promise<string | null> | null = null
 
@@ -175,6 +252,81 @@ export function createStory(input: CreateStoryInput): Promise<Story> {
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+export function getStoryWorkflowSettings(storyID: string): Promise<StoryWorkflowSettings> {
+  return request<StoryWorkflowSettings>(`/admin/stories/${storyID}/workflow-settings`)
+}
+
+export function updateStoryWorkflowSettings(
+  storyID: string,
+  input: StoryWorkflowSettings,
+): Promise<StoryWorkflowSettings> {
+  return request<StoryWorkflowSettings>(`/admin/stories/${storyID}/workflow-settings`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export function getStoryContentProfile(storyID: string): Promise<StoryContentProfile> {
+  return request<StoryContentProfile>(`/admin/stories/${storyID}/content-profile`)
+}
+
+export function createStoryContentProfile(
+  storyID: string,
+  input: ContentProfileInput,
+): Promise<StoryContentProfile> {
+  return request<StoryContentProfile>(`/admin/stories/${storyID}/content-profile`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function generateStoryFoundation(storyID: string, premise: string): Promise<FoundationResult> {
+  return request<FoundationResult>(`/admin/stories/${storyID}/foundation`, {
+    method: 'POST',
+    body: JSON.stringify({ premise }),
+  })
+}
+
+export function getStoryBible(storyID: string): Promise<StoryBibleVersion> {
+  return request<StoryBibleVersion>(`/admin/stories/${storyID}/bible`)
+}
+
+export function getStoryEnding(storyID: string): Promise<EndingPlanVersion> {
+  return request<EndingPlanVersion>(`/admin/stories/${storyID}/ending`)
+}
+
+export function listStoryArcs(storyID: string): Promise<{ arcs: StoryArc[] }> {
+  return request<{ arcs: StoryArc[] }>(`/admin/stories/${storyID}/arcs`)
+}
+
+export function listStoryCharacters(storyID: string): Promise<{ characters: PlanningCharacter[] }> {
+  return request<{ characters: PlanningCharacter[] }>(`/admin/stories/${storyID}/characters`)
+}
+
+export function getActivationReadiness(storyID: string): Promise<ActivationReadiness> {
+  return request<ActivationReadiness>(`/admin/stories/${storyID}/activation-readiness`)
+}
+
+export function activateStory(storyID: string): Promise<Story> {
+  return request<Story>(`/admin/stories/${storyID}/activate`, { method: 'POST' })
+}
+
+export function archiveStory(storyID: string): Promise<Story> {
+  return request<Story>(`/admin/stories/${storyID}/archive`, { method: 'POST' })
+}
+
+export function restoreStory(storyID: string): Promise<Story> {
+  return request<Story>(`/admin/stories/${storyID}/restore`, { method: 'POST' })
+}
+
+export function makeStoryPublic(storyID: string): Promise<Story> {
+  return request<Story>(`/admin/stories/${storyID}/make-public`, { method: 'POST' })
+}
+
+export function makeStoryPrivate(storyID: string): Promise<Story> {
+  return request<Story>(`/admin/stories/${storyID}/make-private`, { method: 'POST' })
 }
 
 export async function login(email: string, password: string): Promise<TokenResponse> {
