@@ -23,6 +23,7 @@ import type {
   ThreadInactivityResponse,
   UsageListResponse,
 } from './types'
+import { ApiRequestError } from './http-error.ts'
 
 const BASE = '/api/v1'
 
@@ -83,14 +84,18 @@ function mayRefresh(path: string): boolean {
   )
 }
 
-async function parseFailure(res: Response): Promise<Error> {
+async function parseFailure(res: Response): Promise<ApiRequestError> {
   let body: ApiError | null = null
   try {
     body = (await res.json()) as ApiError
   } catch {
-    // Ignore non-JSON error bodies.
+    // Ignore non-JSON error bodies while retaining the HTTP status.
   }
-  return new Error(body?.error?.message ?? `Request failed (${res.status})`)
+  return new ApiRequestError(
+    res.status,
+    body?.error?.message ?? `Request failed (${res.status})`,
+    body?.error?.code,
+  )
 }
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -223,205 +228,73 @@ export function revokeAuthSession(sessionID: string): Promise<{ status: string }
   return request<{ status: string }>(`/auth/sessions/${sessionID}`, { method: 'DELETE' })
 }
 
-export function setupTOTP(): Promise<{ secret: string }> {
-  return request<{ secret: string }>('/auth/mfa/totp/setup', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  })
+export function setupMFA(): Promise<{ secret: string; otpauth_uri: string }> {
+  return request<{ secret: string; otpauth_uri: string }>('/auth/mfa/setup', { method: 'POST' })
 }
 
-export function confirmTOTP(code: string): Promise<{ recovery_codes: string[] }> {
-  return request<{ recovery_codes: string[] }>('/auth/mfa/totp/confirm', {
+export function confirmMFA(code: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/mfa/confirm', {
     method: 'POST',
     body: JSON.stringify({ code }),
   })
 }
 
-export function disableTOTP(): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/mfa/totp/disable', {
+export function verifyMFA(code: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/mfa/verify', {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({ code }),
   })
 }
 
-export function requestAccountDeletion(): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/account/deletion/request', {
-    method: 'POST',
-    body: JSON.stringify({}),
+export function disableMFA(code: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/mfa', {
+    method: 'DELETE',
+    body: JSON.stringify({ code }),
   })
-}
-
-export function cancelAccountDeletion(): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/account/deletion/cancel', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  })
-}
-
-export function register(email: string, password: string): Promise<{ id: string; email: string; status: string }> {
-  return request<{ id: string; email: string; status: string }>(
-    '/auth/register',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    },
-    false,
-  )
 }
 
 export function requestPasswordReset(email: string): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    '/auth/password/forgot',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    },
-    false,
-  )
+  return request<{ status: string }>('/auth/password/forgot', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
 }
 
-export function resetPassword(
-  email: string,
-  token: string,
-  newPassword: string,
-): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    '/auth/password/reset',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, token, new_password: newPassword }),
-    },
-    false,
-  )
+export function resetPassword(token: string, password: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/password/reset', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  })
 }
 
-export function verifyEmail(email: string, token: string): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    '/auth/email/verify',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, token }),
-    },
-    false,
-  )
+export function verifyEmail(token: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/email/verify', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
 }
 
-export function resendEmailVerification(email: string): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    '/auth/email/resend',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    },
-    false,
-  )
+export function resendVerificationEmail(): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/email/resend', { method: 'POST' })
 }
 
-export function listPublishedChapters(storyID: string): Promise<ChapterListResponse> {
+export function deleteAccount(password: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/account', {
+    method: 'DELETE',
+    body: JSON.stringify({ password }),
+  })
+}
+
+export function getStoryContent(storyID: string): Promise<ChapterListResponse> {
   return request<ChapterListResponse>(`/stories/${storyID}/chapters`)
 }
 
-export function listAdminChapters(storyID: string): Promise<ChapterListResponse> {
-  return request<ChapterListResponse>(`/admin/stories/${storyID}/chapters`)
-}
-
-export function listContentRevisions(chapterID: string): Promise<ContentRevisionListResponse> {
-  return request<ContentRevisionListResponse>(`/admin/chapters/${chapterID}/content`)
-}
-
-export function listChapterReviews(chapterID: string): Promise<ChapterReviewListResponse> {
-  return request<ChapterReviewListResponse>(`/admin/chapters/${chapterID}/reviews`)
-}
-
-export function editContent(
-  chapterID: string,
-  basedOnRevisionID: string,
-  text: string,
-): Promise<ContentRevision> {
-  return request<ContentRevision>(`/admin/chapters/${chapterID}/edit`, {
-    method: 'POST',
-    body: JSON.stringify({
-      based_on_revision_id: basedOnRevisionID,
-      text,
-    }),
-  })
-}
-
-export function regenerateContent(
-  chapterID: string,
-  basedOnRevisionID: string,
-): Promise<ContentRevision> {
-  return request<ContentRevision>(`/admin/chapters/${chapterID}/regenerate`, {
-    method: 'POST',
-    body: JSON.stringify({
-      based_on_revision_id: basedOnRevisionID,
-    }),
-  })
-}
-
-export function approveContent(
-  chapterID: string,
-  revisionID: string,
-): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>(`/admin/chapters/${chapterID}/approve`, {
-    method: 'POST',
-    body: JSON.stringify({ revision_id: revisionID }),
-  })
-}
-
-export function rejectContent(
-  revisionID: string,
-  reason: string,
-): Promise<ContentRevision> {
-  return request<ContentRevision>(`/admin/revisions/${revisionID}/reject`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  })
-}
-
-export function runContentReview(
-  chapterID: string,
-  reviewType: 'CONTINUITY' | 'QUALITY' | 'SAFETY',
-  revisionID: string,
-  text: string,
-): Promise<ChapterReview> {
-  const paths = {
-    CONTINUITY: 'continuity',
-    QUALITY: 'quality',
-    SAFETY: 'safety',
-  } as const
-  return request<ChapterReview>(`/admin/chapters/${chapterID}/${paths[reviewType]}`, {
-    method: 'POST',
-    body: JSON.stringify({ revision_id: revisionID, text }),
-  })
-}
-
 export function getChapterContent(chapterID: string): Promise<ChapterContent> {
-  return request<ChapterContent>(`/chapters/${chapterID}/content`)
+  return request<ChapterContent>(`/chapters/${chapterID}`)
 }
 
 export function getAudioURL(chapterID: string): Promise<AudioURLResponse> {
-  return request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`)
-}
-
-export function getListenerLibrary(): Promise<ListenerLibrary> {
-  return request<ListenerLibrary>('/me/library')
-}
-
-export function listFavorites(): Promise<FavoriteListResponse> {
-  return request<FavoriteListResponse>('/me/favorites')
-}
-
-export function addFavorite(storyID: string): Promise<{ status: string }> {
-  return request<{ status: string }>(`/me/favorites/${storyID}`, {
-    method: 'PUT',
-  })
-}
-
-export function removeFavorite(storyID: string): Promise<{ status: string }> {
-  return request<{ status: string }>(`/me/favorites/${storyID}`, {
-    method: 'DELETE',
-  })
+  return request<AudioURLResponse>(`/chapters/${chapterID}/audio`)
 }
 
 export function getProgress(chapterID: string): Promise<ListeningProgress> {
@@ -439,42 +312,93 @@ export function saveProgress(
 }
 
 export function completeProgress(chapterID: string): Promise<ListeningProgress> {
-  return request<ListeningProgress>(`/me/progress/${chapterID}/complete`, {
-    method: 'POST',
-  })
+  return request<ListeningProgress>(`/me/progress/${chapterID}/complete`, { method: 'POST' })
+}
+
+export function listFavorites(): Promise<FavoriteListResponse> {
+  return request<FavoriteListResponse>('/me/favorites')
+}
+
+export function addFavorite(storyID: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/me/favorites/${storyID}`, { method: 'POST' })
+}
+
+export function removeFavorite(storyID: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/me/favorites/${storyID}`, { method: 'DELETE' })
+}
+
+export function getListenerLibrary(): Promise<ListenerLibrary> {
+  return request<ListenerLibrary>('/me/library')
+}
+
+export function listAuditEvents(filters: AuditFilters = {}): Promise<AuditListResponse> {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== '') qs.set(key, String(value))
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  return request<AuditListResponse>(`/admin/audit${suffix}`)
+}
+
+export function getAuditEvent(id: string): Promise<AuditEvent> {
+  return request<AuditEvent>(`/admin/audit/${id}`)
+}
+
+export function listAttention(params?: { type?: string; status?: string }): Promise<AttentionListResponse> {
+  const qs = new URLSearchParams()
+  if (params?.type) qs.set('type', params.type)
+  if (params?.status) qs.set('status', params.status)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  return request<AttentionListResponse>(`/admin/attention${suffix}`)
+}
+
+export function listUsage(): Promise<UsageListResponse> {
+  return request<UsageListResponse>('/admin/usage')
+}
+
+export function getThreadInactivity(): Promise<ThreadInactivityResponse> {
+  return request<ThreadInactivityResponse>('/admin/threads/inactive')
 }
 
 export function listCreativeDecisions(storyID: string): Promise<CreativeDecisionListResponse> {
   return request<CreativeDecisionListResponse>(`/admin/stories/${storyID}/creative-decisions`)
 }
 
-export function listAttentionItems(storyID: string): Promise<AttentionListResponse> {
-  return request<AttentionListResponse>(`/admin/stories/${storyID}/attention`)
+export function getChapterReview(chapterID: string): Promise<ChapterReview> {
+  return request<ChapterReview>(`/admin/chapters/${chapterID}/review`)
 }
 
-export function reviewArcCompletion(storyID: string, arcID: string): Promise<ArcCompletionResult> {
-  return request<ArcCompletionResult>(`/admin/stories/${storyID}/arcs/${arcID}/completion`)
+export function listChapterReviews(storyID: string): Promise<ChapterReviewListResponse> {
+  return request<ChapterReviewListResponse>(`/admin/stories/${storyID}/reviews`)
 }
 
-export function analyzeThreadInactivity(storyID: string): Promise<ThreadInactivityResponse> {
-  return request<ThreadInactivityResponse>(`/admin/stories/${storyID}/thread-inactivity`)
+export function listContentRevisions(chapterID: string): Promise<ContentRevisionListResponse> {
+  return request<ContentRevisionListResponse>(`/admin/chapters/${chapterID}/content-revisions`)
 }
 
-export function listUsage(storyID: string): Promise<UsageListResponse> {
-  return request<UsageListResponse>(`/admin/stories/${storyID}/usage`)
+export function getContentRevision(revisionID: string): Promise<ContentRevision> {
+  return request<ContentRevision>(`/admin/content-revisions/${revisionID}`)
 }
 
-export function listAuditEvents(filters: AuditFilters = {}): Promise<AuditListResponse> {
-  const qs = new URLSearchParams()
-  for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== null && String(value).trim() !== '') {
-      qs.set(key, String(value))
-    }
-  }
-  const suffix = qs.toString() ? `?${qs.toString()}` : ''
-  return request<AuditListResponse>(`/admin/audit${suffix}`)
+export function approveContentRevision(revisionID: string): Promise<ContentRevision> {
+  return request<ContentRevision>(`/admin/content-revisions/${revisionID}/approve`, { method: 'POST' })
 }
 
-export function getAuditEvent(eventID: string): Promise<AuditEvent> {
-  return request<AuditEvent>(`/admin/audit/${eventID}`)
+export function rejectContentRevision(revisionID: string): Promise<ContentRevision> {
+  return request<ContentRevision>(`/admin/content-revisions/${revisionID}/reject`, { method: 'POST' })
+}
+
+export function chooseCreativeDecision(decisionID: string, optionID: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/admin/creative-decisions/${decisionID}/select`, {
+    method: 'POST',
+    body: JSON.stringify({ option_id: optionID }),
+  })
+}
+
+export function ignoreCreativeDecision(decisionID: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/admin/creative-decisions/${decisionID}/ignore`, { method: 'POST' })
+}
+
+export function resolveArcCompletion(arcID: string): Promise<ArcCompletionResult> {
+  return request<ArcCompletionResult>(`/admin/arcs/${arcID}/complete`, { method: 'POST' })
 }
