@@ -16,7 +16,9 @@ const filters = ref({
   resource_type: '',
   resource_id: '',
   story_id: '',
+  chapter_id: '',
   run_id: '',
+  correlation_id: '',
   result: '',
   from: '',
   to: '',
@@ -41,7 +43,9 @@ function buildFilters(): AuditFilters {
     resource_type: filters.value.resource_type || undefined,
     resource_id: filters.value.resource_id || undefined,
     story_id: filters.value.story_id || undefined,
+    chapter_id: filters.value.chapter_id || undefined,
     run_id: filters.value.run_id || undefined,
+    correlation_id: filters.value.correlation_id || undefined,
     result: filters.value.result || undefined,
     from: toRFC3339(filters.value.from),
     to: toRFC3339(filters.value.to),
@@ -83,7 +87,9 @@ function resetFilters() {
     resource_type: '',
     resource_id: '',
     story_id: '',
+    chapter_id: '',
     run_id: '',
+    correlation_id: '',
     result: '',
     from: '',
     to: '',
@@ -117,7 +123,7 @@ onMounted(load)
       <div class="section-heading">
         <div>
           <h2>Lọc sự kiện</h2>
-          <p class="muted">Tìm theo actor, action, resource, story, generation run, kết quả hoặc khoảng thời gian.</p>
+          <p class="muted">Tìm theo actor, action, resource, story/chapter, generation run, correlation, kết quả hoặc khoảng thời gian.</p>
         </div>
         <button v-if="hasFilters" class="secondary-button" type="button" @click="resetFilters">Xóa bộ lọc</button>
       </div>
@@ -156,12 +162,20 @@ onMounted(load)
           <input v-model.trim="filters.story_id" placeholder="UUID" />
         </label>
         <label>
-          Generation run ID
-          <input v-model.trim="filters.run_id" placeholder="UUID" />
+          Chapter ID
+          <input v-model.trim="filters.chapter_id" placeholder="UUID" />
         </label>
       </div>
 
       <div class="row">
+        <label>
+          Generation run ID
+          <input v-model.trim="filters.run_id" placeholder="UUID" />
+        </label>
+        <label>
+          Correlation ID
+          <input v-model.trim="filters.correlation_id" placeholder="request / trace correlation" />
+        </label>
         <label>
           Từ thời điểm
           <input v-model="filters.from" type="datetime-local" />
@@ -243,6 +257,8 @@ onMounted(load)
             <dd>{{ selected.actor_type }} {{ selected.actor_user_id || '' }}</dd>
             <dt>Resource</dt>
             <dd>{{ selected.resource_type || '—' }} {{ selected.resource_id || '' }}</dd>
+            <dt>Story / Chapter</dt>
+            <dd>{{ selected.story_id || '—' }} / {{ selected.chapter_id || '—' }}</dd>
             <dt>Request</dt>
             <dd>{{ selected.request_id || '—' }}</dd>
             <dt>Correlation</dt>
