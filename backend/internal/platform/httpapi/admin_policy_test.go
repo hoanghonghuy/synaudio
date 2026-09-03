@@ -35,6 +35,56 @@ func TestAdminRouteUsesOperationSpecificPermission(t *testing.T) {
 	}
 }
 
+func TestUnmappedAdminRouteFailsClosedInsteadOfFallingBackToBroadAdmin(t *testing.T) {
+	src := chi.NewRouter()
+	src.Post("/admin/future-sensitive-action", okJSONHandler)
+
+	var gotPermission string
+	broadAdminCalled := false
+	router := NewRouter(Dependencies{
+		AdminCheck: func(context.Context, *http.Request) (bool, error) {
+			broadAdminCalled = true
+			return true, nil
+		},
+		AdminPermissionCheck: func(_ context.Context, _ *http.Request, permission string) (bool, error) {
+			gotPermission = permission
+			return false, nil
+		},
+		AdminActor: func(context.Context, *http.Request) (string, error) { return "actor", nil },
+		StoryHandler: src,
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/future-sensitive-action", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected unmapped privileged route to fail closed with 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if gotPermission != unmappedAdminPermission {
+		t.Fatalf("expected fail-closed sentinel permission, got %q", gotPermission)
+	}
+	if broadAdminCalled {
+		t.Fatal("unmapped privileged route must not fall back to broad admin authorization")
+	}
+}
+
+func TestStoryLifecycleRoutesUseSpecificPermissions(t *testing.T) {
+	cases := []struct {
+		route string
+		want  string
+	}{
+		{"/admin/stories/{storyID}/activate", "STORY_ACTIVATE"},
+		{"/admin/stories/{storyID}/archive", "STORY_ARCHIVE"},
+		{"/admin/stories/{storyID}/restore", "STORY_RESTORE"},
+		{"/admin/stories/{storyID}/make-public", "STORY_VISIBILITY_MANAGE"},
+		{"/admin/stories/{storyID}/make-private", "STORY_VISIBILITY_MANAGE"},
+	}
+	for _, tc := range cases {
+		if got := adminPolicyFor(http.MethodPost, tc.route).Permission; got != tc.want {
+			t.Fatalf("%s: expected %s, got %s", tc.route, tc.want, got)
+		}
+	}
+}
+
 func TestHighRiskAdminRouteRejectsStaleRecentAuth(t *testing.T) {
 	src := chi.NewRouter()
 	src.Post("/admin/retcons/{id}/apply", okJSONHandler)
