@@ -89,17 +89,26 @@ func main() {
 	}
 }
 
-// processJob dispatches a claimed job to the appropriate handler based on job type.
+// processJob dispatches a claimed job to the appropriate durable handler.
 func processJob(svc *generation.Service, log *slog.Logger) generation.JobProcessor {
 	return func(ctx context.Context, job generation.GenerationJob) error {
 		switch job.JobType {
 		case "WRITER":
-			log.Info("processing writer job", "job_id", job.ID)
-			// Writer jobs are driven by the API layer which already created the
-			// content revision; here we simply mark success for the mock pipeline.
+			log.Info("processing writer job", "job_id", job.ID, "run_id", job.RunID)
+			revision, err := svc.ExecuteWriterJob(ctx, job)
+			if err != nil {
+				log.Error("writer job failed", "job_id", job.ID, "run_id", job.RunID, "error", err)
+				return err
+			}
+			log.Info("writer job durable output ready",
+				"job_id", job.ID,
+				"run_id", job.RunID,
+				"content_revision_id", revision.ID,
+				"plan_revision_id", revision.PlanRevisionID,
+			)
 			return nil
 		default:
-			log.Info("skipping unknown job type", "job_id", job.ID, "job_type", job.JobType)
+			log.Info("rejecting unknown job type", "job_id", job.ID, "job_type", job.JobType)
 			return &generation.ClassifiedError{Class: "PERMANENT", Code: "UNKNOWN_JOB_TYPE"}
 		}
 	}
