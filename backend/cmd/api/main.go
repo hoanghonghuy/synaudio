@@ -35,6 +35,11 @@ func main() {
 		log.Error("config load failed", "error", err)
 		os.Exit(1)
 	}
+	emailCfg, err := config.LoadEmail(cfg.AppEnv, cfg.AppPublicURL)
+	if err != nil {
+		log.Error("email config load failed", "error", err)
+		os.Exit(1)
+	}
 
 	aiProviders, err := providers.BuildAI(cfg)
 	if err != nil {
@@ -57,7 +62,8 @@ func main() {
 	}
 	defer pool.Close()
 
-	queries := db.New(db.Contextual(pool))
+	database := db.Contextual(pool)
+	queries := db.New(database)
 	auditBoundary := audit.TransactionBoundary(func(parent context.Context, run func(context.Context) error) error {
 		tx, err := pool.Begin(parent)
 		if err != nil {
@@ -77,7 +83,19 @@ func main() {
 		RefreshSessionTTL:     cfg.RefreshSessionTTL,
 		RefreshSessionIdleTTL: cfg.RefreshSessionIdleTTL,
 	}))
-	authHandler := identity.NewAuthHandler(authService)
+	var authHandler http.Handler = identity.NewAuthHandler(authService)
+	if emailCfg.Mode != config.EmailModeDisabled {
+		emailStore := pgstore.NewEmailOutboxStore(database)
+		emailService, err := providers.BuildEmail(emailCfg, emailStore)
+		if err != nil {
+			log.Error("email provider init failed", "error", err)
+			os.Exit(1)
+		}
+		identityBoundary := identity.TransactionBoundary(func(parent context.Context, run func(context.Context) error) error {
+			return db.InTransaction(parent, database, run)
+		})
+		authHandler = identity.WrapTransactionalEmail(authHandler, authService, emailService, identityBoundary)
+	}
 
 	auditStore := pgstore.NewAuditStore(queries)
 	auditService := audit.NewService(auditStore)

@@ -49,7 +49,8 @@ async function signOut() {
           <RouterLink to="/">Khám phá</RouterLink>
           <RouterLink v-if="!auth.isAuthenticated" to="/auth">Đăng nhập</RouterLink>
           <template v-else>
-            <RouterLink class="nav-cta" to="/admin">Studio</RouterLink>
+            <RouterLink to="/library">Thư viện</RouterLink>
+            <RouterLink v-if="auth.isAdmin" class="nav-cta" to="/admin">Studio</RouterLink>
             <RouterLink to="/account/security">Bảo mật</RouterLink>
             <button class="nav-sign-out" type="button" @click="signOut">Đăng xuất</button>
           </template>
