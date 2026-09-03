@@ -20,13 +20,37 @@ func NewEmailOutboxStore(executor db.DBTX) *EmailOutboxStore {
 }
 
 func (s *EmailOutboxStore) Enqueue(ctx context.Context, item notification.OutboxItem) error {
-	_, err := s.db.Exec(ctx, `
+	// Auth delivery runs inside a request transaction. The advisory transaction
+	// lock serializes concurrent resend/reset requests for the same address and
+	// purpose so the cooldown/hourly cap cannot be bypassed by a request race.
+	if _, err := s.db.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, item.Purpose+":"+item.RecipientEmail); err != nil {
+		return err
+	}
+	tag, err := s.db.Exec(ctx, `
 INSERT INTO email_delivery_outbox (
     id, purpose, recipient_email, encrypted_payload, status, attempt_count,
     max_attempts, available_at, created_at, updated_at
-) VALUES ($1, $2, $3, $4, 'PENDING', 0, $5, NOW(), NOW(), NOW())`,
-		item.ID, item.Purpose, item.RecipientEmail, item.EncryptedPayload, item.MaxAttempts)
-	return err
+)
+SELECT $1, $2, $3, $4, 'PENDING', 0, $5, NOW(), NOW(), NOW()
+WHERE NOT EXISTS (
+    SELECT 1 FROM email_delivery_outbox
+    WHERE purpose = $2
+      AND lower(recipient_email) = lower($3)
+      AND created_at > NOW() - INTERVAL '60 seconds'
+)
+AND (
+    SELECT COUNT(*) FROM email_delivery_outbox
+    WHERE purpose = $2
+      AND lower(recipient_email) = lower($3)
+      AND created_at > NOW() - INTERVAL '1 hour'
+) < 5`, item.ID, item.Purpose, item.RecipientEmail, item.EncryptedPayload, item.MaxAttempts)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return notification.ErrRateLimited
+	}
+	return nil
 }
 
 func (s *EmailOutboxStore) Claim(ctx context.Context, now, staleBefore time.Time) (notification.OutboxItem, error) {
