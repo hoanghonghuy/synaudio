@@ -84,20 +84,25 @@ func (s *SMTPSender) Send(ctx context.Context, message Message) error {
 	}
 	body := "From: " + s.cfg.From + "\r\n" +
 		"To: " + to + "\r\n" +
+		"Message-ID: " + sanitizeHeader(message.ID) + "\r\n" +
 		"Subject: " + sanitizeHeader(message.Subject) + "\r\n" +
 		"MIME-Version: 1.0\r\n" +
 		"Content-Type: text/plain; charset=UTF-8\r\n" +
 		"Content-Transfer-Encoding: 8bit\r\n\r\n" + message.Text
 	if _, err := writer.Write([]byte(body)); err != nil {
 		_ = writer.Close()
-		return fmt.Errorf("smtp body write failed: %w", err)
+		return fmt.Errorf("%w: smtp body write failed: %v", ErrDeliveryOutcomeUncertain, err)
 	}
+	// Close waits for the server's response to the message body. If that exchange
+	// fails, the server may already have accepted the message, so retrying is not
+	// safe without provider-side idempotency/lookup support.
 	if err := writer.Close(); err != nil {
-		return fmt.Errorf("smtp body close failed: %w", err)
+		return fmt.Errorf("%w: smtp body close failed: %v", ErrDeliveryOutcomeUncertain, err)
 	}
-	if err := client.Quit(); err != nil {
-		return fmt.Errorf("smtp quit failed: %w", err)
-	}
+	// A successful DATA close means the SMTP server accepted responsibility for
+	// the message. QUIT is session cleanup only; a lost QUIT acknowledgement must
+	// not turn an accepted delivery into a retryable failure.
+	_ = client.Quit()
 	return nil
 }
 
