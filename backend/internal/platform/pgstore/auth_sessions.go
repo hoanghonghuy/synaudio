@@ -78,16 +78,16 @@ func toIdentitySession(row db.UserSession) identity.Session {
 		ID:               fromUUID(row.ID),
 		UserID:           fromUUID(row.UserID),
 		RefreshTokenHash: row.RefreshTokenHash,
-		CreatedAt:        authSessionTime(row.CreatedAt),
-		LastUsedAt:       authSessionTime(row.LastUsedAt),
-		ExpiresAt:        authSessionTime(row.ExpiresAt),
-		RevokedAt:        authSessionTime(row.RevokedAt),
+		CreatedAt:        fromPGTimestamp(row.CreatedAt),
+		LastUsedAt:       fromPGTimestamp(row.LastUsedAt),
+		ExpiresAt:        fromPGTimestamp(row.ExpiresAt),
+		RevokedAt:        fromPGTimestamp(row.RevokedAt),
 		UserAgentSummary: fromText(row.UserAgentSummary),
 		SafeIPMetadata:   fromText(row.SafeIpMetadata),
 	}
 }
 
-func authSessionTime(value pgtype.Timestamptz) time.Time {
+func fromPGTimestamp(value pgtype.Timestamptz) time.Time {
 	if !value.Valid {
 		return time.Time{}
 	}
