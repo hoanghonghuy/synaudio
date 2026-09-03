@@ -14,18 +14,18 @@ var (
 
 // GenerationRun is a high-level workflow intent.
 type GenerationRun struct {
-	ID                string
-	RunType           string
-	StoryID           string
-	ChapterID         string
-	Status            string
-	WaitingReason     string
-	WorkflowVersion   string
-	Priority          int
+	ID                 string
+	RunType            string
+	StoryID            string
+	ChapterID          string
+	Status             string
+	WaitingReason      string
+	WorkflowVersion    string
+	Priority           int
 	BaseCanonVersionID string
-	ContextSnapshotID string
-	RequestedBy       string
-	IdempotencyKey    string
+	ContextSnapshotID  string
+	RequestedBy        string
+	IdempotencyKey     string
 }
 
 // GenerationJob is a smaller execution unit inside a GenerationRun.
@@ -82,7 +82,9 @@ func (s *Service) GetGenerationRun(ctx context.Context, runID string) (Generatio
 	return s.store.GetGenerationRun(ctx, runID)
 }
 
-// CreateGenerationJob creates a new PENDING job within a run.
+// CreateGenerationJob creates a new PENDING job within a run. WRITER jobs are
+// special: their exact current Chapter Plan revision is atomically frozen by the
+// WriterStore before the job is visible to workers.
 func (s *Service) CreateGenerationJob(ctx context.Context, runID, jobType string, maxAttempts int) (GenerationJob, error) {
 	jobType = strings.TrimSpace(jobType)
 	if jobType == "" {
@@ -90,6 +92,17 @@ func (s *Service) CreateGenerationJob(ctx context.Context, runID, jobType string
 	}
 	if maxAttempts <= 0 {
 		maxAttempts = 3
+	}
+
+	if jobType == "WRITER" {
+		run, err := s.store.GetGenerationRun(ctx, runID)
+		if err != nil {
+			return GenerationJob{}, err
+		}
+		if run.RunType != "CHAPTER_GENERATION" {
+			return GenerationJob{}, errors.New("WRITER job requires CHAPTER_GENERATION run")
+		}
+		return s.createWriterGenerationJob(ctx, runID, run.ChapterID, maxAttempts)
 	}
 
 	j := GenerationJob{
