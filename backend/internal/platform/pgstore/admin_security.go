@@ -171,6 +171,67 @@ SELECT EXISTS (
 	return allowed, err
 }
 
+// RevokeAdminRoleSafely serializes the Last Active Admin decision with the role
+// removal. The advisory transaction lock is shared by all callers of this
+// boundary, preventing two concurrent revocations from both observing the same
+// pre-delete active-admin count.
+func (s *IdentityStore) RevokeAdminRoleSafely(ctx context.Context, targetID string) error {
+	beginner, ok := s.q.DBTX().(transactionBeginner)
+	if !ok {
+		return errors.New("identity store transaction support unavailable")
+	}
+	tx, err := beginner.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('synaudio:last-active-admin'))`); err != nil {
+		return err
+	}
+
+	var targetIsActiveAdmin bool
+	if err := tx.QueryRow(ctx, `
+SELECT EXISTS (
+    SELECT 1
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON r.id = ur.role_id
+     WHERE u.id = $1
+       AND u.status = 'ACTIVE'
+       AND r.code = 'ADMIN'
+)
+`, toUUID(targetID)).Scan(&targetIsActiveAdmin); err != nil {
+		return err
+	}
+
+	if targetIsActiveAdmin {
+		var activeAdmins int
+		if err := tx.QueryRow(ctx, `
+SELECT COUNT(*)
+  FROM user_roles ur
+  JOIN roles r ON r.id = ur.role_id
+  JOIN users u ON u.id = ur.user_id
+ WHERE r.code = 'ADMIN'
+   AND u.status = 'ACTIVE'
+`).Scan(&activeAdmins); err != nil {
+			return err
+		}
+		if activeAdmins <= 1 {
+			return identity.ErrLastAdmin
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `
+DELETE FROM user_roles
+ WHERE user_id = $1
+   AND role_id = (SELECT id FROM roles WHERE code = 'ADMIN')
+`, toUUID(targetID)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func decimal(value int) string {
 	if value == 0 {
 		return "0"
