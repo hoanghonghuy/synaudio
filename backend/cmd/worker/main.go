@@ -63,7 +63,7 @@ func main() {
 		if event.Outcome == "FAILED" {
 			result = audit.ResultFailed
 		}
-		_, err := auditService.Record(ctx, audit.Event{
+		_, err := auditService.RecordReliable(ctx, audit.Event{
 			ActorType:       actorType,
 			Action:          "GENERATION_JOB_" + event.Outcome,
 			ResourceType:    "GENERATION_JOB",
@@ -96,6 +96,10 @@ func main() {
 	reclaimTicker := time.NewTicker(30 * time.Second)
 	defer reclaimTicker.Stop()
 
+	// Reconcile durable audit intents independently from generation-job traffic.
+	auditTicker := time.NewTicker(15 * time.Second)
+	defer auditTicker.Stop()
+
 	// Poll for new jobs.
 	pollTicker := time.NewTicker(2 * time.Second)
 	defer pollTicker.Stop()
@@ -113,6 +117,17 @@ func main() {
 			}
 			if len(reclaimed) > 0 {
 				log.Info("reclaimed stale jobs", "count", len(reclaimed))
+			}
+		case <-auditTicker.C:
+			report, err := auditService.DeliverPending(ctx, 50)
+			if err != nil {
+				log.Error("audit outbox reconciliation failed", "error", err)
+				continue
+			}
+			if report.DeadLetter > 0 {
+				log.Error("audit delivery dead-lettered", "count", report.DeadLetter, "claimed", report.Claimed)
+			} else if report.Claimed > 0 {
+				log.Info("audit outbox reconciled", "claimed", report.Claimed, "delivered", report.Delivered, "retrying", report.Retrying)
 			}
 		case <-pollTicker.C:
 			if err := worker.ProcessOne(ctx); err != nil {
