@@ -3,12 +3,11 @@ package generation
 import (
 	"context"
 	"errors"
-
-	"github.com/google/uuid"
 )
 
 // StartBatchGeneration creates a GenerationRun of type CHAPTER_GENERATION and
-// enqueues sequential WRITER jobs, one per chapter, in order.
+// enqueues sequential WRITER jobs, one per chapter, in order. Each job freezes
+// its own exact Chapter Plan revision because one batch run can span many chapters.
 func (s *Service) StartBatchGeneration(ctx context.Context, storyID string, chapterIDs []string, requestedBy string) (GenerationRun, error) {
 	if len(chapterIDs) == 0 {
 		return GenerationRun{}, errors.New("chapter ids must not be empty")
@@ -20,15 +19,7 @@ func (s *Service) StartBatchGeneration(ctx context.Context, storyID string, chap
 	}
 
 	for _, chapterID := range chapterIDs {
-		job := GenerationJob{
-			ID:          uuid.NewString(),
-			RunID:       run.ID,
-			JobType:     "WRITER",
-			Status:      "PENDING",
-			MaxAttempts: 3,
-			OutputRef:   map[string]any{"chapter_id": chapterID},
-		}
-		if _, err := s.store.CreateGenerationJob(ctx, job); err != nil {
+		if _, err := s.createWriterGenerationJob(ctx, run.ID, chapterID, 3); err != nil {
 			return GenerationRun{}, err
 		}
 	}
@@ -43,11 +34,22 @@ func (s *Service) MarkDownstreamStale(ctx context.Context, runID, chapterID stri
 	if err != nil {
 		return nil, err
 	}
+	writerStore, err := s.writerStore()
+	if err != nil {
+		return nil, err
+	}
 
 	var stale []GenerationJob
 	found := false
 	for _, j := range jobs {
-		if j.OutputRef["chapter_id"] == chapterID {
+		if j.JobType != "WRITER" {
+			continue
+		}
+		input, err := writerStore.GetWriterJobInput(ctx, j.ID)
+		if err != nil {
+			return nil, err
+		}
+		if input.ChapterID == chapterID {
 			found = true
 			continue
 		}
