@@ -1,18 +1,20 @@
 -- Append-only platform audit/provenance events.
+-- Source identifiers are intentionally not foreign keys: audit history must
+-- survive source-row lifecycle changes without being updated or nulled.
 
 CREATE TABLE audit_events (
     id                UUID PRIMARY KEY,
-    actor_user_id     UUID REFERENCES users (id),
+    actor_user_id     UUID,
     actor_type        TEXT NOT NULL CHECK (actor_type IN ('USER', 'SYSTEM', 'AI', 'ANONYMOUS')),
     action            TEXT NOT NULL,
     resource_type     TEXT,
     resource_id       TEXT,
-    story_id          UUID REFERENCES stories (id) ON DELETE SET NULL,
-    chapter_id        UUID REFERENCES chapters (id) ON DELETE SET NULL,
+    story_id          UUID,
+    chapter_id        UUID,
     result            TEXT NOT NULL CHECK (result IN ('SUCCEEDED', 'FAILED', 'DENIED')),
     correlation_id    TEXT,
     request_id        TEXT,
-    generation_run_id UUID REFERENCES generation_runs (id) ON DELETE SET NULL,
+    generation_run_id UUID,
     provenance        JSONB NOT NULL DEFAULT '{}'::jsonb,
     metadata          JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
