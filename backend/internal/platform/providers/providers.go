@@ -108,9 +108,9 @@ type geminiInlineData struct {
 }
 
 type geminiGenerationConfig struct {
-	ResponseMIMEType string              `json:"responseMimeType,omitempty"`
-	ResponseModalities []string          `json:"responseModalities,omitempty"`
-	SpeechConfig     *geminiSpeechConfig `json:"speechConfig,omitempty"`
+	ResponseMIMEType   string              `json:"responseMimeType,omitempty"`
+	ResponseModalities []string            `json:"responseModalities,omitempty"`
+	SpeechConfig       *geminiSpeechConfig `json:"speechConfig,omitempty"`
 }
 
 type geminiSpeechConfig struct {
@@ -136,7 +136,7 @@ type geminiResponse struct {
 
 func (c *geminiClient) generate(ctx context.Context, prompt string, generationConfig *geminiGenerationConfig) (geminiResponse, error) {
 	payload, err := json.Marshal(geminiRequest{
-		Contents: []geminiContent{{Parts: []geminiPart{{Text: prompt}}}},
+		Contents:         []geminiContent{{Parts: []geminiPart{{Text: prompt}}}},
 		GenerationConfig: generationConfig,
 	})
 	if err != nil {
@@ -218,9 +218,9 @@ Use only MAJOR or MINOR for character importance.`, in.Premise)
 		return planning.FoundationProposal{}, err
 	}
 	var proposal struct {
-		Bible      map[string]any `json:"bible"`
-		Ending     map[string]any `json:"ending"`
-		Arcs       []map[string]any `json:"arcs"`
+		Bible      map[string]any              `json:"bible"`
+		Ending     map[string]any              `json:"ending"`
+		Arcs       []map[string]any            `json:"arcs"`
 		Characters []planning.CharacterProposal `json:"characters"`
 	}
 	if err := json.Unmarshal([]byte(text), &proposal); err != nil {
@@ -230,9 +230,9 @@ Use only MAJOR or MINOR for character importance.`, in.Premise)
 		return planning.FoundationProposal{}, errors.New("Gemini foundation response is incomplete")
 	}
 	return planning.FoundationProposal{
-		Bible: proposal.Bible,
-		Ending: proposal.Ending,
-		Arcs: proposal.Arcs,
+		Bible:      proposal.Bible,
+		Ending:     proposal.Ending,
+		Arcs:       proposal.Arcs,
 		Characters: proposal.Characters,
 	}, nil
 }
@@ -268,10 +268,15 @@ type geminiTTS struct {
 }
 
 func (g *geminiTTS) Synthesize(ctx context.Context, in audio.TTSInput) (audio.TTSOutput, error) {
-	voice := strings.TrimSpace(in.VoiceID)
+	// in.VoiceID is Synaudio's logical narration voice identity. It must never be
+	// forwarded as a provider-native Gemini voice name. Until the narrator voice
+	// registry supplies an explicit provider binding, the composition contract
+	// resolves Gemini's provider voice through GEMINI_TTS_VOICE.
+	voice := strings.TrimSpace(g.voice)
 	if voice == "" {
-		voice = g.voice
+		return audio.TTSOutput{}, errors.New("Gemini provider voice is not configured")
 	}
+
 	resp, err := g.client.generate(ctx, in.Text, &geminiGenerationConfig{
 		ResponseModalities: []string{"AUDIO"},
 		SpeechConfig: &geminiSpeechConfig{
@@ -294,11 +299,11 @@ func (g *geminiTTS) Synthesize(ctx context.Context, in audio.TTSInput) (audio.TT
 			return audio.TTSOutput{}, errors.New("Gemini returned empty audio")
 		}
 		return audio.TTSOutput{
-			AudioData: wrapPCM16Mono24kWAV(pcm),
+			AudioData:  wrapPCM16Mono24kWAV(pcm),
 			DurationMs: len(pcm) * 1000 / (24000 * 2),
-			Provider: "gemini",
-			Model: g.client.model,
-			Format: "wav",
+			Provider:   "gemini",
+			Model:      g.client.model,
+			Format:     "wav",
 		}, nil
 	}
 	return audio.TTSOutput{}, errors.New("Gemini returned no audio")
