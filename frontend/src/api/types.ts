@@ -211,3 +211,28 @@ export interface UsageRecord {
 export interface UsageListResponse {
   usage: UsageRecord[]
 }
+
+export type AuditActorType = 'USER' | 'SYSTEM' | 'AI' | 'ANONYMOUS'
+export type AuditResult = 'SUCCEEDED' | 'FAILED' | 'DENIED'
+
+export interface AuditEvent {
+  id: string
+  actor_user_id?: string
+  actor_type: AuditActorType
+  action: string
+  resource_type?: string
+  resource_id?: string
+  story_id?: string
+  chapter_id?: string
+  result: AuditResult
+  correlation_id?: string
+  request_id?: string
+  generation_run_id?: string
+  provenance?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
+export interface AuditListResponse {
+  items: AuditEvent[]
+}
