@@ -100,6 +100,24 @@ func main() {
 		return err
 	}
 
+	deletionAudit := func(ctx context.Context, event identity.AccountDeletionPurgeEvent) error {
+		result := audit.ResultSucceeded
+		if event.Outcome == "FAILED" {
+			result = audit.ResultFailed
+		}
+		_, err := auditService.RecordReliable(ctx, audit.Event{
+			ActorType:    audit.ActorSystem,
+			Action:       "ACCOUNT_DELETION_PURGE_" + event.Outcome,
+			ResourceType: "USER",
+			ResourceID:   event.UserID,
+			Result:       result,
+			Metadata: map[string]any{
+				"worker_id": workerID,
+			},
+		})
+		return err
+	}
+
 	worker := generation.NewWorker(
 		generationService,
 		workerID,
@@ -109,25 +127,18 @@ func main() {
 
 	log.Info("worker started", "env", cfg.AppEnv, "worker_id", workerID)
 
-	// Reclaim stale jobs periodically.
 	reclaimTicker := time.NewTicker(30 * time.Second)
 	defer reclaimTicker.Stop()
 
-	// Reconcile durable audit intents independently from generation-job traffic.
 	auditTicker := time.NewTicker(15 * time.Second)
 	defer auditTicker.Stop()
 
-	// Deliver a bounded batch of transactional-email intents. Raw links are
-	// decrypted only in memory immediately before the SMTP send.
 	emailTicker := time.NewTicker(5 * time.Second)
 	defer emailTicker.Stop()
 
-	// Account deletion is a slow lifecycle; hourly reconciliation is enough to
-	// discover accounts whose frozen 30-day grace period has elapsed.
 	deletionTicker := time.NewTicker(time.Hour)
 	defer deletionTicker.Stop()
 
-	// Poll for new jobs.
 	pollTicker := time.NewTicker(2 * time.Second)
 	defer pollTicker.Stop()
 
@@ -171,7 +182,7 @@ func main() {
 				}
 			}
 		case <-deletionTicker.C:
-			purged, err := identityService.PurgeEligibleAccounts(ctx, 50)
+			purged, err := identityService.PurgeEligibleAccountsObserved(ctx, 50, deletionAudit)
 			if err != nil {
 				log.Error("account deletion reconciliation failed", "error", err)
 				continue
@@ -190,7 +201,6 @@ func main() {
 	}
 }
 
-// processJob dispatches a claimed job to the appropriate durable handler.
 func processJob(svc *generation.Service, log *slog.Logger) generation.JobProcessor {
 	return func(ctx context.Context, job generation.GenerationJob) error {
 		switch job.JobType {
