@@ -7,10 +7,12 @@ type adminRoutePolicy struct {
 	RecentAuth bool
 }
 
+const unmappedAdminPermission = "__UNMAPPED_ADMIN_ROUTE__"
+
 // adminPolicyFor returns the minimum permission for each current privileged
-// route family. Unknown privileged routes intentionally return no policy so the
-// router can fall back to the existing assured-admin gate until a concrete
-// permission is defined, avoiding accidental product-contract invention.
+// route family. Unknown privileged routes deliberately receive a permission
+// that is never granted so newly-added admin endpoints fail closed until their
+// operation-specific policy is defined.
 func adminPolicyFor(method, route string) adminRoutePolicy {
 	if route == "/admin/audit" || route == "/admin/audit/{eventID}" {
 		return adminRoutePolicy{Permission: "AUDIT_VIEW"}
@@ -33,6 +35,19 @@ func adminPolicyFor(method, route string) adminRoutePolicy {
 
 	if hasPrefix(route, "/admin/stories") {
 		switch {
+		case hasSuffix(route, "/activate"):
+			return adminRoutePolicy{Permission: "STORY_ACTIVATE"}
+		case hasSuffix(route, "/archive"):
+			return adminRoutePolicy{Permission: "STORY_ARCHIVE"}
+		case hasSuffix(route, "/restore"):
+			return adminRoutePolicy{Permission: "STORY_RESTORE"}
+		case hasSuffix(route, "/make-public") || hasSuffix(route, "/make-private"):
+			return adminRoutePolicy{Permission: "STORY_VISIBILITY_MANAGE"}
+		case hasSuffix(route, "/cover"):
+			return adminRoutePolicy{Permission: "STORY_METADATA_EDIT"}
+		case hasSegment(route, "/content-profile"):
+			if method == http.MethodGet { return adminRoutePolicy{Permission: "STORY_METADATA_EDIT"} }
+			return adminRoutePolicy{Permission: "STORY_METADATA_EDIT"}
 		case hasSegment(route, "/bible"):
 			if method == http.MethodGet { return adminRoutePolicy{Permission: "STORY_BIBLE_VIEW"} }
 			return adminRoutePolicy{Permission: "STORY_BIBLE_MANAGE"}
@@ -97,7 +112,7 @@ func adminPolicyFor(method, route string) adminRoutePolicy {
 		return adminRoutePolicy{Permission: "GENERATION_START"}
 	}
 
-	return adminRoutePolicy{}
+	return adminRoutePolicy{Permission: unmappedAdminPermission}
 }
 
 func hasPrefix(value, prefix string) bool {
