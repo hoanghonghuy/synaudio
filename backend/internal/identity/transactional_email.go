@@ -15,6 +15,10 @@ type TransactionalEmail interface {
 	QueuePasswordReset(ctx context.Context, email, token string) error
 }
 
+type accountDeletionRecoveryEmail interface {
+	QueueAccountDeletionRecovery(ctx context.Context, email, token string) error
+}
+
 type TransactionBoundary func(context.Context, func(context.Context) error) error
 
 // WrapTransactionalEmail makes token creation and durable notification intent
@@ -36,6 +40,10 @@ func WrapTransactionalEmail(next http.Handler, svc *AuthService, emails Transact
 			handleResendEmail(w, r, svc, emails, boundary)
 		case strings.HasSuffix(r.URL.Path, "/password/forgot"):
 			handleForgotEmail(w, r, svc, emails, boundary)
+		case strings.HasSuffix(r.URL.Path, "/account/deletion/recovery/request"):
+			handleDeletionRecoveryRequest(w, r, svc, emails, boundary)
+		case strings.HasSuffix(r.URL.Path, "/account/deletion/recovery/confirm"):
+			handleDeletionRecoveryConfirm(w, r, svc)
 		default:
 			next.ServeHTTP(w, r)
 		}
@@ -87,8 +95,6 @@ func handleResendEmail(w http.ResponseWriter, r *http.Request, svc *AuthService,
 		return
 	}
 
-	// The externally observable result stays identical for known and unknown
-	// addresses. A known account gets a fresh token and durable encrypted intent.
 	_ = boundary(r.Context(), func(txCtx context.Context) error {
 		token, err := svc.ResendEmailVerification(txCtx, req.Email)
 		if err != nil {
@@ -128,6 +134,61 @@ func handleForgotEmail(w http.ResponseWriter, r *http.Request, svc *AuthService,
 		return emails.QueuePasswordReset(txCtx, u.Email, token)
 	})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+type deletionRecoveryRequest struct {
+	Email string `json:"email"`
+}
+
+type deletionRecoveryConfirmRequest struct {
+	Email string `json:"email"`
+	Token string `json:"token"`
+}
+
+func handleDeletionRecoveryRequest(w http.ResponseWriter, r *http.Request, svc *AuthService, emails TransactionalEmail, boundary TransactionBoundary) {
+	var req deletionRecoveryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+	recoveryEmail, ok := emails.(accountDeletionRecoveryEmail)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "EMAIL_DELIVERY_UNAVAILABLE", "account recovery is unavailable")
+		return
+	}
+
+	// Known eligible and unknown/ineligible accounts return the same Accepted
+	// response. For a real pending deletion, token persistence and durable email
+	// intent are committed in one transaction.
+	_ = boundary(r.Context(), func(txCtx context.Context) error {
+		token, err := svc.RequestAccountDeletionRecovery(txCtx, req.Email)
+		if err != nil {
+			if errors.Is(err, ErrUserNotFound) || errors.Is(err, ErrInvalidToken) {
+				return nil
+			}
+			return err
+		}
+		u, err := svc.store.GetUserByEmail(txCtx, NormalizeEmail(req.Email))
+		if err != nil {
+			return err
+		}
+		return recoveryEmail.QueueAccountDeletionRecovery(txCtx, u.Email, token)
+	})
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+func handleDeletionRecoveryConfirm(w http.ResponseWriter, r *http.Request, svc *AuthService) {
+	var req deletionRecoveryConfirmRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+	if err := svc.CancelAccountDeletionByEmail(r.Context(), req.Email, req.Token); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_TOKEN", "invalid or expired recovery token")
+		return
+	}
+	clearRefreshCookies(w)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "active"})
 }
 
 func readAuthBody(r *http.Request) ([]byte, error) {
