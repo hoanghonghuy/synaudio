@@ -30,8 +30,15 @@ func TestStartBatchGenerationCreatesSequentialJobs(t *testing.T) {
 		if j.JobType != "WRITER" {
 			t.Fatalf("expected WRITER job, got %q", j.JobType)
 		}
-		if j.OutputRef["chapter_id"] != chapterIDs[i] {
-			t.Fatalf("expected chapter %q, got %q", chapterIDs[i], j.OutputRef["chapter_id"])
+		input := store.writerInputs[j.ID]
+		if input.ChapterID != chapterIDs[i] {
+			t.Fatalf("expected frozen chapter %q, got %q", chapterIDs[i], input.ChapterID)
+		}
+		if input.PlanRevisionID == "" {
+			t.Fatalf("expected frozen plan revision for chapter %q", chapterIDs[i])
+		}
+		if j.OutputRef != nil {
+			t.Fatalf("expected output_ref to remain output-only before execution, got %#v", j.OutputRef)
 		}
 	}
 }
@@ -58,8 +65,9 @@ func TestMarkDownstreamStale(t *testing.T) {
 	if len(stale) != 1 {
 		t.Fatalf("expected 1 stale job, got %d", len(stale))
 	}
-	if stale[0].OutputRef["chapter_id"] != "ch3" {
-		t.Fatalf("expected ch3 stale, got %q", stale[0].OutputRef["chapter_id"])
+	input := store.writerInputs[stale[0].ID]
+	if input.ChapterID != "ch3" {
+		t.Fatalf("expected ch3 stale, got %q", input.ChapterID)
 	}
 	if stale[0].Status != "STALE" {
 		t.Fatalf("expected STALE, got %q", stale[0].Status)
