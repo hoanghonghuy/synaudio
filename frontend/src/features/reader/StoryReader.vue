@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
+  completeProgress,
   getAudioURL,
   getChapterContent,
   listPublishedChapters,
@@ -25,6 +26,9 @@ const contentError = ref('')
 const audioError = ref('')
 
 const audioEl = ref<HTMLAudioElement | null>(null)
+const progressWriteIntervalMs = 15_000
+let lastProgressWriteAt = 0
+let progressWrite: Promise<void> = Promise.resolve()
 
 async function loadChapters() {
   loading.value = true
@@ -33,7 +37,9 @@ async function loadChapters() {
     const res = await listPublishedChapters(storyID.value)
     chapters.value = res.chapters
     if (chapters.value.length > 0) {
-      await selectChapter(chapters.value[0])
+      const requestedChapterID = typeof route.query.chapter === 'string' ? route.query.chapter : ''
+      const requested = chapters.value.find((chapter) => chapter.ID === requestedChapterID)
+      await selectChapter(requested ?? chapters.value[0])
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Không thể tải danh sách chương.'
@@ -43,7 +49,9 @@ async function loadChapters() {
 }
 
 async function selectChapter(chapter: Chapter) {
+  persistCurrentPosition(true)
   activeChapter.value = chapter
+  lastProgressWriteAt = 0
   content.value = null
   audioURL.value = ''
   contentError.value = ''
@@ -79,7 +87,6 @@ async function selectChapter(chapter: Chapter) {
     await listener.loadProgress(chapter.ID)
     const saved = listener.progress[chapter.ID]
     if (saved && saved.PositionMs > 0) {
-      // resume position after audio metadata loads
       await nextTick()
       const el = audioEl.value
       if (el) {
@@ -87,20 +94,51 @@ async function selectChapter(chapter: Chapter) {
       }
     }
   } catch {
-    // Guest progress remains local; an unavailable progress endpoint should
-    // not prevent the reader from opening.
+    // Guest progress remains local; unavailable authenticated progress must not
+    // prevent the reader from opening public content.
   }
 }
 
-function onTimeUpdate() {
+function persistCurrentPosition(force = false) {
   const el = audioEl.value
-  if (!el || !activeChapter.value) return
-  const positionMs = Math.floor(el.currentTime * 1000)
-  listener.saveProgress(activeChapter.value.ID, positionMs, '')
+  const chapter = activeChapter.value
+  if (!el || !chapter) return
+
+  const now = Date.now()
+  if (!force && now - lastProgressWriteAt < progressWriteIntervalMs) return
+  const positionMs = Math.max(0, Math.floor(el.currentTime * 1000))
+  lastProgressWriteAt = now
+
+  progressWrite = progressWrite
+    .catch(() => undefined)
+    .then(() => listener.saveProgress(chapter.ID, positionMs, ''))
+    .then(() => undefined)
+    .catch(() => undefined)
 }
 
-function onPause() {
-  onTimeUpdate()
+function onTimeUpdate() {
+  persistCurrentPosition(false)
+}
+
+function onPauseOrSeek() {
+  persistCurrentPosition(true)
+}
+
+async function onEnded() {
+  persistCurrentPosition(true)
+  const chapter = activeChapter.value
+  if (!chapter || listener.isGuest) return
+  try {
+    const completed = await completeProgress(chapter.ID)
+    listener.progress[chapter.ID] = completed
+  } catch {
+    // The final persisted position is still useful if completion marking is
+    // temporarily unavailable; the next interaction can retry naturally.
+  }
+}
+
+function onPageHide() {
+  persistCurrentPosition(true)
 }
 
 async function toggleFavorite() {
@@ -108,8 +146,14 @@ async function toggleFavorite() {
 }
 
 onMounted(async () => {
+  window.addEventListener('pagehide', onPageHide)
   await listener.loadFavorites()
   await loadChapters()
+})
+
+onBeforeUnmount(() => {
+  persistCurrentPosition(true)
+  window.removeEventListener('pagehide', onPageHide)
 })
 </script>
 
@@ -176,7 +220,9 @@ onMounted(async () => {
               controls
               preload="metadata"
               @timeupdate="onTimeUpdate"
-              @pause="onPause"
+              @pause="onPauseOrSeek"
+              @seeked="onPauseOrSeek"
+              @ended="onEnded"
             />
           </div>
           <div
