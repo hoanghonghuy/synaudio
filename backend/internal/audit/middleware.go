@@ -47,8 +47,7 @@ func WrapRoute(next http.Handler, method, route string, record RecordFunc, resol
 
 		event := eventForResponse(r, method, route, desc, actorID, status, buffer.body.Bytes())
 		if _, err := record(r.Context(), event); err != nil {
-			writeAuditUnavailable(w)
-			return
+			buffer.header.Set("X-Synaudio-Audit-Status", "unavailable")
 		}
 		buffer.flushTo(w)
 	})
@@ -80,8 +79,7 @@ func WrapAuth(next http.Handler, record RecordFunc, resolveActor ActorResolver) 
 		}
 		event := eventForResponse(r, r.Method, route, desc, actorID, status, buffer.body.Bytes())
 		if _, err := record(r.Context(), event); err != nil {
-			writeAuditUnavailable(w)
-			return
+			buffer.header.Set("X-Synaudio-Audit-Status", "unavailable")
 		}
 		buffer.flushTo(w)
 	})
@@ -363,11 +361,4 @@ func (w *bufferedResponse) flushTo(dst http.ResponseWriter) {
 	}
 	dst.WriteHeader(status)
 	_, _ = dst.Write(w.body.Bytes())
-}
-
-func writeAuditUnavailable(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Synaudio-Audit-Status", "unavailable")
-	w.WriteHeader(http.StatusServiceUnavailable)
-	_, _ = w.Write([]byte(`{"error":{"code":"AUDIT_UNAVAILABLE","message":"mutation completed with unavailable audit persistence; verify state before retrying"}}`))
 }
