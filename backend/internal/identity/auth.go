@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,6 +25,7 @@ var (
 	ErrLastAdmin          = errors.New("cannot remove last active admin")
 	ErrForbidden          = errors.New("forbidden")
 	ErrUnauthenticated    = errors.New("authentication required")
+	ErrSessionNotFound    = errors.New("session not found")
 )
 
 const (
@@ -48,15 +50,38 @@ type User struct {
 	EmailVerifiedAt string
 }
 
+// Session is one logical refresh session (normally one signed-in browser/device).
+// Refresh token rotation updates RefreshTokenHash in place, preserving the
+// session identity used for revocation and access-token binding.
 type Session struct {
 	ID               string
 	UserID           string
 	RefreshToken     string
 	RefreshTokenHash string
+	CreatedAt        time.Time
+	LastUsedAt       time.Time
 	ExpiresAt        time.Time
+	RevokedAt        time.Time
+	UserAgentSummary string
+	SafeIPMetadata   string
 }
 
-// Store is the persistence boundary for the auth service.
+type SessionMetadata struct {
+	UserAgentSummary string
+	SafeIPMetadata   string
+}
+
+type Principal struct {
+	UserID    string
+	SessionID string
+}
+
+type AccessToken struct {
+	Token     string
+	ExpiresAt time.Time
+}
+
+// Store is the persistence boundary for the identity service.
 type Store interface {
 	CreateUser(ctx context.Context, u User) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
@@ -90,12 +115,77 @@ type Store interface {
 	PurgeUser(ctx context.Context, userID string) error
 }
 
-type AuthService struct {
-	store Store
+// SessionStore contains the atomic operations required by the V1 access/refresh
+// architecture. Rotation is compare-and-swap on the old refresh-token hash so
+// concurrent reuse cannot create multiple valid descendants.
+type SessionStore interface {
+	RotateSession(ctx context.Context, oldHash, newHash string, now, idleCutoff time.Time) (Session, error)
+	TouchSession(ctx context.Context, sessionID string, now, idleCutoff time.Time) (Session, error)
+	RevokeSessionByID(ctx context.Context, sessionID, userID string) error
+	ListActiveSessions(ctx context.Context, userID string, now, idleCutoff time.Time) ([]Session, error)
 }
 
-func NewAuthService(store Store) *AuthService {
-	return &AuthService{store: store}
+type AuthSettings struct {
+	AccessTokenSecret     string
+	AccessTokenTTL        time.Duration
+	RefreshSessionTTL     time.Duration
+	RefreshSessionIdleTTL time.Duration
+	Now                    func() time.Time
+}
+
+type AuthOption func(*AuthService)
+
+func WithAuthSettings(settings AuthSettings) AuthOption {
+	return func(s *AuthService) {
+		if settings.AccessTokenSecret != "" {
+			s.settings.AccessTokenSecret = settings.AccessTokenSecret
+		}
+		if settings.AccessTokenTTL > 0 {
+			s.settings.AccessTokenTTL = settings.AccessTokenTTL
+		}
+		if settings.RefreshSessionTTL > 0 {
+			s.settings.RefreshSessionTTL = settings.RefreshSessionTTL
+		}
+		if settings.RefreshSessionIdleTTL > 0 {
+			s.settings.RefreshSessionIdleTTL = settings.RefreshSessionIdleTTL
+		}
+		if settings.Now != nil {
+			s.settings.Now = settings.Now
+		}
+	}
+}
+
+type AuthService struct {
+	store        Store
+	settings     AuthSettings
+	accessTokens *AccessTokenManager
+}
+
+func NewAuthService(store Store, opts ...AuthOption) *AuthService {
+	settings := AuthSettings{
+		AccessTokenSecret:     "test-and-development-access-token-secret-change-me",
+		AccessTokenTTL:        15 * time.Minute,
+		RefreshSessionTTL:     30 * 24 * time.Hour,
+		RefreshSessionIdleTTL: 7 * 24 * time.Hour,
+		Now:                    time.Now,
+	}
+	s := &AuthService{store: store, settings: settings}
+	for _, opt := range opts {
+		opt(s)
+	}
+	manager, err := NewAccessTokenManager(s.settings.AccessTokenSecret, s.settings.AccessTokenTTL, s.settings.Now)
+	if err == nil {
+		s.accessTokens = manager
+	}
+	return s
+}
+
+func (s *AuthService) sessionStore() (SessionStore, error) {
+	store, ok := s.store.(SessionStore)
+	if !ok {
+		return nil, errors.New("session lifecycle persistence not configured")
+	}
+	return store, nil
 }
 
 // Register creates a normal ACTIVE user with a hashed password.
@@ -120,8 +210,12 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Use
 	return s.store.CreateUser(ctx, u)
 }
 
-// Login verifies credentials and creates a new refresh session.
+// Login verifies credentials and creates a new logical refresh session.
 func (s *AuthService) Login(ctx context.Context, email, password string) (Session, error) {
+	return s.LoginWithMetadata(ctx, email, password, SessionMetadata{})
+}
+
+func (s *AuthService) LoginWithMetadata(ctx context.Context, email, password string, metadata SessionMetadata) (Session, error) {
 	normalized, err := NormalizeEmailChecked(email)
 	if err != nil {
 		return Session{}, ErrInvalidCredentials
@@ -148,11 +242,17 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (Sessio
 		return Session{}, err
 	}
 
+	now := s.settings.Now().UTC()
 	sess := Session{
+		ID:               uuid.NewString(),
 		UserID:           u.ID,
 		RefreshToken:     raw,
 		RefreshTokenHash: HashToken(raw),
-		ExpiresAt:        time.Now().Add(30 * 24 * time.Hour),
+		CreatedAt:        now,
+		LastUsedAt:       now,
+		ExpiresAt:        now.Add(s.settings.RefreshSessionTTL),
+		UserAgentSummary: strings.TrimSpace(metadata.UserAgentSummary),
+		SafeIPMetadata:   strings.TrimSpace(metadata.SafeIPMetadata),
 	}
 
 	if err := s.store.CreateSession(ctx, sess); err != nil {
@@ -162,17 +262,15 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (Sessio
 	return sess, nil
 }
 
-// RefreshSession rotates a valid refresh token and creates a new session.
+// RefreshSession atomically rotates a valid opaque refresh credential in place.
+// Once one request swaps the old hash, concurrent/replayed uses of that old token
+// can no longer match the persisted session.
 func (s *AuthService) RefreshSession(ctx context.Context, token string) (Session, error) {
-	if token == "" {
+	if strings.TrimSpace(token) == "" {
 		return Session{}, ErrUnauthenticated
 	}
-
-	current, err := s.store.GetSessionByRefreshTokenHash(ctx, HashToken(token))
+	store, err := s.sessionStore()
 	if err != nil {
-		return Session{}, ErrUnauthenticated
-	}
-	if err := s.store.RevokeSession(ctx, current.RefreshTokenHash); err != nil {
 		return Session{}, err
 	}
 
@@ -180,33 +278,118 @@ func (s *AuthService) RefreshSession(ctx context.Context, token string) (Session
 	if err != nil {
 		return Session{}, err
 	}
-	next := Session{
-		UserID:           current.UserID,
-		RefreshToken:     raw,
-		RefreshTokenHash: HashToken(raw),
-		ExpiresAt:        time.Now().Add(30 * 24 * time.Hour),
-	}
-	if err := s.store.CreateSession(ctx, next); err != nil {
+	now := s.settings.Now().UTC()
+	sess, err := store.RotateSession(ctx, HashToken(token), HashToken(raw), now, now.Add(-s.settings.RefreshSessionIdleTTL))
+	if err != nil {
+		if errors.Is(err, ErrUnauthenticated) || errors.Is(err, ErrSessionNotFound) {
+			return Session{}, ErrUnauthenticated
+		}
 		return Session{}, err
 	}
-	return next, nil
-}
 
-// ResolveUserID returns the active user associated with the refresh cookie.
-// Callers must not accept a user ID from request headers or bodies instead.
-func (s *AuthService) ResolveUserID(ctx context.Context, r *http.Request) (string, error) {
-	token, err := refreshTokenFromRequest(r)
-	if err != nil || token == "" {
-		return "", ErrUnauthenticated
+	user, err := s.store.GetUserByID(ctx, sess.UserID)
+	if err != nil || user.Status != StatusActive {
+		_ = store.RevokeSessionByID(ctx, sess.ID, sess.UserID)
+		return Session{}, ErrUnauthenticated
 	}
 
-	session, err := s.store.GetSessionByRefreshTokenHash(ctx, HashToken(token))
+	sess.RefreshToken = raw
+	return sess, nil
+}
+
+func (s *AuthService) IssueAccessToken(sess Session) (AccessToken, error) {
+	if s.accessTokens == nil {
+		return AccessToken{}, errors.New("access token manager not configured")
+	}
+	token, expiresAt, err := s.accessTokens.Issue(sess.UserID, sess.ID)
+	if err != nil {
+		return AccessToken{}, err
+	}
+	return AccessToken{Token: token, ExpiresAt: expiresAt}, nil
+}
+
+// AuthenticateRequest validates the Bearer JWT, validates/touches its bound
+// persisted session, and re-checks account state. The refresh cookie is never
+// used as the normal authorization credential for protected API traffic.
+func (s *AuthService) AuthenticateRequest(ctx context.Context, r *http.Request) (Principal, User, error) {
+	token, err := accessTokenFromRequest(r)
+	if err != nil {
+		return Principal{}, User{}, ErrUnauthenticated
+	}
+	return s.AuthenticateAccessToken(ctx, token)
+}
+
+func (s *AuthService) AuthenticateAccessToken(ctx context.Context, token string) (Principal, User, error) {
+	if s.accessTokens == nil {
+		return Principal{}, User{}, ErrUnauthenticated
+	}
+	claims, err := s.accessTokens.Parse(token)
+	if err != nil {
+		return Principal{}, User{}, ErrUnauthenticated
+	}
+	store, err := s.sessionStore()
+	if err != nil {
+		return Principal{}, User{}, ErrUnauthenticated
+	}
+
+	now := s.settings.Now().UTC()
+	sess, err := store.TouchSession(ctx, claims.SessionID, now, now.Add(-s.settings.RefreshSessionIdleTTL))
+	if err != nil || sess.UserID != claims.Subject {
+		return Principal{}, User{}, ErrUnauthenticated
+	}
+	user, err := s.store.GetUserByID(ctx, claims.Subject)
+	if err != nil || user.Status != StatusActive {
+		_ = store.RevokeSessionByID(ctx, sess.ID, sess.UserID)
+		return Principal{}, User{}, ErrUnauthenticated
+	}
+	return Principal{UserID: claims.Subject, SessionID: claims.SessionID}, user, nil
+}
+
+// ResolveUserID is the compatibility boundary used by domain handlers. It now
+// resolves exclusively from a valid Bearer access token, never a refresh cookie.
+func (s *AuthService) ResolveUserID(ctx context.Context, r *http.Request) (string, error) {
+	principal, _, err := s.AuthenticateRequest(ctx, r)
 	if err != nil {
 		return "", ErrUnauthenticated
 	}
-	user, err := s.store.GetUserByID(ctx, session.UserID)
-	if err != nil || user.Status != StatusActive {
+	return principal.UserID, nil
+}
+
+func (s *AuthService) ListSessions(ctx context.Context, principal Principal) ([]Session, error) {
+	store, err := s.sessionStore()
+	if err != nil {
+		return nil, err
+	}
+	now := s.settings.Now().UTC()
+	return store.ListActiveSessions(ctx, principal.UserID, now, now.Add(-s.settings.RefreshSessionIdleTTL))
+}
+
+func (s *AuthService) RevokeSessionByID(ctx context.Context, principal Principal, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return ErrSessionNotFound
+	}
+	store, err := s.sessionStore()
+	if err != nil {
+		return err
+	}
+	return store.RevokeSessionByID(ctx, sessionID, principal.UserID)
+}
+
+func (s *AuthService) RevokeAllSessions(ctx context.Context, userID string) error {
+	if strings.TrimSpace(userID) == "" {
+		return ErrUnauthenticated
+	}
+	return s.store.RevokeSessions(ctx, userID)
+}
+
+func accessTokenFromRequest(r *http.Request) (string, error) {
+	header := strings.TrimSpace(r.Header.Get("Authorization"))
+	if header == "" {
 		return "", ErrUnauthenticated
 	}
-	return session.UserID, nil
+	parts := strings.Fields(header)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+		return "", ErrUnauthenticated
+	}
+	return parts[1], nil
 }

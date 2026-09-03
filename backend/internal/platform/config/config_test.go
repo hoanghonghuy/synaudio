@@ -51,6 +51,9 @@ func TestLoadAllowsLocalDatabaseInDevelopment(t *testing.T) {
 	if cfg.DatabaseURL == "" {
 		t.Fatal("expected database URL to be set")
 	}
+	if cfg.AccessTokenTTL <= 0 || cfg.RefreshSessionIdleTTL <= 0 {
+		t.Fatal("expected positive authentication lifetimes")
+	}
 }
 
 func TestLoadRejectsRemoteStorageInDevelopmentByDefault(t *testing.T) {
@@ -86,6 +89,7 @@ func TestLoadRejectsMockProvidersInProduction(t *testing.T) {
 	t.Setenv("APP_PUBLIC_URL", "https://app.example.com")
 	t.Setenv("API_PUBLIC_URL", "https://api.example.com")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://app.example.com")
+	t.Setenv("ACCESS_TOKEN_SECRET", "production-test-access-token-secret-at-least-32-bytes")
 
 	_, err := config.Load()
 	if err == nil {
@@ -93,5 +97,19 @@ func TestLoadRejectsMockProvidersInProduction(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "mock") {
 		t.Fatalf("expected mock provider rejection, got %v", err)
+	}
+}
+
+func TestLoadRejectsShortAccessTokenSecret(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("DATABASE_URL", "postgres://synaudio:synaudio@localhost:5432/synaudio?sslmode=disable")
+	t.Setenv("STORAGE_PROVIDER", "minio")
+	t.Setenv("STORAGE_ENDPOINT", "http://localhost:9000")
+	t.Setenv("STORAGE_BUCKET", "synaudio")
+	t.Setenv("ACCESS_TOKEN_SECRET", "too-short")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "ACCESS_TOKEN_SECRET") {
+		t.Fatalf("expected short access token secret rejection, got %v", err)
 	}
 }

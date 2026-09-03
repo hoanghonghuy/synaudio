@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia'
-import { getCurrentUser, logout as logoutRequest } from '../api/client'
+import {
+  clearAccessToken,
+  getCurrentUser,
+  logout as logoutRequest,
+  logoutAll as logoutAllRequest,
+} from '../api/client'
 import { useListenerStore } from './listener'
 import type { AuthUser } from '../api/types'
 
@@ -23,6 +28,7 @@ export const useAuthStore = defineStore('auth', {
         await this.syncListener()
       } catch {
         this.user = null
+        clearAccessToken()
         useListenerStore().setUserID('')
       } finally {
         this.loading = false
@@ -48,12 +54,28 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async logout() {
-      await logoutRequest()
+    async clearLocalSession() {
+      clearAccessToken()
       this.user = null
       const listener = useListenerStore()
       listener.setUserID('')
       await listener.loadFavorites()
+    },
+
+    async logout() {
+      try {
+        await logoutRequest()
+      } finally {
+        await this.clearLocalSession()
+      }
+    },
+
+    async logoutAll() {
+      try {
+        await logoutAllRequest()
+      } finally {
+        await this.clearLocalSession()
+      }
     },
   },
 })

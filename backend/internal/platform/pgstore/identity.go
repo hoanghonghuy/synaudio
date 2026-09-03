@@ -3,6 +3,7 @@ package pgstore
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -61,12 +62,20 @@ func (s *IdentityStore) CreateSession(ctx context.Context, sess identity.Session
 	if id == "" {
 		id = uuid.NewString()
 	}
-	return s.q.CreateSession(ctx, db.CreateSessionParams{
+	createdAt := sess.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	_, err := s.q.CreateAuthSession(ctx, db.CreateAuthSessionParams{
 		ID:               toUUID(id),
 		UserID:           toUUID(sess.UserID),
 		RefreshTokenHash: sess.RefreshTokenHash,
+		CreatedAt:        pgtypeTimestamptz(createdAt),
 		ExpiresAt:        pgtypeTimestamptz(sess.ExpiresAt),
+		UserAgentSummary: toText(sess.UserAgentSummary),
+		SafeIpMetadata:   toText(sess.SafeIPMetadata),
 	})
+	return err
 }
 
 func (s *IdentityStore) GetSessionByRefreshTokenHash(ctx context.Context, tokenHash string) (identity.Session, error) {

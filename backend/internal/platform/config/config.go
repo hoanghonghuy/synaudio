@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -33,13 +34,45 @@ type Config struct {
 	APIPublicURL       string
 	CORSAllowedOrigins []string
 
+	AccessTokenSecret     string
+	AccessTokenTTL        time.Duration
+	RefreshSessionTTL     time.Duration
+	RefreshSessionIdleTTL time.Duration
+	RecentAuthWindow      time.Duration
+
 	AllowRemoteDatabaseInDev bool
 	AllowRemoteStorageInDev  bool
 }
 
 func Load() (Config, error) {
+	appEnv := strings.ToLower(strings.TrimSpace(getenv("APP_ENV", EnvDevelopment)))
+	accessTokenSecret := strings.TrimSpace(os.Getenv("ACCESS_TOKEN_SECRET"))
+	if accessTokenSecret == "" && appEnv == EnvDevelopment {
+		// Development remains zero-setup while production is required to supply an
+		// explicit secret. The value is intentionally environment-local, not a
+		// production default.
+		accessTokenSecret = "development-only-access-token-secret-change-me"
+	}
+
+	accessTokenTTL, err := getenvDuration("ACCESS_TOKEN_TTL", 15*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	refreshSessionTTL, err := getenvDuration("REFRESH_SESSION_TTL", 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	refreshSessionIdleTTL, err := getenvDuration("REFRESH_SESSION_IDLE_TTL", 7*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	recentAuthWindow, err := getenvDuration("RECENT_AUTH_WINDOW", 10*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
-		AppEnv:                   strings.ToLower(strings.TrimSpace(getenv("APP_ENV", EnvDevelopment))),
+		AppEnv:                   appEnv,
 		HTTPAddr:                 getenv("HTTP_ADDR", ":8080"),
 		DatabaseURL:              strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		StorageProvider:          strings.ToLower(strings.TrimSpace(getenv("STORAGE_PROVIDER", "minio"))),
@@ -56,6 +89,11 @@ func Load() (Config, error) {
 		AppPublicURL:             strings.TrimSpace(os.Getenv("APP_PUBLIC_URL")),
 		APIPublicURL:             strings.TrimSpace(os.Getenv("API_PUBLIC_URL")),
 		CORSAllowedOrigins:       splitCSV(os.Getenv("CORS_ALLOWED_ORIGINS")),
+		AccessTokenSecret:        accessTokenSecret,
+		AccessTokenTTL:           accessTokenTTL,
+		RefreshSessionTTL:        refreshSessionTTL,
+		RefreshSessionIdleTTL:    refreshSessionIdleTTL,
+		RecentAuthWindow:         recentAuthWindow,
 		AllowRemoteDatabaseInDev: getenvBool("ALLOW_REMOTE_DATABASE_IN_DEV", false),
 		AllowRemoteStorageInDev:  getenvBool("ALLOW_REMOTE_STORAGE_IN_DEV", false),
 	}
@@ -75,6 +113,22 @@ func Load() (Config, error) {
 }
 
 func (c Config) validate() error {
+	if len(c.AccessTokenSecret) < 32 {
+		return fmt.Errorf("ACCESS_TOKEN_SECRET must be at least 32 bytes")
+	}
+	if c.AccessTokenTTL <= 0 {
+		return fmt.Errorf("ACCESS_TOKEN_TTL must be positive")
+	}
+	if c.RefreshSessionTTL <= 0 {
+		return fmt.Errorf("REFRESH_SESSION_TTL must be positive")
+	}
+	if c.RefreshSessionIdleTTL <= 0 || c.RefreshSessionIdleTTL > c.RefreshSessionTTL {
+		return fmt.Errorf("REFRESH_SESSION_IDLE_TTL must be positive and no greater than REFRESH_SESSION_TTL")
+	}
+	if c.RecentAuthWindow <= 0 {
+		return fmt.Errorf("RECENT_AUTH_WINDOW must be positive")
+	}
+
 	if c.AppEnv == EnvDevelopment {
 		if isRemoteDatabaseURL(c.DatabaseURL) && !c.AllowRemoteDatabaseInDev {
 			return fmt.Errorf("remote DATABASE_URL is blocked in development; set ALLOW_REMOTE_DATABASE_IN_DEV=true to override")
@@ -158,6 +212,18 @@ func getenvBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return v
+}
+
+func getenvDuration(key string, fallback time.Duration) (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid duration: %w", key, err)
+	}
+	return value, nil
 }
 
 func splitCSV(raw string) []string {

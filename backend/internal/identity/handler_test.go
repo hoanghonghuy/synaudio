@@ -2,7 +2,6 @@ package identity_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,14 +37,11 @@ func doJSON(t *testing.T, h http.Handler, method, path string, body any) *httpte
 func TestRegisterHandlerReturnsCreated(t *testing.T) {
 	h := newTestHandler()
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email":    "  User@Example.COM ",
-		"password": "correct horse battery staple",
+		"email": "  User@Example.COM ", "password": "correct horse battery staple",
 	})
-
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-
 	var resp map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -60,264 +56,212 @@ func TestRegisterHandlerReturnsCreated(t *testing.T) {
 
 func TestRegisterHandlerRejectsDuplicate(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "a@example.com", "password": "password123",
-	})
+	registerUser(t, h, "a@example.com")
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
 		"email": "A@Example.com", "password": "password456",
 	})
-
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d", rec.Code)
 	}
 }
 
-func TestLoginHandlerSetsRefreshCookie(t *testing.T) {
+func TestLoginReturnsAccessTokenAndHttpOnlyRefreshCookie(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "user@example.com", "password": "correct password",
-	})
+	registerUser(t, h, "login@example.com")
 
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
-		"email": "user@example.com", "password": "correct password",
-	})
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	cookies := rec.Result().Cookies()
-	if len(cookies) == 0 {
-		t.Fatal("expected refresh cookie to be set")
-	}
-	var found bool
-	for _, c := range cookies {
-		if c.Name == identity.DevelopmentRefreshCookieName {
-			found = true
-			if !c.HttpOnly {
-				t.Fatal("refresh cookie must be HttpOnly")
-			}
-		}
-	}
-	if !found {
-		t.Fatalf("expected cookie %q, got %v", identity.DevelopmentRefreshCookieName, cookies)
-	}
-}
-
-func TestHTTPLoginUsesBrowserCompatibleRefreshCookie(t *testing.T) {
-	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "http-cookie@example.com", "password": "correct password",
-	})
-
-	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
-		"email": "http-cookie@example.com", "password": "correct password",
+		"email": "login@example.com", "password": "correct password",
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["access_token"] == "" || resp["token_type"] != "Bearer" {
+		t.Fatalf("expected bearer access token, got %v", resp)
+	}
 	cookies := rec.Result().Cookies()
-	if len(cookies) == 0 {
-		t.Fatal("expected refresh cookie to be set")
-	}
-	cookie := cookies[0]
-	if cookie.Name != identity.DevelopmentRefreshCookieName {
-		t.Fatalf("expected development cookie %q, got %q", identity.DevelopmentRefreshCookieName, cookie.Name)
-	}
-	if cookie.Secure {
-		t.Fatal("development HTTP cookie must not require Secure transport")
+	if len(cookies) == 0 || cookies[0].Name != identity.DevelopmentRefreshCookieName || !cookies[0].HttpOnly {
+		t.Fatalf("expected HttpOnly development refresh cookie, got %v", cookies)
 	}
 }
 
 func TestHTTPSLoginUsesSecureHostRefreshCookie(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "https-cookie@example.com", "password": "correct password",
-	})
+	registerUser(t, h, "https-cookie@example.com")
 
 	req := httptest.NewRequest(http.MethodPost, "https://example.com/api/v1/auth/login", bytes.NewBufferString(`{"email":"https-cookie@example.com","password":"correct password"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	cookies := rec.Result().Cookies()
-	if len(cookies) == 0 {
-		t.Fatal("expected refresh cookie to be set")
-	}
-	cookie := cookies[0]
-	if cookie.Name != identity.RefreshCookieName {
-		t.Fatalf("expected secure cookie %q, got %q", identity.RefreshCookieName, cookie.Name)
-	}
-	if !cookie.Secure {
-		t.Fatal("HTTPS refresh cookie must require Secure transport")
+	if len(cookies) == 0 || cookies[0].Name != identity.RefreshCookieName || !cookies[0].Secure {
+		t.Fatalf("expected secure __Host refresh cookie, got %v", cookies)
 	}
 }
 
-func TestCurrentUserHandlerReturnsAuthenticatedUser(t *testing.T) {
+func TestCurrentUserRequiresBearerNotRefreshCookie(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "current@example.com", "password": "correct password",
-	})
+	registerUser(t, h, "current@example.com")
+	sess := loginUser(t, h, "current@example.com")
 
-	login := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
-		"email": "current@example.com", "password": "correct password",
-	})
-	cookies := login.Result().Cookies()
-	if len(cookies) == 0 {
-		t.Fatal("expected login cookie")
+	cookieOnly := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	cookieOnly.AddCookie(sess.cookie)
+	cookieRec := httptest.NewRecorder()
+	h.ServeHTTP(cookieRec, cookieOnly)
+	if cookieRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected refresh-cookie-only request to be 401, got %d", cookieRec.Code)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(cookies[0])
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
+	rec := doAuthenticatedJSON(t, h, http.MethodGet, "/api/v1/auth/me", nil, sess)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var resp map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if got := resp["email"]; got != "current@example.com" {
-		t.Fatalf("expected current user email, got %v", got)
+		t.Fatalf("expected bearer access to return 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
-func TestLogoutHandlerRevokesAuthenticatedSession(t *testing.T) {
-	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "logout@example.com", "password": "correct password",
-	})
-
-	login := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
-		"email": "logout@example.com", "password": "correct password",
-	})
-	cookies := login.Result().Cookies()
-	if len(cookies) == 0 {
-		t.Fatal("expected login cookie")
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
-	req.AddCookie(cookies[0])
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(cookies[0])
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected revoked session to return 401, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestRefreshHandlerRotatesRefreshCookie(t *testing.T) {
+func TestRefreshRotatesCredentialAndRejectsReuse(t *testing.T) {
 	h := newTestHandler()
 	registerUser(t, h, "refresh@example.com")
-	cookie := loginUser(t, h, "refresh@example.com")
+	initial := loginUser(t, h, "refresh@example.com")
 
-	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/refresh", nil, cookie)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	first := refreshWithCookie(t, h, initial.cookie)
+	if first.Code != http.StatusOK {
+		t.Fatalf("refresh: expected 200, got %d: %s", first.Code, first.Body.String())
 	}
-	refreshedCookies := rec.Result().Cookies()
-	if len(refreshedCookies) == 0 || refreshedCookies[0].Value == cookie.Value {
-		t.Fatal("expected refresh token rotation")
+	cookies := first.Result().Cookies()
+	if len(cookies) == 0 || cookies[0].Value == initial.cookie.Value {
+		t.Fatal("expected rotated refresh credential")
 	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(refreshedCookies[0])
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected rotated session to remain valid, got %d: %s", rec.Code, rec.Body.String())
+	var refreshed struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &refreshed); err != nil || refreshed.AccessToken == "" {
+		t.Fatalf("expected fresh access token: %v", err)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(cookie)
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected old session to be revoked, got %d: %s", rec.Code, rec.Body.String())
+	replay := refreshWithCookie(t, h, initial.cookie)
+	if replay.Code != http.StatusUnauthorized {
+		t.Fatalf("expected old refresh credential reuse to be 401, got %d", replay.Code)
 	}
-}
 
-func TestRefreshHandlerRequiresSession(t *testing.T) {
-	h := newTestHandler()
-
-	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/refresh", nil)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	rotated := testAuthSession{cookie: cookies[0], accessToken: refreshed.AccessToken}
+	me := doAuthenticatedJSON(t, h, http.MethodGet, "/api/v1/auth/me", nil, rotated)
+	if me.Code != http.StatusOK {
+		t.Fatalf("expected fresh access token to work, got %d: %s", me.Code, me.Body.String())
 	}
 }
 
-func TestAccountDeletionRequestUsesAuthenticatedSession(t *testing.T) {
+func TestLogoutRevokesBoundAccessTokenImmediately(t *testing.T) {
 	h := newTestHandler()
+	registerUser(t, h, "logout@example.com")
+	sess := loginUser(t, h, "logout@example.com")
+
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/logout", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logout: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	me := doAuthenticatedJSON(t, h, http.MethodGet, "/api/v1/auth/me", nil, sess)
+	if me.Code != http.StatusUnauthorized {
+		t.Fatalf("expected revoked access token to be 401, got %d", me.Code)
+	}
+}
+
+func TestLogoutAllRevokesEverySession(t *testing.T) {
+	h := newTestHandler()
+	registerUser(t, h, "all@example.com")
+	first := loginUser(t, h, "all@example.com")
+	second := loginUser(t, h, "all@example.com")
+
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/logout-all", nil, first)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logout-all: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, sess := range []testAuthSession{first, second} {
+		me := doAuthenticatedJSON(t, h, http.MethodGet, "/api/v1/auth/me", nil, sess)
+		if me.Code != http.StatusUnauthorized {
+			t.Fatalf("expected all sessions revoked, got %d", me.Code)
+		}
+	}
+}
+
+func TestSessionListingAndTargetedRevocation(t *testing.T) {
+	h := newTestHandler()
+	registerUser(t, h, "sessions@example.com")
+	current := loginUser(t, h, "sessions@example.com")
+	other := loginUser(t, h, "sessions@example.com")
+
+	list := doAuthenticatedJSON(t, h, http.MethodGet, "/api/v1/auth/sessions", nil, current)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list sessions: expected 200, got %d: %s", list.Code, list.Body.String())
+	}
+	var body struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Current bool   `json:"current"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode sessions: %v", err)
+	}
+	if len(body.Items) != 2 {
+		t.Fatalf("expected two sessions, got %d", len(body.Items))
+	}
+	var otherID string
+	for _, item := range body.Items {
+		if !item.Current {
+			otherID = item.ID
+		}
+	}
+	if otherID == "" {
+		t.Fatal("expected non-current session id")
+	}
+
+	revoke := doAuthenticatedJSON(t, h, http.MethodDelete, "/api/v1/auth/sessions/"+otherID, nil, current)
+	if revoke.Code != http.StatusOK {
+		t.Fatalf("revoke session: expected 200, got %d: %s", revoke.Code, revoke.Body.String())
+	}
+	me := doAuthenticatedJSON(t, h, http.MethodGet, "/api/v1/auth/me", nil, other)
+	if me.Code != http.StatusUnauthorized {
+		t.Fatalf("expected revoked device access token to be 401, got %d", me.Code)
+	}
+}
+
+func TestAccountDeletionRequiresAndUsesBearerSession(t *testing.T) {
+	h := newTestHandler()
+	unauth := doJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/request", nil)
+	if unauth.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated deletion request to be 401, got %d", unauth.Code)
+	}
+
 	registerUser(t, h, "delete@example.com")
-	cookie := loginUser(t, h, "delete@example.com")
-
-	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/request", nil, cookie)
+	sess := loginUser(t, h, "delete@example.com")
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/request", nil, sess)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestAccountDeletionRequestRequiresSession(t *testing.T) {
-	h := newTestHandler()
-
-	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/request", nil)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestAccountDeletionCancelUsesExistingSession(t *testing.T) {
-	h := newTestHandler()
-	registerUser(t, h, "cancel-delete@example.com")
-	cookie := loginUser(t, h, "cancel-delete@example.com")
-
-	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/request", nil, cookie)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("request deletion: expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	rec = doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/account/deletion/cancel", nil, cookie)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("cancel deletion: expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	req.AddCookie(cookie)
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected restored account session to remain valid, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
 func TestLoginHandlerRejectsWrongPassword(t *testing.T) {
 	h := newTestHandler()
-	doJSON(t, h, http.MethodPost, "/api/v1/auth/register", map[string]string{
-		"email": "user@example.com", "password": "correct password",
-	})
-
+	registerUser(t, h, "wrong@example.com")
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
-		"email": "user@example.com", "password": "wrong password",
+		"email": "wrong@example.com", "password": "wrong password",
 	})
-
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rec.Code)
 	}
 }
 
-var _ = context.Background
+func refreshWithCookie(t *testing.T, h http.Handler, cookie *http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}

@@ -10,12 +10,17 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/identity"
 )
 
+type testAuthSession struct {
+	cookie      *http.Cookie
+	accessToken string
+}
+
 func TestMFASetupHandlerReturnsSecret(t *testing.T) {
 	h := newTestHandler()
 	registerUser(t, h, "user@example.com")
-	cookie := loginUser(t, h, "user@example.com")
+	sess := loginUser(t, h, "user@example.com")
 
-	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil, cookie)
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil, sess)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -33,10 +38,9 @@ func TestMFASetupHandlerReturnsSecret(t *testing.T) {
 func TestMFAConfirmHandlerReturnsRecoveryCodes(t *testing.T) {
 	h := newTestHandler()
 	registerUser(t, h, "user@example.com")
-	cookie := loginUser(t, h, "user@example.com")
+	sess := loginUser(t, h, "user@example.com")
 
-	// Setup to obtain a valid secret.
-	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil, cookie)
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil, sess)
 	var setupResp map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &setupResp)
 	secret, _ := setupResp["secret"].(string)
@@ -46,7 +50,7 @@ func TestMFAConfirmHandlerReturnsRecoveryCodes(t *testing.T) {
 
 	rec = doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/confirm", map[string]any{
 		"code": code,
-	}, cookie)
+	}, sess)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -65,12 +69,12 @@ func TestMFAConfirmHandlerReturnsRecoveryCodes(t *testing.T) {
 func TestMFAConfirmHandlerRejectsWrongCode(t *testing.T) {
 	h := newTestHandler()
 	registerUser(t, h, "user@example.com")
-	cookie := loginUser(t, h, "user@example.com")
-	doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil, cookie)
+	sess := loginUser(t, h, "user@example.com")
+	doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil, sess)
 
 	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/confirm", map[string]any{
 		"code": "000000",
-	}, cookie)
+	}, sess)
 
 	if rec.Code != http.StatusBadRequest && rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 400/401, got %d", rec.Code)
@@ -80,26 +84,26 @@ func TestMFAConfirmHandlerRejectsWrongCode(t *testing.T) {
 func TestMFADisableHandlerReturnsOK(t *testing.T) {
 	h := newTestHandler()
 	registerUser(t, h, "user@example.com")
-	cookie := loginUser(t, h, "user@example.com")
-	doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil, cookie)
+	sess := loginUser(t, h, "user@example.com")
+	doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil, sess)
 
-	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/disable", nil, cookie)
+	rec := doAuthenticatedJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/disable", nil, sess)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
-func TestMFAEndpointsRequireSession(t *testing.T) {
+func TestMFAEndpointsRequireBearerAccessToken(t *testing.T) {
 	h := newTestHandler()
 
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil)
 	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected setup without session to return 401, got %d", rec.Code)
+		t.Fatalf("expected setup without access token to return 401, got %d", rec.Code)
 	}
 }
 
-func doAuthenticatedJSON(t *testing.T, h http.Handler, method, path string, body any, cookie *http.Cookie) *httptest.ResponseRecorder {
+func doAuthenticatedJSON(t *testing.T, h http.Handler, method, path string, body any, sess testAuthSession) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
 	if body != nil {
@@ -109,13 +113,16 @@ func doAuthenticatedJSON(t *testing.T, h http.Handler, method, path string, body
 	}
 	req := httptest.NewRequest(method, path, &buf)
 	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(cookie)
+	req.Header.Set("Authorization", "Bearer "+sess.accessToken)
+	if sess.cookie != nil {
+		req.AddCookie(sess.cookie)
+	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
 }
 
-func loginUser(t *testing.T, h http.Handler, email string) *http.Cookie {
+func loginUser(t *testing.T, h http.Handler, email string) testAuthSession {
 	t.Helper()
 	rec := doJSON(t, h, http.MethodPost, "/api/v1/auth/login", map[string]string{
 		"email": email, "password": "correct password",
@@ -127,7 +134,16 @@ func loginUser(t *testing.T, h http.Handler, email string) *http.Cookie {
 	if len(cookies) == 0 {
 		t.Fatal("login: expected refresh cookie")
 	}
-	return cookies[0]
+	var resp struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if resp.AccessToken == "" {
+		t.Fatal("login: expected access token")
+	}
+	return testAuthSession{cookie: cookies[0], accessToken: resp.AccessToken}
 }
 
 func registerUser(t *testing.T, h http.Handler, email string) string {
