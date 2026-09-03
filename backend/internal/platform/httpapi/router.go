@@ -17,21 +17,22 @@ import (
 var ErrDependencyUnavailable = errors.New("dependency unavailable")
 
 type Dependencies struct {
-	ReadyCheck            func() error
-	DependencyChecks      map[string]func() error
-	Logger                *slog.Logger
-	AdminCheck            func(context.Context, *http.Request) (bool, error)
-	AdminActor            func(context.Context, *http.Request) (string, error)
-	AuditRecord           audit.RecordFunc
-	AuthHandler           http.Handler
-	AuditHandler          http.Handler
-	StoryHandler          http.Handler
-	StoryReadinessHandler http.Handler
-	PlanningHandler       http.Handler
-	GenerationHandler     http.Handler
-	AudioHandler          http.Handler
-	ListenerHandler       http.Handler
-	RetconHandler         http.Handler
+	ReadyCheck              func() error
+	DependencyChecks        map[string]func() error
+	Logger                  *slog.Logger
+	AdminCheck              func(context.Context, *http.Request) (bool, error)
+	AdminActor              func(context.Context, *http.Request) (string, error)
+	AuditRecord             audit.RecordFunc
+	AuthHandler             http.Handler
+	AuditHandler            http.Handler
+	StoryHandler            http.Handler
+	StoryReadinessHandler   http.Handler
+	PlanningHandler         http.Handler
+	PlanningWorkspaceHandler http.Handler
+	GenerationHandler       http.Handler
+	AudioHandler            http.Handler
+	ListenerHandler         http.Handler
+	RetconHandler           http.Handler
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -95,6 +96,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		deps.StoryHandler,
 		deps.StoryReadinessHandler,
 		deps.PlanningHandler,
+		deps.PlanningWorkspaceHandler,
 		deps.GenerationHandler,
 		deps.AudioHandler,
 		deps.ListenerHandler,
