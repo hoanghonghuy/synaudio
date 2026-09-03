@@ -114,8 +114,18 @@ func (s *AuthService) GrantAdmin(ctx context.Context, actorID, targetID string) 
 	return s.store.GrantRole(ctx, targetID, RoleAdmin)
 }
 
-// RevokeAdmin removes the ADMIN role from the target user, enforcing the
-// Last Active Admin Guard.
+// AdminRoleGuardStore is the persistence boundary for role revocation that
+// must not race the Last Active Admin invariant. Implementations must serialize
+// competing privileged transitions and perform the active-admin check and role
+// removal in one transaction.
+type AdminRoleGuardStore interface {
+	RevokeAdminRoleSafely(ctx context.Context, targetID string) error
+}
+
+// RevokeAdmin removes the ADMIN role from the target user. The Last Active
+// Admin decision is deliberately delegated to one atomic persistence operation;
+// a read-count followed by a separate delete can let concurrent requests both
+// observe two admins and revoke both.
 func (s *AuthService) RevokeAdmin(ctx context.Context, actorID, targetID string) error {
 	if ok, err := s.Authorize(ctx, actorID, PermAdminRoleRevoke); err != nil {
 		return err
@@ -123,13 +133,9 @@ func (s *AuthService) RevokeAdmin(ctx context.Context, actorID, targetID string)
 		return ErrForbidden
 	}
 
-	count, err := s.store.CountActiveAdmins(ctx)
-	if err != nil {
-		return err
+	guardStore, ok := s.store.(AdminRoleGuardStore)
+	if !ok {
+		return errors.New("atomic last-admin guard persistence not configured")
 	}
-	if count <= 1 {
-		return ErrLastAdmin
-	}
-
-	return s.store.RevokeRole(ctx, targetID, RoleAdmin)
+	return guardStore.RevokeAdminRoleSafely(ctx, targetID)
 }
