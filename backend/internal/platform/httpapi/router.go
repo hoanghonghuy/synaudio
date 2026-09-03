@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/synaudio/synaudio/backend/internal/audit"
 )
 
 var ErrDependencyUnavailable = errors.New("dependency unavailable")
@@ -20,7 +22,9 @@ type Dependencies struct {
 	Logger            *slog.Logger
 	AdminCheck        func(context.Context, *http.Request) (bool, error)
 	AdminActor        func(context.Context, *http.Request) (string, error)
+	AuditRecord       audit.RecordFunc
 	AuthHandler       http.Handler
+	AuditHandler      http.Handler
 	StoryHandler      http.Handler
 	PlanningHandler   http.Handler
 	GenerationHandler http.Handler
@@ -80,11 +84,13 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	if deps.AuthHandler != nil {
-		r.Mount("/api/v1/auth", deps.AuthHandler)
+		authHandler := audit.WrapAuth(deps.AuthHandler, deps.AuditRecord, deps.AdminActor)
+		r.Mount("/api/v1/auth", authHandler)
 	}
 
 	api := chi.NewRouter()
 	for _, h := range []http.Handler{
+		deps.AuditHandler,
 		deps.StoryHandler,
 		deps.PlanningHandler,
 		deps.GenerationHandler,
@@ -95,7 +101,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		if h == nil {
 			continue
 		}
-		mountRoutes(api, h, deps.AdminCheck, deps.AdminActor)
+		mountRoutes(api, h, deps.AdminCheck, deps.AdminActor, deps.AuditRecord)
 	}
 	r.Mount("/api/v1", api)
 
@@ -111,6 +117,7 @@ func mountRoutes(
 	src http.Handler,
 	adminCheck func(context.Context, *http.Request) (bool, error),
 	adminActor func(context.Context, *http.Request) (string, error),
+	auditRecord audit.RecordFunc,
 ) {
 	routes, ok := src.(chi.Routes)
 	if !ok {
@@ -120,6 +127,9 @@ func mountRoutes(
 		if strings.HasPrefix(route, "/admin/") {
 			handler = requireAdmin(adminCheck, adminActor)(handler)
 		}
+		// Audit wraps authorization too, so denied security-sensitive mutations
+		// are recorded as DENIED instead of disappearing before the audit layer.
+		handler = audit.WrapRoute(handler, method, route, auditRecord, adminActor)
 		dst.Method(method, route, handler)
 		return nil
 	})

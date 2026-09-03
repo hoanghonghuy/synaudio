@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/synaudio/synaudio/backend/internal/audit"
 	"github.com/synaudio/synaudio/backend/internal/generation"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
@@ -46,13 +47,48 @@ func main() {
 	queries := db.New(pool)
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
+	auditService := audit.NewService(pgstore.NewAuditStore(queries))
 
 	workerID := os.Getenv("WORKER_ID")
 	if workerID == "" {
 		workerID = "worker-1"
 	}
 
-	worker := generation.NewWorker(generationService, workerID, processJob(generationService, log))
+	jobAudit := func(ctx context.Context, event generation.JobAuditEvent) error {
+		actorType := audit.ActorSystem
+		if event.Job.JobType == "WRITER" {
+			actorType = audit.ActorAI
+		}
+		result := audit.ResultSucceeded
+		if event.Outcome == "FAILED" {
+			result = audit.ResultFailed
+		}
+		_, err := auditService.Record(ctx, audit.Event{
+			ActorType:       actorType,
+			Action:          "GENERATION_JOB_" + event.Outcome,
+			ResourceType:    "GENERATION_JOB",
+			ResourceID:      event.Job.ID,
+			Result:          result,
+			GenerationRunID: event.Job.RunID,
+			Provenance: map[string]any{
+				"attempt_id": event.AttemptID,
+				"job_type":   event.Job.JobType,
+			},
+			Metadata: map[string]any{
+				"worker_id":   workerID,
+				"error_class": event.ErrorClass,
+				"error_code":  event.ErrorCode,
+			},
+		})
+		return err
+	}
+
+	worker := generation.NewWorker(
+		generationService,
+		workerID,
+		processJob(generationService, log),
+		generation.WithJobAudit(jobAudit),
+	)
 
 	log.Info("worker started", "env", cfg.AppEnv, "worker_id", workerID)
 
