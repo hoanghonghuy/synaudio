@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/synaudio/synaudio/backend/internal/audio"
+	"github.com/synaudio/synaudio/backend/internal/audit"
 	"github.com/synaudio/synaudio/backend/internal/generation"
 	"github.com/synaudio/synaudio/backend/internal/identity"
 	"github.com/synaudio/synaudio/backend/internal/listener"
@@ -66,6 +67,10 @@ func main() {
 		RefreshSessionIdleTTL: cfg.RefreshSessionIdleTTL,
 	}))
 	authHandler := identity.NewAuthHandler(authService)
+
+	auditStore := pgstore.NewAuditStore(queries)
+	auditService := audit.NewService(auditStore)
+	auditHandler := audit.NewHandler(auditService)
 
 	storyStore := pgstore.NewStoryStore(queries)
 	objStorage, err := storage.NewMinIO(cfg)
@@ -130,7 +135,9 @@ func main() {
 		Logger:            log,
 		AdminCheck:        authService.ResolveAdmin,
 		AdminActor:        authService.ResolveUserID,
+		AuditRecord:       auditService.Record,
 		AuthHandler:       authHandler,
+		AuditHandler:      auditHandler,
 		StoryHandler:      storyHandler,
 		PlanningHandler:   planningHandler,
 		GenerationHandler: generationHandler,
