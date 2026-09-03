@@ -4,26 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/synaudio/synaudio/backend/internal/identity"
 )
 
 // ReplaceMFARecoveryCodes persists only hashes and invalidates all previous
 // recovery credentials for the user. Plaintext codes never cross this adapter.
 func (s *IdentityStore) ReplaceMFARecoveryCodes(ctx context.Context, userID string, codeHashes []string) error {
-	beginner, ok := s.q.DBTX().(interface {
-		Begin(context.Context) (interface {
-			Exec(context.Context, string, ...interface{}) (interface{}, error)
-			Commit(context.Context) error
-			Rollback(context.Context) error
-		}, error)
-	})
-	_ = beginner
-	_ = ok
-
-	// A single data-modifying CTE keeps replacement atomic without requiring
-	// callers to coordinate transaction ownership with sqlc.
 	args := make([]interface{}, 0, len(codeHashes)+1)
 	args = append(args, toUUID(userID))
 	values := ""
@@ -31,7 +17,7 @@ func (s *IdentityStore) ReplaceMFARecoveryCodes(ctx context.Context, userID stri
 		if i > 0 {
 			values += ","
 		}
-		values += "($1,$" + itoa(i+2) + ")"
+		values += "($1,$" + decimal(i+2) + ")"
 		args = append(args, hash)
 	}
 	if values == "" {
@@ -43,7 +29,7 @@ WITH removed AS (
     DELETE FROM user_mfa_recovery_codes WHERE user_id = $1
 )
 INSERT INTO user_mfa_recovery_codes (id, user_id, code_hash)
-SELECT gen_random_uuid(), v.user_id, v.code_hash
+SELECT gen_random_uuid(), v.user_id::uuid, v.code_hash
 FROM (VALUES `+values+`) AS v(user_id, code_hash)
 `, args...)
 	return err
@@ -128,7 +114,7 @@ SELECT EXISTS (
 	return allowed, err
 }
 
-func itoa(value int) string {
+func decimal(value int) string {
 	if value == 0 {
 		return "0"
 	}
@@ -141,5 +127,3 @@ func itoa(value int) string {
 	}
 	return string(buf[i:])
 }
-
-var _ = uuid.Nil
