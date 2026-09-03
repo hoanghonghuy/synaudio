@@ -29,6 +29,7 @@ import {
   updateStoryWorkflowSettings,
   uploadStoryCover,
 } from '../../api/client'
+import { isExplicitNotFound } from '../../api/http-error'
 import type {
   ActivationReadiness,
   EndingPlanVersion,
@@ -53,6 +54,7 @@ const characters = ref<PlanningCharacter[]>([])
 const contentProfile = ref<StoryContentProfile | null>(null)
 const readiness = ref<ActivationReadiness | null>(null)
 const workflowLoaded = ref(false)
+const planningTruthLoaded = ref(false)
 
 const loading = ref(false)
 const mutating = ref(false)
@@ -95,8 +97,11 @@ const planDraft = reactive({ chapter_id: '', plan: '{}' })
 const unresolvedDecisions = computed(() =>
   decisions.value.filter((item) => item.Status !== 'SELECTED' && item.Status !== 'REJECTED'),
 )
-const canActivate = computed(() => story.value?.status === 'DRAFT' && readiness.value?.ready === true)
+const canActivate = computed(() =>
+  planningTruthLoaded.value && story.value?.status === 'DRAFT' && readiness.value?.ready === true,
+)
 const canMakePublic = computed(() =>
+  planningTruthLoaded.value &&
   story.value?.visibility === 'PRIVATE' &&
   (story.value?.status === 'ACTIVE' || story.value?.status === 'COMPLETED'),
 )
@@ -162,16 +167,18 @@ function syncProfile(value: StoryContentProfile | null) {
   profileDraft.constraints = asJSON(profile.constraints)
 }
 
-async function optional<T>(promise: Promise<T>): Promise<T | null> {
+async function optionalNotFound<T>(promise: Promise<T>): Promise<T | null> {
   try {
     return await promise
-  } catch {
-    return null
+  } catch (e) {
+    if (isExplicitNotFound(e)) return null
+    throw e
   }
 }
 
 async function loadWorkspace() {
   loading.value = true
+  planningTruthLoaded.value = false
   error.value = ''
   try {
     const [storyList, chapterList, decisionList, arcList, characterList, ready] = await Promise.all([
@@ -198,10 +205,10 @@ async function loadWorkspace() {
     metadata.description = story.value.description
 
     const [workflow, currentProfile, currentBible, currentEnding] = await Promise.all([
-      optional(getStoryWorkflowSettings(storyID.value)),
-      optional(getStoryContentProfile(storyID.value)),
-      optional(getStoryBible(storyID.value)),
-      optional(getStoryEnding(storyID.value)),
+      optionalNotFound(getStoryWorkflowSettings(storyID.value)),
+      optionalNotFound(getStoryContentProfile(storyID.value)),
+      optionalNotFound(getStoryBible(storyID.value)),
+      optionalNotFound(getStoryEnding(storyID.value)),
     ])
     syncSettings(workflow)
     syncProfile(currentProfile)
@@ -209,6 +216,7 @@ async function loadWorkspace() {
     ending.value = currentEnding
     if (currentBible) bibleDraft.value = asJSON(currentBible.Content)
     if (currentEnding) endingDraft.value = asJSON(currentEnding.Content)
+    planningTruthLoaded.value = true
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Không thể tải Planning Studio.'
   } finally {
@@ -217,6 +225,10 @@ async function loadWorkspace() {
 }
 
 async function runMutation(message: string, action: () => Promise<unknown>) {
+  if (!planningTruthLoaded.value) {
+    error.value = 'Planning truth chưa được tải đầy đủ. Hãy tải lại workspace trước khi thay đổi dữ liệu.'
+    return
+  }
   mutating.value = true
   error.value = ''
   notice.value = ''
@@ -359,7 +371,10 @@ onMounted(loadWorkspace)
 
     <template v-else-if="story">
       <p v-if="notice" class="status-state" role="status">{{ notice }}</p>
-      <p v-if="error" class="status-state error" role="alert">{{ error }}</p>
+      <div v-if="error" class="status-state error" role="alert">
+        <p>{{ error }}</p>
+        <button v-if="!planningTruthLoaded" type="button" class="secondary-link" @click="loadWorkspace">Tải lại authoritative state</button>
+      </div>
 
       <div class="admin-workspace">
         <section class="admin-list-panel">
@@ -376,10 +391,10 @@ onMounted(loadWorkspace)
           </dl>
           <div class="action-row">
             <button type="button" :disabled="mutating || !canActivate" @click="runMutation('Story đã ACTIVE.', () => activateStory(storyID))">Activate</button>
-            <button v-if="story.status !== 'ARCHIVED'" type="button" class="secondary-link" :disabled="mutating" @click="confirmAndRun('Archive Story này?', 'Story đã được archive.', () => archiveStory(storyID))">Archive</button>
-            <button v-else type="button" class="secondary-link" :disabled="mutating" @click="confirmAndRun('Restore Story này?', 'Story đã được restore.', () => restoreStory(storyID))">Restore</button>
+            <button v-if="story.status !== 'ARCHIVED'" type="button" class="secondary-link" :disabled="mutating || !planningTruthLoaded" @click="confirmAndRun('Archive Story này?', 'Story đã được archive.', () => archiveStory(storyID))">Archive</button>
+            <button v-else type="button" class="secondary-link" :disabled="mutating || !planningTruthLoaded" @click="confirmAndRun('Restore Story này?', 'Story đã được restore.', () => restoreStory(storyID))">Restore</button>
             <button v-if="story.visibility === 'PRIVATE'" type="button" class="secondary-link" :disabled="mutating || !canMakePublic" @click="confirmAndRun('Đưa Story ra PUBLIC?', 'Story đã PUBLIC.', () => makeStoryPublic(storyID))">Make public</button>
-            <button v-else type="button" class="secondary-link" :disabled="mutating" @click="confirmAndRun('Chuyển Story về PRIVATE?', 'Story đã PRIVATE.', () => makeStoryPrivate(storyID))">Make private</button>
+            <button v-else type="button" class="secondary-link" :disabled="mutating || !planningTruthLoaded" @click="confirmAndRun('Chuyển Story về PRIVATE?', 'Story đã PRIVATE.', () => makeStoryPrivate(storyID))">Make private</button>
           </div>
         </section>
 
@@ -400,11 +415,11 @@ onMounted(loadWorkspace)
         <form class="planning-form" @submit.prevent="saveMetadata">
           <label>Title<input v-model="metadata.title" type="text" required></label>
           <label class="full-field">Description<textarea v-model="metadata.description" rows="4"></textarea></label>
-          <div class="full-field"><button type="submit" :disabled="mutating">Lưu metadata</button></div>
+          <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Lưu metadata</button></div>
         </form>
         <div class="cover-form">
           <input type="file" accept="image/jpeg,image/png,image/webp" @change="chooseCover">
-          <button type="button" :disabled="mutating || !coverFile" @click="uploadCover">Upload cover</button>
+          <button type="button" :disabled="mutating || !planningTruthLoaded || !coverFile" @click="uploadCover">Upload cover</button>
         </div>
       </section>
 
@@ -433,7 +448,7 @@ onMounted(loadWorkspace)
           <label class="check-field"><input v-model="settings.pause_before_tts" type="checkbox"> Pause before TTS</label>
           <label class="check-field"><input v-model="settings.auto_ai_review" type="checkbox"> Auto AI review</label>
           <label class="full-field">Fallback Policy (JSON)<textarea v-model="fallbackPolicyJSON" rows="5" spellcheck="false"></textarea></label>
-          <div class="full-field"><button type="submit" :disabled="mutating">Lưu Workflow Settings</button></div>
+          <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Lưu Workflow Settings</button></div>
         </form>
       </section>
 
@@ -447,7 +462,7 @@ onMounted(loadWorkspace)
           <label>Language limits<input v-model="profileDraft.language_limits" type="text"></label>
           <label>Romance limits<input v-model="profileDraft.romance_limits" type="text"></label>
           <label class="full-field">Constraints (JSON)<textarea v-model="profileDraft.constraints" rows="5" spellcheck="false"></textarea></label>
-          <div class="full-field"><button type="submit" :disabled="mutating">Tạo Content Profile version</button></div>
+          <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Content Profile version</button></div>
         </form>
       </section>
 
@@ -455,19 +470,19 @@ onMounted(loadWorkspace)
         <div class="section-heading"><div><p class="eyebrow">Planning foundation</p><h2>Bible · Ending · Arcs · Characters</h2><p class="muted">Có thể generate foundation hoặc tạo version/entity có chủ đích; history không bị overwrite.</p></div></div>
         <form class="foundation-form" @submit.prevent="generateFoundation">
           <label>Premise<textarea v-model="premise" rows="4" placeholder="Premise cho Story Architect"></textarea></label>
-          <button type="submit" :disabled="mutating || !premise.trim()">Generate foundation</button>
+          <button type="submit" :disabled="mutating || !planningTruthLoaded || !premise.trim()">Generate foundation</button>
         </form>
 
         <div class="admin-workspace artifact-grid">
           <article class="artifact-card">
             <div class="section-heading"><h3>Story Bible</h3><span class="badge">v{{ bible?.VersionNo ?? 0 }}</span></div>
             <textarea v-model="bibleDraft" rows="12" spellcheck="false"></textarea>
-            <button type="button" :disabled="mutating" @click="saveBibleVersion">Tạo Bible version mới</button>
+            <button type="button" :disabled="mutating || !planningTruthLoaded" @click="saveBibleVersion">Tạo Bible version mới</button>
           </article>
           <article class="artifact-card">
             <div class="section-heading"><h3>Ending Plan</h3><span class="badge">v{{ ending?.VersionNo ?? 0 }}</span></div>
             <textarea v-model="endingDraft" rows="12" spellcheck="false"></textarea>
-            <button type="button" :disabled="mutating" @click="saveEndingVersion">Tạo Ending version mới</button>
+            <button type="button" :disabled="mutating || !planningTruthLoaded" @click="saveEndingVersion">Tạo Ending version mới</button>
           </article>
         </div>
 
@@ -475,7 +490,7 @@ onMounted(loadWorkspace)
           <h3>Story Arcs</h3>
           <form class="inline-json-form" @submit.prevent="addArc">
             <textarea v-model="arcDraft" rows="4" spellcheck="false" placeholder="Arc content JSON"></textarea>
-            <button type="submit" :disabled="mutating">Tạo Arc</button>
+            <button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Arc</button>
           </form>
           <div class="story-table-wrap"><table class="story-table"><thead><tr><th>Arc</th><th>Status</th><th>Current version</th></tr></thead><tbody>
             <tr v-for="arc in arcs" :key="arc.ID"><th scope="row">Arc {{ arc.Ordinal }}</th><td>{{ arc.Status }}</td><td>{{ arc.CurrentVersionID || '—' }}</td></tr>
@@ -489,7 +504,7 @@ onMounted(loadWorkspace)
             <label>Name<input v-model="characterDraft.name" type="text" required></label>
             <label>Importance<input v-model="characterDraft.importance" type="text" required></label>
             <label class="full-field">Profile JSON<textarea v-model="characterDraft.profile" rows="5" spellcheck="false"></textarea></label>
-            <div class="full-field"><button type="submit" :disabled="mutating">Tạo Character</button></div>
+            <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Character</button></div>
           </form>
           <div class="story-table-wrap"><table class="story-table"><thead><tr><th>Character</th><th>Importance</th><th>Current profile</th></tr></thead><tbody>
             <tr v-for="character in characters" :key="character.ID"><th scope="row">{{ character.CanonicalName }}</th><td>{{ character.Importance }}</td><td>{{ character.CurrentProfileVersionID || '—' }}</td></tr>
@@ -501,8 +516,8 @@ onMounted(loadWorkspace)
       <section class="admin-list-panel">
         <div class="section-heading"><div><p class="eyebrow">Versioned chapter planning</p><h2>Chapter Plans</h2><p class="muted">Tạo Chapter hoặc revision mới; không destructive edit lịch sử.</p></div><span class="count-label">{{ chapters.length }}</span></div>
         <div class="admin-workspace artifact-grid">
-          <form class="artifact-card" @submit.prevent="addChapter"><h3>Tạo Chapter</h3><label>Title<input v-model="chapterTitle" type="text" required></label><button type="submit" :disabled="mutating">Tạo Chapter</button></form>
-          <form class="artifact-card" @submit.prevent="addPlanRevision"><h3>Tạo Plan revision</h3><label>Chapter<select v-model="planDraft.chapter_id" required><option value="" disabled>Chọn chapter</option><option v-for="chapter in chapters" :key="chapter.ID" :value="chapter.ID">#{{ chapter.ChapterNumber }} — {{ chapter.Title }}</option></select></label><label>Plan JSON<textarea v-model="planDraft.plan" rows="6" spellcheck="false"></textarea></label><button type="submit" :disabled="mutating">Tạo revision</button></form>
+          <form class="artifact-card" @submit.prevent="addChapter"><h3>Tạo Chapter</h3><label>Title<input v-model="chapterTitle" type="text" required></label><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Chapter</button></form>
+          <form class="artifact-card" @submit.prevent="addPlanRevision"><h3>Tạo Plan revision</h3><label>Chapter<select v-model="planDraft.chapter_id" required><option value="" disabled>Chọn chapter</option><option v-for="chapter in chapters" :key="chapter.ID" :value="chapter.ID">#{{ chapter.ChapterNumber }} — {{ chapter.Title }}</option></select></label><label>Plan JSON<textarea v-model="planDraft.plan" rows="6" spellcheck="false"></textarea></label><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo revision</button></form>
         </div>
         <div class="story-table-wrap"><table class="story-table"><thead><tr><th>Chapter</th><th>Status</th><th>Arc</th><th>Current plan</th></tr></thead><tbody>
           <tr v-for="chapter in chapters" :key="chapter.ID"><th scope="row">#{{ chapter.ChapterNumber }} — {{ chapter.Title }}</th><td><span class="badge">{{ chapter.Status }}</span></td><td>{{ chapter.ArcID || '—' }}</td><td>{{ chapter.CurrentPlanRevisionID || '—' }}</td></tr>
