@@ -16,6 +16,7 @@ import type {
   CreativeDecisionListResponse,
   FavoriteListResponse,
   GenreListResponse,
+  ListenerLibrary,
   ListeningProgress,
   Story,
   StoryListResponse,
@@ -401,6 +402,10 @@ export function getChapterContent(chapterID: string): Promise<ChapterContent> {
 
 export function getAudioURL(chapterID: string): Promise<AudioURLResponse> {
   return request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`)
+}
+
+export function getListenerLibrary(): Promise<ListenerLibrary> {
+  return request<ListenerLibrary>('/me/library')
 }
 
 export function listFavorites(): Promise<FavoriteListResponse> {
