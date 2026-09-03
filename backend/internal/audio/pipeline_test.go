@@ -7,7 +7,12 @@ import (
 
 func TestSynthesizeNarrationProducesAudioAsset(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, WithTTS(NewMockTTS()), WithObjectStorage(newFakeObjectStorage()))
+	svc := NewService(
+		store,
+		WithTTS(NewMockTTS()),
+		WithObjectStorage(newFakeObjectStorage()),
+		WithAudioProcessor(NewMockAudioProcessor()),
+	)
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "First sentence. Second sentence.", "u1")
 
