@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -39,9 +40,13 @@ func (s *fakeObjectStorage) Get(_ context.Context, key string) ([]byte, error) {
 type recordingProcessor struct {
 	segments [][]byte
 	output   []byte
+	err      error
 }
 
 func (p *recordingProcessor) Process(_ context.Context, in ProcessInput) (ProcessOutput, error) {
+	if p.err != nil {
+		return ProcessOutput{}, p.err
+	}
 	p.segments = make([][]byte, len(in.Segments))
 	total := 0
 	for i, seg := range in.Segments {
@@ -101,6 +106,24 @@ func TestSynthesizeSegmentStorageFailureDoesNotMarkSuccess(t *testing.T) {
 	}
 }
 
+func TestSynthesizeNarrationWithoutProcessorFailsClosed(t *testing.T) {
+	objects := newFakeObjectStorage()
+	store := newFakeStore()
+	svc := NewService(store, WithTTS(NewMockTTS()), WithObjectStorage(objects))
+
+	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello.", "u1")
+	_, err := svc.SynthesizeNarration(context.Background(), nar.ID)
+	if err == nil || !strings.Contains(err.Error(), "audio processor not configured") {
+		t.Fatalf("expected fail-closed processor error, got %v", err)
+	}
+	if len(store.assets["c1"]) != 0 {
+		t.Fatal("READY asset must not be created without an explicitly configured processor")
+	}
+	if len(objects.objects) != 0 {
+		t.Fatal("pipeline must reject missing processor before staging or final audio side effects")
+	}
+}
+
 func TestSynthesizeNarrationUsesStagedBytesAndPersistsFinalBeforeReady(t *testing.T) {
 	objects := newFakeObjectStorage()
 	store := &storageAwareStore{fakeStore: newFakeStore(), storage: objects}
@@ -126,6 +149,30 @@ func TestSynthesizeNarrationUsesStagedBytesAndPersistsFinalBeforeReady(t *testin
 	}
 	if got := objects.objects[asset.StorageKey]; !bytes.Equal(got, []byte("FINAL-AUDIO")) {
 		t.Fatalf("expected final bytes persisted before READY metadata, got %q", got)
+	}
+}
+
+func TestSynthesizeNarrationProcessorFailurePreventsReadyAsset(t *testing.T) {
+	objects := newFakeObjectStorage()
+	store := newFakeStore()
+	processor := &recordingProcessor{err: errors.New("ffmpeg execution failed")}
+	svc := NewService(store,
+		WithTTS(NewMockTTS()),
+		WithObjectStorage(objects),
+		WithAudioProcessor(processor),
+	)
+
+	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello.", "u1")
+	if _, err := svc.SynthesizeNarration(context.Background(), nar.ID); err == nil || !strings.Contains(err.Error(), "process audio") {
+		t.Fatalf("expected processor failure, got %v", err)
+	}
+	if len(store.assets["c1"]) != 0 {
+		t.Fatal("READY asset must not be created when processor fails")
+	}
+	for key := range objects.objects {
+		if strings.Contains(key, "/audio/") {
+			t.Fatalf("final audio object %q must not exist after processor failure", key)
+		}
 	}
 }
 
