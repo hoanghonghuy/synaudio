@@ -3,7 +3,10 @@ package identity
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -25,7 +28,10 @@ func NewAuthHandler(svc *AuthService) http.Handler {
 	r.Post("/login", h.login)
 	r.Get("/me", h.me)
 	r.Post("/logout", h.logout)
+	r.Post("/logout-all", h.logoutAll)
 	r.Post("/refresh", h.refresh)
+	r.Get("/sessions", h.listSessions)
+	r.Delete("/sessions/{sessionID}", h.revokeSession)
 	r.Post("/email/verify", h.emailVerify)
 	r.Post("/email/resend", h.emailResend)
 	r.Post("/password/forgot", h.passwordForgot)
@@ -47,6 +53,13 @@ type userResponse struct {
 	ID     string `json:"id"`
 	Email  string `json:"email"`
 	Status string `json:"status"`
+}
+
+type tokenResponse struct {
+	Status      string `json:"status"`
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int64  `json:"expires_in"`
 }
 
 func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +103,10 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess, err := h.svc.Login(r.Context(), req.Email, req.Password)
+	sess, err := h.svc.LoginWithMetadata(r.Context(), req.Email, req.Password, SessionMetadata{
+		UserAgentSummary: summarizeUserAgent(r.UserAgent()),
+		SafeIPMetadata:   safeIPMetadata(r.RemoteAddr),
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAccountSuspended):
@@ -103,22 +119,25 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	access, err := h.svc.IssueAccessToken(sess)
+	if err != nil {
+		_ = h.svc.store.RevokeSession(r.Context(), sess.RefreshTokenHash)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
 	setRefreshCookie(w, r, sess)
-
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status": "ok",
-	})
+	writeTokenResponse(w, http.StatusOK, "ok", access)
 }
 
 func (h *AuthHandler) me(w http.ResponseWriter, r *http.Request) {
-	sess, user, err := h.authenticatedUser(r)
+	principal, user, err := h.authenticatedUser(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
 		return
 	}
-	roles, _ := h.svc.store.GetUserRoles(r.Context(), sess.UserID)
+	roles, _ := h.svc.store.GetUserRoles(r.Context(), principal.UserID)
 	mfaEnabled := false
-	if method, err := h.svc.store.GetMFAMethod(r.Context(), sess.UserID); err == nil {
+	if method, err := h.svc.store.GetMFAMethod(r.Context(), principal.UserID); err == nil {
 		mfaEnabled = method.Confirmed && !method.Disabled
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -129,16 +148,30 @@ func (h *AuthHandler) me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
-	token, err := refreshTokenFromRequest(r)
-	if err == nil {
-		if err := h.svc.store.RevokeSession(r.Context(), HashToken(token)); err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
-			return
-		}
+	if principal, _, err := h.svc.AuthenticateRequest(r.Context(), r); err == nil {
+		_ = h.svc.RevokeSessionByID(r.Context(), principal, principal.SessionID)
+	} else if token, cookieErr := refreshTokenFromRequest(r); cookieErr == nil {
+		// Logout remains safe when the short-lived access token has already expired:
+		// the refresh credential can revoke itself but is never accepted as normal
+		// application authorization.
+		_ = h.svc.store.RevokeSession(r.Context(), HashToken(token))
 	}
-	clearRefreshCookie(w, RefreshCookieName)
-	clearRefreshCookie(w, DevelopmentRefreshCookieName)
+	clearRefreshCookies(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
+}
+
+func (h *AuthHandler) logoutAll(w http.ResponseWriter, r *http.Request) {
+	principal, _, err := h.authenticatedUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+	if err := h.svc.RevokeAllSessions(r.Context(), principal.UserID); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+	clearRefreshCookies(w)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out_all"})
 }
 
 func (h *AuthHandler) refresh(w http.ResponseWriter, r *http.Request) {
@@ -150,12 +183,75 @@ func (h *AuthHandler) refresh(w http.ResponseWriter, r *http.Request) {
 
 	sess, err := h.svc.RefreshSession(r.Context(), token)
 	if err != nil {
+		clearRefreshCookies(w)
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+	access, err := h.svc.IssueAccessToken(sess)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
 	}
 
 	setRefreshCookie(w, r, sess)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "refreshed"})
+	writeTokenResponse(w, http.StatusOK, "refreshed", access)
+}
+
+type sessionResponse struct {
+	ID               string `json:"id"`
+	Current          bool   `json:"current"`
+	CreatedAt        string `json:"created_at"`
+	LastUsedAt       string `json:"last_used_at"`
+	ExpiresAt        string `json:"expires_at"`
+	UserAgentSummary string `json:"user_agent_summary,omitempty"`
+	SafeIPMetadata   string `json:"safe_ip_metadata,omitempty"`
+}
+
+func (h *AuthHandler) listSessions(w http.ResponseWriter, r *http.Request) {
+	principal, _, err := h.authenticatedUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+	sessions, err := h.svc.ListSessions(r.Context(), principal)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+	items := make([]sessionResponse, 0, len(sessions))
+	for _, sess := range sessions {
+		items = append(items, sessionResponse{
+			ID:               sess.ID,
+			Current:          sess.ID == principal.SessionID,
+			CreatedAt:        formatSessionTime(sess.CreatedAt),
+			LastUsedAt:       formatSessionTime(sess.LastUsedAt),
+			ExpiresAt:        formatSessionTime(sess.ExpiresAt),
+			UserAgentSummary: sess.UserAgentSummary,
+			SafeIPMetadata:   sess.SafeIPMetadata,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *AuthHandler) revokeSession(w http.ResponseWriter, r *http.Request) {
+	principal, _, err := h.authenticatedUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+	sessionID := chi.URLParam(r, "sessionID")
+	if err := h.svc.RevokeSessionByID(r.Context(), principal, sessionID); err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			writeError(w, http.StatusNotFound, "SESSION_NOT_FOUND", "session not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+	if sessionID == principal.SessionID {
+		clearRefreshCookies(w)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
 func setRefreshCookie(w http.ResponseWriter, r *http.Request, sess Session) {
@@ -175,6 +271,11 @@ func setRefreshCookie(w http.ResponseWriter, r *http.Request, sess Session) {
 	})
 }
 
+func clearRefreshCookies(w http.ResponseWriter) {
+	clearRefreshCookie(w, RefreshCookieName)
+	clearRefreshCookie(w, DevelopmentRefreshCookieName)
+}
+
 func clearRefreshCookie(w http.ResponseWriter, name string) {
 	http.SetCookie(w, &http.Cookie{
 		Name: name, Value: "", Path: "/", HttpOnly: true,
@@ -182,20 +283,8 @@ func clearRefreshCookie(w http.ResponseWriter, name string) {
 	})
 }
 
-func (h *AuthHandler) authenticatedUser(r *http.Request) (Session, User, error) {
-	token, err := refreshTokenFromRequest(r)
-	if err != nil {
-		return Session{}, User{}, ErrUnauthenticated
-	}
-	sess, err := h.svc.store.GetSessionByRefreshTokenHash(r.Context(), HashToken(token))
-	if err != nil {
-		return Session{}, User{}, ErrUnauthenticated
-	}
-	user, err := h.svc.store.GetUserByID(r.Context(), sess.UserID)
-	if err != nil {
-		return Session{}, User{}, ErrUnauthenticated
-	}
-	return sess, user, nil
+func (h *AuthHandler) authenticatedUser(r *http.Request) (Principal, User, error) {
+	return h.svc.AuthenticateRequest(r.Context(), r)
 }
 
 func refreshTokenFromRequest(r *http.Request) (string, error) {
@@ -217,6 +306,53 @@ func isSecureRequest(r *http.Request) bool {
 		return true
 	}
 	return r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+func writeTokenResponse(w http.ResponseWriter, status int, state string, access AccessToken) {
+	expiresIn := int64(time.Until(access.ExpiresAt).Seconds())
+	if expiresIn < 0 {
+		expiresIn = 0
+	}
+	writeJSON(w, status, tokenResponse{
+		Status:      state,
+		AccessToken: access.Token,
+		TokenType:   "Bearer",
+		ExpiresIn:   expiresIn,
+	})
+}
+
+func formatSessionTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
+func summarizeUserAgent(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 160 {
+		value = value[:160]
+	}
+	return value
+}
+
+func safeIPMetadata(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(remoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(remoteAddr)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return ""
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return net.IPv4(v4[0], v4[1], v4[2], 0).String() + "/24"
+	}
+	masked := ip.Mask(net.CIDRMask(48, 128))
+	if masked == nil {
+		return ""
+	}
+	return masked.String() + "/48"
 }
 
 type emailVerifyRequest struct {
@@ -251,7 +387,6 @@ func (h *AuthHandler) emailResend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.svc.ResendEmailVerification(r.Context(), req.Email); err != nil {
-		// Do not reveal whether the email exists.
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 		return
 	}
@@ -270,7 +405,6 @@ func (h *AuthHandler) passwordForgot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Always return 202 to avoid revealing whether the email exists.
 	_, _ = h.svc.RequestPasswordResetByEmail(r.Context(), req.Email)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 }
@@ -297,13 +431,13 @@ func (h *AuthHandler) passwordReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) mfaSetup(w http.ResponseWriter, r *http.Request) {
-	sess, _, err := h.authenticatedUser(r)
+	principal, _, err := h.authenticatedUser(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
 		return
 	}
 
-	secret, err := h.svc.SetupTOTP(r.Context(), sess.UserID)
+	secret, err := h.svc.SetupTOTP(r.Context(), principal.UserID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_USER", "user not found")
 		return
@@ -323,13 +457,13 @@ func (h *AuthHandler) mfaConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess, _, err := h.authenticatedUser(r)
+	principal, _, err := h.authenticatedUser(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
 		return
 	}
 
-	codes, err := h.svc.ConfirmTOTP(r.Context(), sess.UserID, req.Code, TOTPTimeStep(0))
+	codes, err := h.svc.ConfirmTOTP(r.Context(), principal.UserID, req.Code, TOTPTimeStep(0))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_TOKEN", "invalid or expired code")
 		return
@@ -339,13 +473,13 @@ func (h *AuthHandler) mfaConfirm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) mfaDisable(w http.ResponseWriter, r *http.Request) {
-	sess, _, err := h.authenticatedUser(r)
+	principal, _, err := h.authenticatedUser(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
 		return
 	}
 
-	if err := h.svc.DisableTOTP(r.Context(), sess.UserID); err != nil {
+	if err := h.svc.DisableTOTP(r.Context(), principal.UserID); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_USER", "user not found")
 		return
 	}
@@ -354,13 +488,13 @@ func (h *AuthHandler) mfaDisable(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) requestDeletion(w http.ResponseWriter, r *http.Request) {
-	sess, _, err := h.authenticatedUser(r)
+	principal, _, err := h.authenticatedUser(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
 		return
 	}
 
-	if err := h.svc.RequestAccountDeletion(r.Context(), sess.UserID); err != nil {
+	if err := h.svc.RequestAccountDeletion(r.Context(), principal.UserID); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			writeError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
 			return
@@ -368,18 +502,18 @@ func (h *AuthHandler) requestDeletion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
 	}
-
+	clearRefreshCookies(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deactivated"})
 }
 
 func (h *AuthHandler) cancelDeletion(w http.ResponseWriter, r *http.Request) {
-	sess, _, err := h.authenticatedUser(r)
+	principal, _, err := h.authenticatedUser(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
 		return
 	}
 
-	if err := h.svc.CancelAccountDeletion(r.Context(), sess.UserID); err != nil {
+	if err := h.svc.CancelAccountDeletion(r.Context(), principal.UserID); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			writeError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
 			return
