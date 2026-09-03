@@ -16,12 +16,14 @@ import type {
   CreativeDecisionListResponse,
   FavoriteListResponse,
   GenreListResponse,
+  ListenerLibrary,
   ListeningProgress,
   Story,
   StoryListResponse,
   ThreadInactivityResponse,
   UsageListResponse,
 } from './types'
+import { ApiRequestError } from './http-error.ts'
 
 const BASE = '/api/v1'
 
@@ -82,14 +84,18 @@ function mayRefresh(path: string): boolean {
   )
 }
 
-async function parseFailure(res: Response): Promise<Error> {
+async function parseFailure(res: Response): Promise<ApiRequestError> {
   let body: ApiError | null = null
   try {
     body = (await res.json()) as ApiError
   } catch {
-    // Ignore non-JSON error bodies.
+    // Ignore non-JSON error bodies while retaining the HTTP status.
   }
-  return new Error(body?.error?.message ?? `Request failed (${res.status})`)
+  return new ApiRequestError(
+    res.status,
+    body?.error?.message ?? `Request failed (${res.status})`,
+    body?.error?.code,
+  )
 }
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -403,6 +409,10 @@ export function getAudioURL(chapterID: string): Promise<AudioURLResponse> {
   return request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`)
 }
 
+export function getListenerLibrary(): Promise<ListenerLibrary> {
+  return request<ListenerLibrary>('/me/library')
+}
+
 export function listFavorites(): Promise<FavoriteListResponse> {
   return request<FavoriteListResponse>('/me/favorites')
 }
@@ -430,6 +440,12 @@ export function saveProgress(
   return request<ListeningProgress>(`/me/progress/${chapterID}`, {
     method: 'PUT',
     body: JSON.stringify(input),
+  })
+}
+
+export function completeProgress(chapterID: string): Promise<ListeningProgress> {
+  return request<ListeningProgress>(`/me/progress/${chapterID}/complete`, {
+    method: 'POST',
   })
 }
 

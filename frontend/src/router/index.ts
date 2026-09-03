@@ -4,6 +4,7 @@ import StoryDetail from '../features/catalog/StoryDetail.vue'
 import AdminShell from '../features/admin/AdminShell.vue'
 import AuditPage from '../features/admin/AuditPage.vue'
 import StoryReader from '../features/reader/StoryReader.vue'
+import ListenerLibraryPage from '../features/library/LibraryPage.vue'
 import StoryControlCenter from '../features/admin/StoryControlCenter.vue'
 import AuthPage from '../features/auth/AuthPage.vue'
 import ForgotPasswordPage from '../features/auth/ForgotPasswordPage.vue'
@@ -20,6 +21,12 @@ export const router = createRouter({
       path: '/',
       name: 'home',
       component: HomePage,
+    },
+    {
+      path: '/library',
+      name: 'library',
+      component: ListenerLibraryPage,
+      meta: { requiresAuth: true },
     },
     {
       path: '/admin',
