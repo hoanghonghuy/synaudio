@@ -2,6 +2,7 @@ package pgstore
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/synaudio/synaudio/backend/internal/identity"
@@ -10,6 +11,41 @@ import (
 // ReplaceMFARecoveryCodes persists only hashes and invalidates all previous
 // recovery credentials for the user. Plaintext codes never cross this adapter.
 func (s *IdentityStore) ReplaceMFARecoveryCodes(ctx context.Context, userID string, codeHashes []string) error {
+	return replaceMFARecoveryCodes(ctx, s.q.DBTX(), userID, codeHashes)
+}
+
+// ConfirmMFAWithRecoveryCodes rotates durable recovery-code hashes and confirms
+// the MFA method in one transaction. If confirmation fails after rotation, the
+// transaction rollback restores the prior recovery-code set.
+func (s *IdentityStore) ConfirmMFAWithRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error {
+	beginner, ok := s.q.DBTX().(transactionBeginner)
+	if !ok {
+		return errors.New("identity store transaction support unavailable")
+	}
+	tx, err := beginner.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := replaceMFARecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE user_mfa_methods SET confirmed_at = NOW() WHERE user_id = $1 AND confirmed_at IS NULL`, toUUID(userID)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+type recoveryCodeExecutor interface {
+	Exec(context.Context, string, ...interface{}) (interface{ RowsAffected() int64 }, error)
+}
+
+// pgx's command tag cannot satisfy the structural interface above through a
+// generic helper, so this helper accepts the concrete DBTX shape used by sqlc.
+func replaceMFARecoveryCodes(ctx context.Context, executor interface {
+	Exec(context.Context, string, ...interface{}) (interface{ RowsAffected() int64 }, error)
+}, userID string, codeHashes []string) error {
 	args := make([]interface{}, 0, len(codeHashes)+1)
 	args = append(args, toUUID(userID))
 	values := ""
@@ -21,10 +57,10 @@ func (s *IdentityStore) ReplaceMFARecoveryCodes(ctx context.Context, userID stri
 		args = append(args, hash)
 	}
 	if values == "" {
-		_, err := s.q.DBTX().Exec(ctx, `DELETE FROM user_mfa_recovery_codes WHERE user_id = $1`, toUUID(userID))
+		_, err := executor.Exec(ctx, `DELETE FROM user_mfa_recovery_codes WHERE user_id = $1`, toUUID(userID))
 		return err
 	}
-	_, err := s.q.DBTX().Exec(ctx, `
+	_, err := executor.Exec(ctx, `
 WITH removed AS (
     DELETE FROM user_mfa_recovery_codes WHERE user_id = $1
 )
