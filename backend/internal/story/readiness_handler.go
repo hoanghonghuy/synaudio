@@ -48,6 +48,15 @@ func (h *readinessHandler) getActivationReadiness(w http.ResponseWriter, r *http
 	if policy, err := h.svc.GetGenerationPolicy(r.Context(), storyID); err == nil {
 		body["generation_policy"] = generationPolicyResponse(policy)
 	}
+	if details, err := h.svc.GetWorkspaceDetails(r.Context(), storyID); err == nil {
+		body["story_workspace"] = map[string]any{
+			"planning_mode":    details.PlanningMode,
+			"planning_phase":   details.PlanningPhase,
+			"public_rating":    details.PublicRating,
+			"public_warnings":  details.PublicWarnings,
+			"cover_asset_id":   details.CoverAssetID,
+		}
+	}
 	writeJSON(w, http.StatusOK, body)
 }
 
