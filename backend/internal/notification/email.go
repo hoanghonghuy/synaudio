@@ -18,13 +18,14 @@ import (
 )
 
 const (
-	PurposeEmailVerification = "EMAIL_VERIFICATION"
-	PurposePasswordReset     = "PASSWORD_RESET"
+	PurposeEmailVerification       = "EMAIL_VERIFICATION"
+	PurposePasswordReset           = "PASSWORD_RESET"
+	PurposeAccountDeletionRecovery = "ACCOUNT_DELETION_RECOVERY"
 )
 
 var (
-	ErrNoPendingDelivery       = errors.New("no pending email delivery")
-	ErrRateLimited             = errors.New("transactional email rate limited")
+	ErrNoPendingDelivery        = errors.New("no pending email delivery")
+	ErrRateLimited              = errors.New("transactional email rate limited")
 	ErrDeliveryOutcomeUncertain = errors.New("email delivery outcome uncertain")
 )
 
@@ -101,6 +102,11 @@ func (s *Service) QueuePasswordReset(ctx context.Context, email, token string) e
 	return s.enqueue(ctx, PurposePasswordReset, email, link)
 }
 
+func (s *Service) QueueAccountDeletionRecovery(ctx context.Context, email, token string) error {
+	link := s.appPublicURL + "/account-deletion-recovery?email=" + url.QueryEscape(email) + "&token=" + url.QueryEscape(token)
+	return s.enqueue(ctx, PurposeAccountDeletionRecovery, email, link)
+}
+
 func (s *Service) enqueue(ctx context.Context, purpose, recipient, link string) error {
 	payload, err := json.Marshal(encryptedPayload{Link: link})
 	if err != nil {
@@ -131,10 +137,6 @@ func (s *Service) DeliverNext(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	// SMTP has no portable provider-side idempotency lookup. If a previous worker
-	// crossed the durable dispatch boundary and then disappeared, re-sending would
-	// create an uncontrolled duplicate window. Quarantine the item for explicit
-	// reconciliation instead of blindly retrying it.
 	if item.DispatchStarted {
 		if err := s.store.MarkDeliveryUncertain(ctx, item.ID, now); err != nil {
 			return true, err
@@ -153,11 +155,6 @@ func (s *Service) DeliverNext(ctx context.Context) (bool, error) {
 		return true, err
 	}
 
-	// Persist the stable dispatch marker before touching SMTP. From this point
-	// onward a crash or ambiguous SMTP acknowledgement is at-most-once: the item
-	// is quarantined rather than re-sent. The stable Message-ID additionally gives
-	// downstream SMTP/mailbox infrastructure a consistent dedupe key, but we do
-	// not rely on receivers honoring it.
 	if err := s.store.MarkDispatchStarted(ctx, item.ID, now); err != nil {
 		return true, err
 	}
@@ -171,9 +168,6 @@ func (s *Service) DeliverNext(ctx context.Context) (bool, error) {
 		return true, err
 	}
 	if err := s.store.MarkDelivered(ctx, item.ID, now); err != nil {
-		// The SMTP boundary returned success but durable acknowledgement failed.
-		// Leave the dispatch marker in place; stale reclaim will quarantine rather
-		// than blindly sending the accepted message again.
 		return true, err
 	}
 	return true, nil
@@ -205,6 +199,8 @@ func render(id, purpose, recipient, link string) (Message, error) {
 		return Message{ID: messageID, To: recipient, Subject: "Verify your Synaudio email", Text: "Verify your email by opening this link:\n\n" + link + "\n"}, nil
 	case PurposePasswordReset:
 		return Message{ID: messageID, To: recipient, Subject: "Reset your Synaudio password", Text: "Reset your password by opening this link:\n\n" + link + "\n"}, nil
+	case PurposeAccountDeletionRecovery:
+		return Message{ID: messageID, To: recipient, Subject: "Cancel your Synaudio account deletion", Text: "Cancel your pending account deletion by opening this link:\n\n" + link + "\n"}, nil
 	default:
 		return Message{}, fmt.Errorf("unsupported email purpose %q", purpose)
 	}
