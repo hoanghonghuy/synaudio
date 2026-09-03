@@ -129,6 +129,9 @@ async function onEnded() {
   const chapter = activeChapter.value
   if (!chapter || listener.isGuest) return
   try {
+    // Completion must be ordered after the final position write; otherwise a
+    // brand-new progress row could race the completion mutation and return 404.
+    await progressWrite
     const completed = await completeProgress(chapter.ID)
     listener.progress[chapter.ID] = completed
   } catch {
