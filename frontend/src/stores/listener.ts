@@ -133,18 +133,21 @@ export const useListenerStore = defineStore('listener', {
       this.progress[chapterID] = saved
     },
 
-    // Merge guest progress into server on login (idempotent).
+    // Guest records do not carry an authoritative server-comparable timestamp.
+    // Import only chapters with no server record; an existing server record always
+    // wins so login can never overwrite newer cross-device state with stale local data.
     async mergeGuestProgress() {
       if (this.isGuest) return
       const guest = readGuestProgress()
       for (const [chapterID, g] of Object.entries(guest)) {
+        let hasServerProgress = false
         try {
           await this.loadProgress(chapterID)
+          hasServerProgress = true
         } catch {
-          // no server progress yet
+          hasServerProgress = false
         }
-        const existing = this.progress[chapterID]
-        if (!existing || existing.PositionMs < g.positionMs) {
+        if (!hasServerProgress) {
           await this.saveProgress(chapterID, g.positionMs, g.audioAssetID)
         }
       }
