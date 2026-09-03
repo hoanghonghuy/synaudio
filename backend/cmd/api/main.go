@@ -59,7 +59,12 @@ func main() {
 	queries := db.New(pool)
 
 	identityStore := pgstore.NewIdentityStore(queries)
-	authService := identity.NewAuthService(identityStore)
+	authService := identity.NewAuthService(identityStore, identity.WithAuthSettings(identity.AuthSettings{
+		AccessTokenSecret:     cfg.AccessTokenSecret,
+		AccessTokenTTL:        cfg.AccessTokenTTL,
+		RefreshSessionTTL:     cfg.RefreshSessionTTL,
+		RefreshSessionIdleTTL: cfg.RefreshSessionIdleTTL,
+	}))
 	authHandler := identity.NewAuthHandler(authService)
 
 	storyStore := pgstore.NewStoryStore(queries)
