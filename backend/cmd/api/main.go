@@ -84,6 +84,7 @@ func main() {
 		planning.WithMemoryExtractor(aiProviders.MemoryExtractor),
 	)
 	planningHandler := planning.NewHandler(planningService)
+	planningWorkspaceHandler := planning.NewWorkspaceHandler(planningService)
 
 	storyService := story.NewService(storyStore,
 		story.WithObjectStorage(objStorage),
@@ -133,19 +134,20 @@ func main() {
 				return objStorage.Ping(pingCtx)
 			},
 		},
-		Logger:                log,
-		AdminCheck:            authService.ResolveAdmin,
-		AdminActor:            authService.ResolveUserID,
-		AuditRecord:           auditService.Record,
-		AuthHandler:           authHandler,
-		AuditHandler:          auditHandler,
-		StoryHandler:          storyHandler,
-		StoryReadinessHandler: storyReadinessHandler,
-		PlanningHandler:       planningHandler,
-		GenerationHandler:     generationHandler,
-		AudioHandler:          audioHandler,
-		ListenerHandler:       listenerHandler,
-		RetconHandler:         retconHandler,
+		Logger:                   log,
+		AdminCheck:               authService.ResolveAdmin,
+		AdminActor:               authService.ResolveUserID,
+		AuditRecord:              auditService.Record,
+		AuthHandler:              authHandler,
+		AuditHandler:             auditHandler,
+		StoryHandler:             storyHandler,
+		StoryReadinessHandler:    storyReadinessHandler,
+		PlanningHandler:          planningHandler,
+		PlanningWorkspaceHandler: planningWorkspaceHandler,
+		GenerationHandler:        generationHandler,
+		AudioHandler:             audioHandler,
+		ListenerHandler:          listenerHandler,
+		RetconHandler:            retconHandler,
 	})
 
 	server := &http.Server{
