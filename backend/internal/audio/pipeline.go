@@ -18,6 +18,9 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 	if s.objectStorage == nil {
 		return AudioAsset{}, errors.New("object storage not configured")
 	}
+	if s.processor == nil {
+		return AudioAsset{}, errors.New("audio processor not configured")
+	}
 
 	nar, err := s.store.GetNarrationRevision(ctx, narrationRevisionID)
 	if err != nil {
@@ -27,11 +30,6 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 	segments, err := s.CreateTTSSegments(ctx, narrationRevisionID)
 	if err != nil {
 		return AudioAsset{}, err
-	}
-
-	processor := s.processor
-	if processor == nil {
-		processor = NewMockAudioProcessor()
 	}
 
 	segAudio := make([]SegmentAudio, 0, len(segments))
@@ -50,7 +48,7 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		})
 	}
 
-	processed, err := processor.Process(ctx, ProcessInput{Segments: segAudio})
+	processed, err := s.processor.Process(ctx, ProcessInput{Segments: segAudio})
 	if err != nil {
 		return AudioAsset{}, fmt.Errorf("process audio: %w", err)
 	}
