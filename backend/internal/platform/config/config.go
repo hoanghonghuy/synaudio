@@ -25,6 +25,10 @@ type Config struct {
 	StorageSecretKey   string
 	AIMode             string
 	TTSMode            string
+	GeminiAPIKey       string
+	GeminiTextModel    string
+	GeminiTTSModel     string
+	GeminiTTSVoice     string
 	AppPublicURL       string
 	APIPublicURL       string
 	CORSAllowedOrigins []string
@@ -45,6 +49,10 @@ func Load() (Config, error) {
 		StorageSecretKey:         strings.TrimSpace(os.Getenv("STORAGE_SECRET_KEY")),
 		AIMode:                   strings.ToLower(strings.TrimSpace(getenv("AI_MODE", "mock"))),
 		TTSMode:                  strings.ToLower(strings.TrimSpace(getenv("TTS_MODE", "mock"))),
+		GeminiAPIKey:             strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		GeminiTextModel:          strings.TrimSpace(getenv("GEMINI_TEXT_MODEL", "gemini-3.7-flash")),
+		GeminiTTSModel:           strings.TrimSpace(getenv("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")),
+		GeminiTTSVoice:           strings.TrimSpace(getenv("GEMINI_TTS_VOICE", "Kore")),
 		AppPublicURL:             strings.TrimSpace(os.Getenv("APP_PUBLIC_URL")),
 		APIPublicURL:             strings.TrimSpace(os.Getenv("API_PUBLIC_URL")),
 		CORSAllowedOrigins:       splitCSV(os.Getenv("CORS_ALLOWED_ORIGINS")),
