@@ -24,7 +24,7 @@ func (f *deletionRecoveryEmailFake) QueueAccountDeletionRecovery(_ context.Conte
 	return nil
 }
 
-func directIdentityBoundary(ctx context.Context, run func(context.Context) error) error {
+func deletionRecoveryBoundary(ctx context.Context, run func(context.Context) error) error {
 	return run(ctx)
 }
 
@@ -43,7 +43,7 @@ func TestDeletionRecoveryRequestIsEnumerationSafeAndConfirmConsumesToken(t *test
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "unexpected delegate", http.StatusNotFound)
 	})
-	h := identity.WrapTransactionalEmail(next, svc, emails, directIdentityBoundary)
+	h := identity.WrapTransactionalEmail(next, svc, emails, deletionRecoveryBoundary)
 
 	known := httptest.NewRecorder()
 	h.ServeHTTP(known, jsonRequest(t, "/api/v1/auth/account/deletion/recovery/request", map[string]string{"email": u.Email}))
