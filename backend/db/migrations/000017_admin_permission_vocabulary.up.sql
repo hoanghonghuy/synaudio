@@ -1,76 +1,88 @@
 -- Seed the effective V1 permission vocabulary and bind it to ADMIN.
 -- Roles remain fixed; this migration only activates the granular authorization
 -- model already present in the schema/spec.
+--
+-- Ownership is recorded because some permission codes / ADMIN bindings may
+-- legitimately pre-exist. The down migration must remove only rows created by
+-- this migration, never authorization data that existed before it.
+CREATE TABLE migration_000017_admin_permission_ownership (
+    permission_id UUID PRIMARY KEY REFERENCES permissions(id) ON DELETE CASCADE,
+    permission_created BOOLEAN NOT NULL,
+    admin_binding_created BOOLEAN NOT NULL DEFAULT FALSE
+);
 
-INSERT INTO permissions (id, code) VALUES
-    (gen_random_uuid(), 'STORY_CREATE'),
-    (gen_random_uuid(), 'STORY_METADATA_EDIT'),
-    (gen_random_uuid(), 'STORY_ACTIVATE'),
-    (gen_random_uuid(), 'STORY_ARCHIVE'),
-    (gen_random_uuid(), 'STORY_RESTORE'),
-    (gen_random_uuid(), 'STORY_VISIBILITY_MANAGE'),
-    (gen_random_uuid(), 'STORY_WORKFLOW_SETTINGS_MANAGE'),
-    (gen_random_uuid(), 'STORY_BIBLE_VIEW'),
-    (gen_random_uuid(), 'STORY_BIBLE_MANAGE'),
-    (gen_random_uuid(), 'CHARACTER_VIEW'),
-    (gen_random_uuid(), 'CHARACTER_MANAGE'),
-    (gen_random_uuid(), 'ARC_VIEW'),
-    (gen_random_uuid(), 'ARC_MANAGE'),
-    (gen_random_uuid(), 'ENDING_PLAN_VIEW'),
-    (gen_random_uuid(), 'ENDING_PLAN_MANAGE'),
-    (gen_random_uuid(), 'CHAPTER_PLAN_VIEW'),
-    (gen_random_uuid(), 'CHAPTER_PLAN_MANAGE'),
-    (gen_random_uuid(), 'STORY_FACT_VIEW'),
-    (gen_random_uuid(), 'PLOT_THREAD_VIEW'),
-    (gen_random_uuid(), 'CHAPTER_CREATE'),
-    (gen_random_uuid(), 'CHAPTER_GENERATE'),
-    (gen_random_uuid(), 'CHAPTER_EDIT_DRAFT'),
-    (gen_random_uuid(), 'CHAPTER_REVIEW'),
-    (gen_random_uuid(), 'CHAPTER_APPROVE_CONTENT'),
-    (gen_random_uuid(), 'CHAPTER_REVISE_PRE_PUBLISH'),
-    (gen_random_uuid(), 'CHAPTER_PUBLISH'),
-    (gen_random_uuid(), 'CHAPTER_UNPUBLISH'),
-    (gen_random_uuid(), 'CHAPTER_ARCHIVE'),
-    (gen_random_uuid(), 'GENERATION_VIEW'),
-    (gen_random_uuid(), 'GENERATION_START'),
-    (gen_random_uuid(), 'GENERATION_RETRY'),
-    (gen_random_uuid(), 'GENERATION_REGENERATE'),
-    (gen_random_uuid(), 'GENERATION_REWRITE'),
-    (gen_random_uuid(), 'GENERATION_CANCEL'),
-    (gen_random_uuid(), 'CANON_VIEW'),
-    (gen_random_uuid(), 'CANON_HISTORY_VIEW'),
-    (gen_random_uuid(), 'STORY_MEMORY_VIEW'),
-    (gen_random_uuid(), 'CANON_DATA_REPAIR_REQUEST'),
-    (gen_random_uuid(), 'CANON_DATA_REPAIR_APPLY'),
-    (gen_random_uuid(), 'CREATIVE_DECISION_VIEW'),
-    (gen_random_uuid(), 'CREATIVE_DECISION_RESOLVE'),
-    (gen_random_uuid(), 'CREATIVE_DECISION_POSTPONE'),
-    (gen_random_uuid(), 'CREATIVE_DECISION_REJECT'),
-    (gen_random_uuid(), 'RETCON_VIEW'),
-    (gen_random_uuid(), 'RETCON_REQUEST'),
-    (gen_random_uuid(), 'RETCON_APPROVE'),
-    (gen_random_uuid(), 'RETCON_APPLY'),
-    (gen_random_uuid(), 'RETCON_CANCEL'),
-    (gen_random_uuid(), 'NARRATION_VIEW'),
-    (gen_random_uuid(), 'NARRATION_GENERATE'),
-    (gen_random_uuid(), 'NARRATION_EDIT'),
-    (gen_random_uuid(), 'NARRATION_APPROVE'),
-    (gen_random_uuid(), 'AUDIO_GENERATE'),
-    (gen_random_uuid(), 'AUDIO_RETRY'),
-    (gen_random_uuid(), 'AUDIO_REVIEW'),
-    (gen_random_uuid(), 'AUDIO_ACTIVATE_VERSION'),
-    (gen_random_uuid(), 'AUDIT_VIEW'),
-    (gen_random_uuid(), 'USER_STATUS_MANAGE'),
-    (gen_random_uuid(), 'ADMIN_ROLE_GRANT'),
-    (gen_random_uuid(), 'ADMIN_ROLE_REVOKE'),
-    (gen_random_uuid(), 'ADMIN_STATUS_MANAGE'),
-    (gen_random_uuid(), 'SECURITY_EVENT_VIEW')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-JOIN permissions p ON p.code IN (
+WITH inserted AS (
+    INSERT INTO permissions (id, code) VALUES
+        (gen_random_uuid(), 'STORY_CREATE'),
+        (gen_random_uuid(), 'STORY_METADATA_EDIT'),
+        (gen_random_uuid(), 'STORY_ACTIVATE'),
+        (gen_random_uuid(), 'STORY_ARCHIVE'),
+        (gen_random_uuid(), 'STORY_RESTORE'),
+        (gen_random_uuid(), 'STORY_VISIBILITY_MANAGE'),
+        (gen_random_uuid(), 'STORY_WORKFLOW_SETTINGS_MANAGE'),
+        (gen_random_uuid(), 'STORY_BIBLE_VIEW'),
+        (gen_random_uuid(), 'STORY_BIBLE_MANAGE'),
+        (gen_random_uuid(), 'CHARACTER_VIEW'),
+        (gen_random_uuid(), 'CHARACTER_MANAGE'),
+        (gen_random_uuid(), 'ARC_VIEW'),
+        (gen_random_uuid(), 'ARC_MANAGE'),
+        (gen_random_uuid(), 'ENDING_PLAN_VIEW'),
+        (gen_random_uuid(), 'ENDING_PLAN_MANAGE'),
+        (gen_random_uuid(), 'CHAPTER_PLAN_VIEW'),
+        (gen_random_uuid(), 'CHAPTER_PLAN_MANAGE'),
+        (gen_random_uuid(), 'STORY_FACT_VIEW'),
+        (gen_random_uuid(), 'PLOT_THREAD_VIEW'),
+        (gen_random_uuid(), 'CHAPTER_CREATE'),
+        (gen_random_uuid(), 'CHAPTER_GENERATE'),
+        (gen_random_uuid(), 'CHAPTER_EDIT_DRAFT'),
+        (gen_random_uuid(), 'CHAPTER_REVIEW'),
+        (gen_random_uuid(), 'CHAPTER_APPROVE_CONTENT'),
+        (gen_random_uuid(), 'CHAPTER_REVISE_PRE_PUBLISH'),
+        (gen_random_uuid(), 'CHAPTER_PUBLISH'),
+        (gen_random_uuid(), 'CHAPTER_UNPUBLISH'),
+        (gen_random_uuid(), 'CHAPTER_ARCHIVE'),
+        (gen_random_uuid(), 'GENERATION_VIEW'),
+        (gen_random_uuid(), 'GENERATION_START'),
+        (gen_random_uuid(), 'GENERATION_RETRY'),
+        (gen_random_uuid(), 'GENERATION_REGENERATE'),
+        (gen_random_uuid(), 'GENERATION_REWRITE'),
+        (gen_random_uuid(), 'GENERATION_CANCEL'),
+        (gen_random_uuid(), 'CANON_VIEW'),
+        (gen_random_uuid(), 'CANON_HISTORY_VIEW'),
+        (gen_random_uuid(), 'STORY_MEMORY_VIEW'),
+        (gen_random_uuid(), 'CANON_DATA_REPAIR_REQUEST'),
+        (gen_random_uuid(), 'CANON_DATA_REPAIR_APPLY'),
+        (gen_random_uuid(), 'CREATIVE_DECISION_VIEW'),
+        (gen_random_uuid(), 'CREATIVE_DECISION_RESOLVE'),
+        (gen_random_uuid(), 'CREATIVE_DECISION_POSTPONE'),
+        (gen_random_uuid(), 'CREATIVE_DECISION_REJECT'),
+        (gen_random_uuid(), 'RETCON_VIEW'),
+        (gen_random_uuid(), 'RETCON_REQUEST'),
+        (gen_random_uuid(), 'RETCON_APPROVE'),
+        (gen_random_uuid(), 'RETCON_APPLY'),
+        (gen_random_uuid(), 'RETCON_CANCEL'),
+        (gen_random_uuid(), 'NARRATION_VIEW'),
+        (gen_random_uuid(), 'NARRATION_GENERATE'),
+        (gen_random_uuid(), 'NARRATION_EDIT'),
+        (gen_random_uuid(), 'NARRATION_APPROVE'),
+        (gen_random_uuid(), 'AUDIO_GENERATE'),
+        (gen_random_uuid(), 'AUDIO_RETRY'),
+        (gen_random_uuid(), 'AUDIO_REVIEW'),
+        (gen_random_uuid(), 'AUDIO_ACTIVATE_VERSION'),
+        (gen_random_uuid(), 'AUDIT_VIEW'),
+        (gen_random_uuid(), 'USER_STATUS_MANAGE'),
+        (gen_random_uuid(), 'ADMIN_ROLE_GRANT'),
+        (gen_random_uuid(), 'ADMIN_ROLE_REVOKE'),
+        (gen_random_uuid(), 'ADMIN_STATUS_MANAGE'),
+        (gen_random_uuid(), 'SECURITY_EVENT_VIEW')
+    ON CONFLICT (code) DO NOTHING
+    RETURNING id
+)
+INSERT INTO migration_000017_admin_permission_ownership (permission_id, permission_created)
+SELECT p.id, (i.id IS NOT NULL)
+FROM permissions p
+LEFT JOIN inserted i ON i.id = p.id
+WHERE p.code IN (
     'STORY_CREATE','STORY_METADATA_EDIT','STORY_ACTIVATE','STORY_ARCHIVE','STORY_RESTORE','STORY_VISIBILITY_MANAGE','STORY_WORKFLOW_SETTINGS_MANAGE',
     'STORY_BIBLE_VIEW','STORY_BIBLE_MANAGE','CHARACTER_VIEW','CHARACTER_MANAGE','ARC_VIEW','ARC_MANAGE','ENDING_PLAN_VIEW','ENDING_PLAN_MANAGE','CHAPTER_PLAN_VIEW','CHAPTER_PLAN_MANAGE','STORY_FACT_VIEW','PLOT_THREAD_VIEW',
     'CHAPTER_CREATE','CHAPTER_GENERATE','CHAPTER_EDIT_DRAFT','CHAPTER_REVIEW','CHAPTER_APPROVE_CONTENT','CHAPTER_REVISE_PRE_PUBLISH','CHAPTER_PUBLISH','CHAPTER_UNPUBLISH','CHAPTER_ARCHIVE',
@@ -80,6 +92,28 @@ JOIN permissions p ON p.code IN (
     'RETCON_VIEW','RETCON_REQUEST','RETCON_APPROVE','RETCON_APPLY','RETCON_CANCEL',
     'NARRATION_VIEW','NARRATION_GENERATE','NARRATION_EDIT','NARRATION_APPROVE','AUDIO_GENERATE','AUDIO_RETRY','AUDIO_REVIEW','AUDIO_ACTIVATE_VERSION',
     'AUDIT_VIEW','USER_STATUS_MANAGE','ADMIN_ROLE_GRANT','ADMIN_ROLE_REVOKE','ADMIN_STATUS_MANAGE','SECURITY_EVENT_VIEW'
+);
+
+WITH inserted_bindings AS (
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id
+    FROM roles r
+    JOIN permissions p ON p.code IN (
+        'STORY_CREATE','STORY_METADATA_EDIT','STORY_ACTIVATE','STORY_ARCHIVE','STORY_RESTORE','STORY_VISIBILITY_MANAGE','STORY_WORKFLOW_SETTINGS_MANAGE',
+        'STORY_BIBLE_VIEW','STORY_BIBLE_MANAGE','CHARACTER_VIEW','CHARACTER_MANAGE','ARC_VIEW','ARC_MANAGE','ENDING_PLAN_VIEW','ENDING_PLAN_MANAGE','CHAPTER_PLAN_VIEW','CHAPTER_PLAN_MANAGE','STORY_FACT_VIEW','PLOT_THREAD_VIEW',
+        'CHAPTER_CREATE','CHAPTER_GENERATE','CHAPTER_EDIT_DRAFT','CHAPTER_REVIEW','CHAPTER_APPROVE_CONTENT','CHAPTER_REVISE_PRE_PUBLISH','CHAPTER_PUBLISH','CHAPTER_UNPUBLISH','CHAPTER_ARCHIVE',
+        'GENERATION_VIEW','GENERATION_START','GENERATION_RETRY','GENERATION_REGENERATE','GENERATION_REWRITE','GENERATION_CANCEL',
+        'CANON_VIEW','CANON_HISTORY_VIEW','STORY_MEMORY_VIEW','CANON_DATA_REPAIR_REQUEST','CANON_DATA_REPAIR_APPLY',
+        'CREATIVE_DECISION_VIEW','CREATIVE_DECISION_RESOLVE','CREATIVE_DECISION_POSTPONE','CREATIVE_DECISION_REJECT',
+        'RETCON_VIEW','RETCON_REQUEST','RETCON_APPROVE','RETCON_APPLY','RETCON_CANCEL',
+        'NARRATION_VIEW','NARRATION_GENERATE','NARRATION_EDIT','NARRATION_APPROVE','AUDIO_GENERATE','AUDIO_RETRY','AUDIO_REVIEW','AUDIO_ACTIVATE_VERSION',
+        'AUDIT_VIEW','USER_STATUS_MANAGE','ADMIN_ROLE_GRANT','ADMIN_ROLE_REVOKE','ADMIN_STATUS_MANAGE','SECURITY_EVENT_VIEW'
+    )
+    WHERE r.code = 'ADMIN'
+    ON CONFLICT DO NOTHING
+    RETURNING permission_id
 )
-WHERE r.code = 'ADMIN'
-ON CONFLICT DO NOTHING;
+UPDATE migration_000017_admin_permission_ownership o
+SET admin_binding_created = TRUE
+FROM inserted_bindings ib
+WHERE ib.permission_id = o.permission_id;
