@@ -37,8 +37,6 @@ SELECT EXISTS (SELECT 1 FROM deactivated)
 		return err
 	}
 	if !applied {
-		// Idempotent repeat requests for an already-deactivated existing user are
-		// accepted; only a missing user is an error.
 		var exists bool
 		if err := s.q.DBTX().QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)`, toUUID(userID)).Scan(&exists); err != nil {
 			return err
@@ -46,6 +44,78 @@ SELECT EXISTS (SELECT 1 FROM deactivated)
 		if !exists {
 			return identity.ErrUserNotFound
 		}
+	}
+	return nil
+}
+
+func (s *IdentityStore) ReplaceDeletionRecoveryToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+	var applied bool
+	err := s.q.DBTX().QueryRow(ctx, `
+WITH eligible AS (
+    SELECT id
+      FROM users
+     WHERE id = $1
+       AND status = 'DEACTIVATED'
+       AND deactivated_at IS NOT NULL
+       AND deactivated_at > NOW() - INTERVAL '30 days'
+), invalidated AS (
+    UPDATE account_deletion_recovery_tokens
+       SET used_at = COALESCE(used_at, NOW())
+     WHERE user_id = (SELECT id FROM eligible)
+       AND used_at IS NULL
+), inserted AS (
+    INSERT INTO account_deletion_recovery_tokens (user_id, token_hash, expires_at)
+    SELECT id, $2, $3 FROM eligible
+    RETURNING user_id
+)
+SELECT EXISTS (SELECT 1 FROM inserted)
+`, toUUID(userID), tokenHash, expiresAt).Scan(&applied)
+	if err != nil {
+		return err
+	}
+	if !applied {
+		return identity.ErrInvalidToken
+	}
+	return nil
+}
+
+func (s *IdentityStore) CancelAccountDeletionWithToken(ctx context.Context, userID, tokenHash string, now time.Time) error {
+	var applied bool
+	err := s.q.DBTX().QueryRow(ctx, `
+WITH token AS (
+    SELECT t.user_id
+      FROM account_deletion_recovery_tokens t
+      JOIN users u ON u.id = t.user_id
+     WHERE t.user_id = $1
+       AND t.token_hash = $2
+       AND t.used_at IS NULL
+       AND t.expires_at > $3
+       AND u.status = 'DEACTIVATED'
+       AND u.deactivated_at IS NOT NULL
+       AND u.deactivated_at > $3 - INTERVAL '30 days'
+     FOR UPDATE OF t, u
+), consumed AS (
+    UPDATE account_deletion_recovery_tokens
+       SET used_at = $3
+     WHERE user_id = (SELECT user_id FROM token)
+       AND token_hash = $2
+       AND used_at IS NULL
+    RETURNING user_id
+), reactivated AS (
+    UPDATE users
+       SET status = 'ACTIVE',
+           deactivated_at = NULL,
+           updated_at = $3
+     WHERE id = (SELECT user_id FROM consumed)
+    RETURNING id
+)
+SELECT EXISTS (SELECT 1 FROM reactivated)
+`, toUUID(userID), tokenHash, now).Scan(&applied)
+	if err != nil {
+		return err
+	}
+	if !applied {
+		return identity.ErrInvalidToken
 	}
 	return nil
 }
@@ -72,6 +142,8 @@ WITH eligible AS (
     DELETE FROM email_verification_tokens WHERE user_id = (SELECT id FROM eligible)
 ), reset_deleted AS (
     DELETE FROM password_reset_tokens WHERE user_id = (SELECT id FROM eligible)
+), deletion_recovery_deleted AS (
+    DELETE FROM account_deletion_recovery_tokens WHERE user_id = (SELECT id FROM eligible)
 ), roles_deleted AS (
     DELETE FROM user_roles WHERE user_id = (SELECT id FROM eligible)
 ), anonymized AS (
