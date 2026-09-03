@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// MFAMethod represents a user's TOTP MFA method.
 type MFAMethod struct {
 	Secret    string
 	Confirmed bool
@@ -16,11 +15,14 @@ type MFAMethod struct {
 type mfaSecurityStore interface {
 	ReplaceMFARecoveryCodes(ctx context.Context, userID string, codeHashes []string) error
 	ConfirmMFAWithRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error
-	ConfirmMFAWithRecoveryCodesAndSession(ctx context.Context, userID, sessionID string, codeHashes []string, at time.Time) error
 	ConsumeMFARecoveryCode(ctx context.Context, userID, codeHash string) (bool, error)
 	MarkSessionMFAAndRecentAuth(ctx context.Context, userID, sessionID string, at time.Time) error
 	HasPrivilegedSessionAssurance(ctx context.Context, userID, sessionID string, now time.Time) (bool, error)
 	HasRecentAuth(ctx context.Context, userID, sessionID string, cutoff time.Time) (bool, error)
+}
+
+type mfaSessionConfirmationStore interface {
+	ConfirmMFAWithRecoveryCodesAndSession(ctx context.Context, userID, sessionID string, codeHashes []string, at time.Time) error
 }
 
 func (s *AuthService) SetupTOTP(ctx context.Context, userID string) (string, error) {
@@ -37,9 +39,6 @@ func (s *AuthService) SetupTOTP(ctx context.Context, userID string) (string, err
 	return secret, nil
 }
 
-// ConfirmTOTP is retained for non-session service callers. HTTP confirmation
-// must use ConfirmTOTPForSession so privileged assurance is atomic with the
-// confirmation and recovery-code rotation.
 func (s *AuthService) ConfirmTOTP(ctx context.Context, userID, code string, counter uint64) ([]string, error) {
 	method, err := s.store.GetMFAMethod(ctx, userID)
 	if err != nil {
@@ -62,10 +61,9 @@ func (s *AuthService) ConfirmTOTP(ctx context.Context, userID, code string, coun
 	return codes, nil
 }
 
-// ConfirmTOTPForSession validates the TOTP and atomically confirms MFA,
-// rotates hashed recovery credentials, and establishes MFA/recent-auth
-// assurance on the exact authenticated session. Plaintext recovery codes are
-// returned only after the complete transaction commits.
+// ConfirmTOTPForSession is the HTTP security path: confirmation, hashed
+// recovery-code rotation, and exact-session MFA/recent-auth assurance commit as
+// one transaction before plaintext recovery codes can be returned.
 func (s *AuthService) ConfirmTOTPForSession(ctx context.Context, principal Principal, code string, counter uint64) ([]string, error) {
 	if principal.UserID == "" || principal.SessionID == "" {
 		return nil, ErrUnauthenticated
@@ -81,11 +79,11 @@ func (s *AuthService) ConfirmTOTPForSession(ctx context.Context, principal Princ
 	if err != nil {
 		return nil, err
 	}
-	securityStore, ok := s.store.(mfaSecurityStore)
+	store, ok := s.store.(mfaSessionConfirmationStore)
 	if !ok {
-		return nil, errors.New("privileged security persistence not configured")
+		return nil, errors.New("atomic session MFA persistence not configured")
 	}
-	if err := securityStore.ConfirmMFAWithRecoveryCodesAndSession(ctx, principal.UserID, principal.SessionID, hashes, s.settings.Now().UTC()); err != nil {
+	if err := store.ConfirmMFAWithRecoveryCodesAndSession(ctx, principal.UserID, principal.SessionID, hashes, s.settings.Now().UTC()); err != nil {
 		return nil, err
 	}
 	return codes, nil
