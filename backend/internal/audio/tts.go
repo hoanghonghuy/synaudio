@@ -26,10 +26,11 @@ type TTSInput struct {
 
 // TTSOutput is the result of a TTS synthesis call.
 type TTSOutput struct {
-	AudioData []byte
+	AudioData  []byte
 	DurationMs int
-	Provider  string
-	Model     string
+	Provider   string
+	Model      string
+	Format     string
 }
 
 // MockTTS is a deterministic TTS provider for development/testing.
@@ -51,6 +52,7 @@ func (MockTTS) Synthesize(_ context.Context, in TTSInput) (TTSOutput, error) {
 		DurationMs: durationMs,
 		Provider:   "mock",
 		Model:      "mock-tts-v1",
+		Format:     "mp3",
 	}, nil
 }
 
@@ -115,7 +117,11 @@ func (s *Service) SynthesizeSegment(ctx context.Context, segmentID string) (TTSS
 		return TTSSegment{}, err
 	}
 
-	storageKey := "tts/" + seg.ID + ".mp3"
+	format := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(out.Format)), ".")
+	if format == "" {
+		format = "mp3"
+	}
+	storageKey := "tts/" + seg.ID + "." + format
 	if err := s.objectStorage.Put(ctx, storageKey, out.AudioData); err != nil {
 		return TTSSegment{}, fmt.Errorf("persist synthesized audio: %w", err)
 	}

@@ -52,6 +52,17 @@ npm install
 npm run dev
 ```
 
+## Runtime AI/TTS providers
+
+Provider selection is controlled by `AI_MODE` and `TTS_MODE`.
+
+- Local development and deterministic tests may explicitly use `mock`.
+- Gemini mode uses `GEMINI_API_KEY`, `GEMINI_TEXT_MODEL`, `GEMINI_TTS_MODEL`, and `GEMINI_TTS_VOICE` from the environment.
+- Production rejects mock AI/TTS configuration and does not silently fall back when a real provider is unsupported or misconfigured.
+- `GEMINI_TTS_VOICE` is a Gemini provider-native voice name. Synaudio's logical narration `voice_id` remains a separate application identity and is not sent to Gemini as `voiceName`.
+
+Use `.env.example` as the canonical runtime environment template.
+
 ## Health endpoints
 
 - `GET /health` — process liveness, no dependency calls

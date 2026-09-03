@@ -15,6 +15,7 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
 	"github.com/synaudio/synaudio/backend/internal/platform/pgstore"
+	"github.com/synaudio/synaudio/backend/internal/platform/providers"
 )
 
 func main() {
@@ -23,6 +24,12 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Error("config load failed", "error", err)
+		os.Exit(1)
+	}
+
+	aiProviders, err := providers.BuildAI(cfg)
+	if err != nil {
+		log.Error("AI provider init failed", "error", err)
 		os.Exit(1)
 	}
 
@@ -38,7 +45,7 @@ func main() {
 
 	queries := db.New(pool)
 	generationStore := pgstore.NewGenerationStore(queries)
-	generationService := generation.NewService(generationStore, generation.WithTextAI(generation.NewMockTextAI()))
+	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
 
 	workerID := os.Getenv("WORKER_ID")
 	if workerID == "" {

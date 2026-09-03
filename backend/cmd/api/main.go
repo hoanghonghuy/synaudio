@@ -20,6 +20,7 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
 	"github.com/synaudio/synaudio/backend/internal/platform/pgstore"
+	"github.com/synaudio/synaudio/backend/internal/platform/providers"
 	"github.com/synaudio/synaudio/backend/internal/platform/storage"
 	"github.com/synaudio/synaudio/backend/internal/retcon"
 	"github.com/synaudio/synaudio/backend/internal/story"
@@ -31,6 +32,17 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Error("config load failed", "error", err)
+		os.Exit(1)
+	}
+
+	aiProviders, err := providers.BuildAI(cfg)
+	if err != nil {
+		log.Error("AI provider init failed", "error", err)
+		os.Exit(1)
+	}
+	ttsProvider, err := providers.BuildTTS(cfg)
+	if err != nil {
+		log.Error("TTS provider init failed", "error", err)
 		os.Exit(1)
 	}
 
@@ -58,8 +70,8 @@ func main() {
 	}
 	planningStore := pgstore.NewPlanningStore(queries)
 	planningService := planning.NewService(planningStore,
-		planning.WithArchitect(planning.NewMockArchitect()),
-		planning.WithMemoryExtractor(planning.NewMockMemoryExtractor()),
+		planning.WithArchitect(aiProviders.Architect),
+		planning.WithMemoryExtractor(aiProviders.MemoryExtractor),
 	)
 	planningHandler := planning.NewHandler(planningService)
 
@@ -70,12 +82,12 @@ func main() {
 	storyHandler := story.NewHandler(storyService)
 
 	generationStore := pgstore.NewGenerationStore(queries)
-	generationService := generation.NewService(generationStore, generation.WithTextAI(generation.NewMockTextAI()))
+	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
 	generationHandler := generation.NewHandler(generationService, authService.ResolveUserID)
 
 	audioStore := pgstore.NewAudioStore(queries)
 	audioService := audio.NewService(audioStore,
-		audio.WithTTS(audio.NewMockTTS()),
+		audio.WithTTS(ttsProvider),
 		audio.WithObjectStorage(objStorage),
 		audio.WithPresigner(objStorage),
 	)
