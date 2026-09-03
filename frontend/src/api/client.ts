@@ -1,5 +1,7 @@
 import type {
   ApiError,
+  AuditEvent,
+  AuditListResponse,
   AuthUser,
   ArcCompletionResult,
   AttentionListResponse,
@@ -38,6 +40,21 @@ export type AuthSession = {
   expires_at: string
   user_agent_summary?: string
   safe_ip_metadata?: string
+}
+
+export type AuditFilters = {
+  actor_id?: string
+  action?: string
+  resource_type?: string
+  resource_id?: string
+  story_id?: string
+  chapter_id?: string
+  run_id?: string
+  correlation_id?: string
+  result?: string
+  from?: string
+  to?: string
+  limit?: number
 }
 
 let accessToken: string | null = null
@@ -434,4 +451,19 @@ export function analyzeThreadInactivity(storyID: string): Promise<ThreadInactivi
 
 export function listUsage(storyID: string): Promise<UsageListResponse> {
   return request<UsageListResponse>(`/admin/stories/${storyID}/usage`)
+}
+
+export function listAuditEvents(filters: AuditFilters = {}): Promise<AuditListResponse> {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      qs.set(key, String(value))
+    }
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  return request<AuditListResponse>(`/admin/audit${suffix}`)
+}
+
+export function getAuditEvent(eventID: string): Promise<AuditEvent> {
+  return request<AuditEvent>(`/admin/audit/${eventID}`)
 }
