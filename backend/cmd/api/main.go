@@ -90,6 +90,7 @@ func main() {
 		story.WithActivationChecker(planningService),
 	)
 	storyHandler := story.NewHandler(storyService)
+	storyReadinessHandler := story.NewReadinessHandler(storyService)
 
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
@@ -132,18 +133,19 @@ func main() {
 				return objStorage.Ping(pingCtx)
 			},
 		},
-		Logger:            log,
-		AdminCheck:        authService.ResolveAdmin,
-		AdminActor:        authService.ResolveUserID,
-		AuditRecord:       auditService.Record,
-		AuthHandler:       authHandler,
-		AuditHandler:      auditHandler,
-		StoryHandler:      storyHandler,
-		PlanningHandler:   planningHandler,
-		GenerationHandler: generationHandler,
-		AudioHandler:      audioHandler,
-		ListenerHandler:   listenerHandler,
-		RetconHandler:     retconHandler,
+		Logger:                log,
+		AdminCheck:            authService.ResolveAdmin,
+		AdminActor:            authService.ResolveUserID,
+		AuditRecord:           auditService.Record,
+		AuthHandler:           authHandler,
+		AuditHandler:          auditHandler,
+		StoryHandler:          storyHandler,
+		StoryReadinessHandler: storyReadinessHandler,
+		PlanningHandler:       planningHandler,
+		GenerationHandler:     generationHandler,
+		AudioHandler:          audioHandler,
+		ListenerHandler:       listenerHandler,
+		RetconHandler:         retconHandler,
 	})
 
 	server := &http.Server{
