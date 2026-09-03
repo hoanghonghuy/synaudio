@@ -2,6 +2,7 @@ package identity_test
 
 import (
 	"context"
+	"errors"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ type privilegedSecurityFakeStore struct {
 	recoveryHashes map[string]bool
 	assuredSessions map[string]time.Time
 	recentSessions map[string]time.Time
+	confirmAtomicErr error
 }
 
 func newPrivilegedSecurityFakeStore() *privilegedSecurityFakeStore {
@@ -31,6 +33,16 @@ func (s *privilegedSecurityFakeStore) ReplaceMFARecoveryCodes(_ context.Context,
 		s.recoveryHashes[hash] = true
 	}
 	return nil
+}
+
+func (s *privilegedSecurityFakeStore) ConfirmMFAWithRecoveryCodes(ctx context.Context, userID string, hashes []string) error {
+	if s.confirmAtomicErr != nil {
+		return s.confirmAtomicErr
+	}
+	if err := s.fakeStore.ConfirmMFAMethod(ctx, userID); err != nil {
+		return err
+	}
+	return s.ReplaceMFARecoveryCodes(ctx, userID, hashes)
 }
 
 func (s *privilegedSecurityFakeStore) ConsumeMFARecoveryCode(_ context.Context, _ string, hash string) (bool, error) {
@@ -96,6 +108,40 @@ func TestAdminRoleAloneDoesNotGrantPrivilegedCapability(t *testing.T) {
 	}
 	if allowed {
 		t.Fatal("ADMIN role without verified email/MFA session assurance must be denied")
+	}
+}
+
+func TestConfirmTOTPDoesNotPartiallyRotateRecoveryCodesOnAtomicFailure(t *testing.T) {
+	store := newPrivilegedSecurityFakeStore()
+	svc := identity.NewAuthService(store)
+	u, err := svc.Register(context.Background(), "admin@example.com", "correct password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, err := svc.SetupTOTP(context.Background(), u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.recoveryHashes["existing-hash"] = true
+	store.confirmAtomicErr = errors.New("confirm write failed")
+	counter := identity.TOTPTimeStep(0)
+	code, err := identity.TOTPCode(secret, counter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.ConfirmTOTP(context.Background(), u.ID, code, counter); err == nil {
+		t.Fatal("confirmation failure must be returned")
+	}
+	if len(store.recoveryHashes) != 1 || !store.recoveryHashes["existing-hash"] {
+		t.Fatal("failed atomic confirmation must preserve the prior recovery-code set")
+	}
+	method, err := store.GetMFAMethod(context.Background(), u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if method.Confirmed {
+		t.Fatal("failed atomic confirmation must not confirm MFA")
 	}
 }
 
