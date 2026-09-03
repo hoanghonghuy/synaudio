@@ -47,7 +47,7 @@ WITH consumed AS (
           WHERE user_id = $1
             AND code_hash = $2
             AND used_at IS NULL
-          ORDER BY created_at, id
+          ORDER BY id
           LIMIT 1
           FOR UPDATE
      )
