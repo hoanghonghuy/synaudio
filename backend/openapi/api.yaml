@@ -1,63 +1,1441 @@
 openapi: "3.1.0"
 info:
-  title: AI Audiobook Platform API
-  version: 0.1.0
-  description: HTTP contract skeleton for Phase 0 foundation.
+  title: Synaudio V1 API
+  version: 1.0.0
+  description: Executable HTTP contract for the supported Synaudio V1 surface.
 servers:
   - url: http://localhost:8080
-    description: Local API
 paths:
+  /api/v1/admin/attempts/{attemptID}/usage:
+    parameters:
+      - name: attemptID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminAttemptsAttemptidUsage
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/attention/{itemID}/resolve:
+    parameters:
+      - name: itemID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminAttentionItemidResolve
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/audit:
+    get:
+      operationId: getApiV1AdminAudit
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/audit/{eventID}:
+    parameters:
+      - name: eventID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminAuditEventid
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/canon-branches/{branchID}/commit:
+    parameters:
+      - name: branchID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminCanonBranchesBranchidCommit
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/canon-branches/{branchID}/provisional-versions:
+    parameters:
+      - name: branchID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminCanonBranchesBranchidProvisionalVersions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/canon-branches/{branchID}/versions:
+    parameters:
+      - name: branchID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminCanonBranchesBranchidVersions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminCanonBranchesBranchidVersions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/canon-versions/{versionID}/promote:
+    parameters:
+      - name: versionID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminCanonVersionsVersionidPromote
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/approve:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridApprove
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/audio:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridAudio
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminChaptersChapteridAudio
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/audio/{assetID}/activate:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+      - name: assetID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridAudioAssetidActivate
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/content:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridContent
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminChaptersChapteridContent
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/continuity:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridContinuity
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/duration:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridDuration
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/edit:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridEdit
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/narration:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridNarration
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/narration/{narrationID}/segments:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+      - name: narrationID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridNarrationNarrationidSegments
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/narration/{narrationID}/synthesize:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+      - name: narrationID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridNarrationNarrationidSynthesize
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/plans:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridPlans
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/publish:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridPublish
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/quality:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridQuality
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/regenerate:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridRegenerate
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/reviews:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridReviews
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminChaptersChapteridReviews
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/revision-impact:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridRevisionImpact
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/rewrite:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridRewrite
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/safety:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridSafety
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/chapters/{chapterID}/unpublish:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminChaptersChapteridUnpublish
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/context-snapshots/{snapshotID}:
+    parameters:
+      - name: snapshotID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminContextSnapshotsSnapshotid
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/creative-decisions/{decisionID}/reject:
+    parameters:
+      - name: decisionID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminCreativeDecisionsDecisionidReject
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/creative-decisions/{decisionID}/select:
+    parameters:
+      - name: decisionID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminCreativeDecisionsDecisionidSelect
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/plot-threads/{threadID}/events:
+    parameters:
+      - name: threadID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminPlotThreadsThreadidEvents
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/retcons:
+    post:
+      operationId: postApiV1AdminRetcons
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminRetcons
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/retcons/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminRetconsId
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/retcons/{id}/analyze:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminRetconsIdAnalyze
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/retcons/{id}/apply:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminRetconsIdApply
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/retcons/{id}/approve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminRetconsIdApprove
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/retcons/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminRetconsIdCancel
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/retcons/{id}/ready:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminRetconsIdReady
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/revisions/{revisionID}/reject:
+    parameters:
+      - name: revisionID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminRevisionsRevisionidReject
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/runs:
+    post:
+      operationId: postApiV1AdminRuns
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/runs/{runID}:
+    parameters:
+      - name: runID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminRunsRunid
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/runs/{runID}/jobs:
+    parameters:
+      - name: runID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminRunsRunidJobs
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/runs/{runID}/mark-stale:
+    parameters:
+      - name: runID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminRunsRunidMarkStale
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories:
+    post:
+      operationId: postApiV1AdminStories
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminStories
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/activate:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidActivate
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/archive:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidArchive
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/arcs:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidArcs
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/arcs/{arcID}/completion:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+      - name: arcID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidArcsArcidCompletion
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/attention:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidAttention
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: postApiV1AdminStoriesStoryidAttention
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/batch-generate:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidBatchGenerate
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/bible:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidBible
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/canon-branches:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidCanonBranches
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/canon-repair:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidCanonRepair
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/chapters:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidChapters
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminStoriesStoryidChapters
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/characters:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidCharacters
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/content-profile:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidContentProfile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminStoriesStoryidContentProfile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/context-snapshots:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidContextSnapshots
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminStoriesStoryidContextSnapshots
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/cover:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidCover
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/creative-decisions:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidCreativeDecisions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: postApiV1AdminStoriesStoryidCreativeDecisions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/ending:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidEnding
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/facts:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidFacts
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminStoriesStoryidFacts
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/foundation:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidFoundation
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/make-private:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidMakePrivate
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/make-public:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidMakePublic
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/plot-threads:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidPlotThreads
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      operationId: getApiV1AdminStoriesStoryidPlotThreads
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/restore:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminStoriesStoryidRestore
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/thread-inactivity:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidThreadInactivity
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/usage:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidUsage
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/stories/{storyID}/workflow-settings:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1AdminStoriesStoryidWorkflowSettings
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      operationId: putApiV1AdminStoriesStoryidWorkflowSettings
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/tts-segments/{segmentID}/synthesize:
+    parameters:
+      - name: segmentID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1AdminTtsSegmentsSegmentidSynthesize
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/account/deletion/cancel:
+    post:
+      operationId: postApiV1AuthAccountDeletionCancel
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/account/deletion/request:
+    post:
+      operationId: postApiV1AuthAccountDeletionRequest
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/email/resend:
+    post:
+      operationId: postApiV1AuthEmailResend
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/email/verify:
+    post:
+      operationId: postApiV1AuthEmailVerify
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/login:
+    post:
+      operationId: postApiV1AuthLogin
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/logout:
+    post:
+      operationId: postApiV1AuthLogout
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/logout-all:
+    post:
+      operationId: postApiV1AuthLogoutAll
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/me:
+    get:
+      operationId: getApiV1AuthMe
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/mfa/totp/confirm:
+    post:
+      operationId: postApiV1AuthMfaTotpConfirm
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/mfa/totp/disable:
+    post:
+      operationId: postApiV1AuthMfaTotpDisable
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/mfa/totp/setup:
+    post:
+      operationId: postApiV1AuthMfaTotpSetup
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/password/forgot:
+    post:
+      operationId: postApiV1AuthPasswordForgot
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/password/reset:
+    post:
+      operationId: postApiV1AuthPasswordReset
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/refresh:
+    post:
+      operationId: postApiV1AuthRefresh
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/register:
+    post:
+      operationId: postApiV1AuthRegister
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/sessions:
+    get:
+      operationId: getApiV1AuthSessions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/auth/sessions/{sessionID}:
+    parameters:
+      - name: sessionID
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: deleteApiV1AuthSessionsSessionid
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/chapters/{chapterID}/audio-url:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1ChaptersChapteridAudioUrl
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/chapters/{chapterID}/content:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1ChaptersChapteridContent
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/genres:
+    get:
+      operationId: getApiV1Genres
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/me/favorites:
+    get:
+      operationId: getApiV1MeFavorites
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/me/favorites/{storyID}:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: putApiV1MeFavoritesStoryid
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      operationId: deleteApiV1MeFavoritesStoryid
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/me/progress/{chapterID}:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1MeProgressChapterid
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      operationId: putApiV1MeProgressChapterid
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/me/progress/{chapterID}/complete:
+    parameters:
+      - name: chapterID
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postApiV1MeProgressChapteridComplete
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/stories:
+    get:
+      operationId: getApiV1Stories
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/stories/{storyID}:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1StoriesStoryid
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/stories/{storyID}/chapters:
+    parameters:
+      - name: storyID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getApiV1StoriesStoryidChapters
+      security: []
+      responses:
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /health:
     get:
       operationId: getHealth
-      summary: Liveness probe
-      tags: [Platform]
+      security: []
       responses:
-        "200":
-          description: Process is alive
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /ready:
     get:
       operationId: getReady
-      summary: Readiness probe
-      tags: [Platform]
+      security: []
       responses:
-        "200":
-          description: API dependencies are ready
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReadyResponse"
-        "503":
-          description: Required dependency unavailable
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+        "200": { description: Successful response }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthenticated:
+      description: Authentication required or credential invalid
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: Authenticated principal is not allowed to perform the operation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
   schemas:
-    HealthResponse:
-      type: object
-      required: [status]
-      properties:
-        status:
-          type: string
-          enum: [ok]
-    ReadyResponse:
-      type: object
-      required: [status]
-      properties:
-        status:
-          type: string
-          enum: [ready]
     ErrorResponse:
       type: object
-      required: [status, error]
+      required: [error]
       properties:
-        status:
-          type: string
-        error:
-          type: string
+        status: { type: string }
+        error: { type: string }
+        code: { type: string }
+        message: { type: string }
