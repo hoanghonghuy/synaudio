@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/synaudio/synaudio/backend/internal/identity"
+	"github.com/synaudio/synaudio/backend/internal/platform/db"
 )
 
 // ReplaceMFARecoveryCodes persists only hashes and invalidates all previous
@@ -37,15 +38,7 @@ func (s *IdentityStore) ConfirmMFAWithRecoveryCodes(ctx context.Context, userID 
 	return tx.Commit(ctx)
 }
 
-type recoveryCodeExecutor interface {
-	Exec(context.Context, string, ...interface{}) (interface{ RowsAffected() int64 }, error)
-}
-
-// pgx's command tag cannot satisfy the structural interface above through a
-// generic helper, so this helper accepts the concrete DBTX shape used by sqlc.
-func replaceMFARecoveryCodes(ctx context.Context, executor interface {
-	Exec(context.Context, string, ...interface{}) (interface{ RowsAffected() int64 }, error)
-}, userID string, codeHashes []string) error {
+func replaceMFARecoveryCodes(ctx context.Context, executor db.DBTX, userID string, codeHashes []string) error {
 	args := make([]interface{}, 0, len(codeHashes)+1)
 	args = append(args, toUUID(userID))
 	values := ""
