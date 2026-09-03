@@ -12,6 +12,7 @@ import (
 
 	"github.com/synaudio/synaudio/backend/internal/audit"
 	"github.com/synaudio/synaudio/backend/internal/generation"
+	"github.com/synaudio/synaudio/backend/internal/identity"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
@@ -48,6 +49,7 @@ func main() {
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
 	auditService := audit.NewService(pgstore.NewAuditStore(queries))
+	identityService := identity.NewAuthService(pgstore.NewIdentityStore(queries))
 
 	workerID := os.Getenv("WORKER_ID")
 	if workerID == "" {
@@ -100,6 +102,11 @@ func main() {
 	auditTicker := time.NewTicker(15 * time.Second)
 	defer auditTicker.Stop()
 
+	// Account deletion is a slow lifecycle; hourly reconciliation is enough to
+	// discover accounts whose frozen 30-day grace period has elapsed.
+	deletionTicker := time.NewTicker(time.Hour)
+	defer deletionTicker.Stop()
+
 	// Poll for new jobs.
 	pollTicker := time.NewTicker(2 * time.Second)
 	defer pollTicker.Stop()
@@ -128,6 +135,15 @@ func main() {
 				log.Error("audit delivery dead-lettered", "count", report.DeadLetter, "claimed", report.Claimed)
 			} else if report.Claimed > 0 {
 				log.Info("audit outbox reconciled", "claimed", report.Claimed, "delivered", report.Delivered, "retrying", report.Retrying)
+			}
+		case <-deletionTicker.C:
+			purged, err := identityService.PurgeEligibleAccounts(ctx, 50)
+			if err != nil {
+				log.Error("account deletion reconciliation failed", "error", err)
+				continue
+			}
+			if purged > 0 {
+				log.Info("eligible accounts purged", "count", purged)
 			}
 		case <-pollTicker.C:
 			if err := worker.ProcessOne(ctx); err != nil {
