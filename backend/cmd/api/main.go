@@ -57,7 +57,18 @@ func main() {
 	}
 	defer pool.Close()
 
-	queries := db.New(pool)
+	queries := db.New(db.Contextual(pool))
+	auditBoundary := audit.TransactionBoundary(func(parent context.Context, run func(context.Context) error) error {
+		tx, err := pool.Begin(parent)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback(parent) }()
+		if err := run(db.WithTx(parent, tx)); err != nil {
+			return err
+		}
+		return tx.Commit(parent)
+	})
 
 	identityStore := pgstore.NewIdentityStore(queries)
 	authService := identity.NewAuthService(identityStore, identity.WithAuthSettings(identity.AuthSettings{
@@ -135,7 +146,8 @@ func main() {
 		Logger:            log,
 		AdminCheck:        authService.ResolveAdmin,
 		AdminActor:        authService.ResolveUserID,
-		AuditRecord:       auditService.Record,
+		AuditRecord:       auditService.RecordReliable,
+		AuditBoundary:     auditBoundary,
 		AuthHandler:       authHandler,
 		AuditHandler:      auditHandler,
 		StoryHandler:      storyHandler,
