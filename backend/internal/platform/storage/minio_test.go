@@ -1,10 +1,8 @@
 package storage
 
 import (
-	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 )
@@ -56,7 +54,7 @@ func TestNewMinIORejectsRemoteHTTPInProduction(t *testing.T) {
 	}
 }
 
-func TestPresignedURLKeepsHTTPSForRemoteEndpoint(t *testing.T) {
+func TestNewMinIOKeepsHTTPSForRemoteEndpointWithoutNetworkDiscovery(t *testing.T) {
 	store, err := NewMinIO(config.Config{
 		AppEnv:           config.EnvProduction,
 		StorageEndpoint:  "https://account.r2.cloudflarestorage.com",
@@ -67,11 +65,12 @@ func TestPresignedURLKeepsHTTPSForRemoteEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new storage client: %v", err)
 	}
-	got, err := store.PresignedGetObject(context.Background(), "audio/final.mp3", time.Minute)
-	if err != nil {
-		t.Fatalf("presign: %v", err)
+
+	endpoint := store.client.EndpointURL()
+	if endpoint.Scheme != "https" {
+		t.Fatalf("expected https client endpoint, got %q", endpoint.String())
 	}
-	if !strings.HasPrefix(got, "https://") {
-		t.Fatalf("expected https presigned URL, got %q", got)
+	if endpoint.Host != "account.r2.cloudflarestorage.com" {
+		t.Fatalf("unexpected client endpoint host: %q", endpoint.Host)
 	}
 }
