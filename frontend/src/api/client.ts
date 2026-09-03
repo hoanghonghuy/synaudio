@@ -23,6 +23,7 @@ import type {
   ThreadInactivityResponse,
   UsageListResponse,
 } from './types'
+import { ApiRequestError } from './http-error'
 
 const BASE = '/api/v1'
 
@@ -199,14 +200,18 @@ function mayRefresh(path: string): boolean {
   )
 }
 
-async function parseFailure(res: Response): Promise<Error> {
+async function parseFailure(res: Response): Promise<ApiRequestError> {
   let body: ApiError | null = null
   try {
     body = (await res.json()) as ApiError
   } catch {
-    // Ignore non-JSON error bodies.
+    // Ignore non-JSON error bodies while retaining the HTTP status.
   }
-  return new Error(body?.error?.message ?? `Request failed (${res.status})`)
+  return new ApiRequestError(
+    res.status,
+    body?.error?.message ?? `Request failed (${res.status})`,
+    body?.error?.code,
+  )
 }
 
 async function refreshAccessToken(): Promise<string | null> {
