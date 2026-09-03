@@ -15,7 +15,7 @@ type MFAMethod struct {
 
 type mfaSecurityStore interface {
 	ReplaceMFARecoveryCodes(ctx context.Context, userID string, codeHashes []string) error
-	ConfirmMFAWithRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error
+	ConfirmMFAWithRecoveryCodesAndSession(ctx context.Context, userID, sessionID string, codeHashes []string, at time.Time) error
 	ConsumeMFARecoveryCode(ctx context.Context, userID, codeHash string) (bool, error)
 	MarkSessionMFAAndRecentAuth(ctx context.Context, userID, sessionID string, at time.Time) error
 	HasPrivilegedSessionAssurance(ctx context.Context, userID, sessionID string, now time.Time) (bool, error)
@@ -41,13 +41,15 @@ func (s *AuthService) SetupTOTP(ctx context.Context, userID string) (string, err
 	return secret, nil
 }
 
-// ConfirmTOTP validates the code, confirms the method, and replaces recovery
-// credentials with hashes when the persistence adapter supports the V1 security
-// contract. Confirmation and recovery-code rotation are one persistence action
-// so a failed confirmation cannot leave partially-rotated recovery credentials.
-// Plaintext recovery codes are returned only once to the caller.
-func (s *AuthService) ConfirmTOTP(ctx context.Context, userID, code string, counter uint64) ([]string, error) {
-	method, err := s.store.GetMFAMethod(ctx, userID)
+// ConfirmTOTP validates the code and atomically confirms the MFA method,
+// rotates durable recovery-code hashes, and establishes MFA/recent-auth
+// assurance on the exact authenticated session. Plaintext recovery codes are
+// returned only after that complete persistence outcome commits.
+func (s *AuthService) ConfirmTOTP(ctx context.Context, principal Principal, code string, counter uint64) ([]string, error) {
+	if principal.UserID == "" || principal.SessionID == "" {
+		return nil, ErrUnauthenticated
+	}
+	method, err := s.store.GetMFAMethod(ctx, principal.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,22 +62,26 @@ func (s *AuthService) ConfirmTOTP(ctx context.Context, userID, code string, coun
 	if err != nil {
 		return nil, err
 	}
-	if securityStore, ok := s.store.(mfaSecurityStore); ok {
-		if err := securityStore.ConfirmMFAWithRecoveryCodes(ctx, userID, hashes); err != nil {
-			return nil, err
-		}
-		return codes, nil
+	securityStore, ok := s.store.(mfaSecurityStore)
+	if !ok {
+		return nil, errors.New("privileged security persistence not configured")
 	}
-	if err := s.store.ConfirmMFAMethod(ctx, userID); err != nil {
+	if err := securityStore.ConfirmMFAWithRecoveryCodesAndSession(
+		ctx,
+		principal.UserID,
+		principal.SessionID,
+		hashes,
+		s.settings.Now().UTC(),
+	); err != nil {
 		return nil, err
 	}
-
 	return codes, nil
 }
 
 // MarkSessionMFAAndRecentAuth binds successful MFA proof to the exact logical
-// session. This prevents a password-only or stale parallel session from gaining
-// privileged capability merely because the user has MFA configured globally.
+// session. This remains available for other MFA challenge flows such as a
+// bounded privileged-login/re-auth challenge; TOTP setup confirmation itself
+// uses the atomic confirmation method above.
 func (s *AuthService) MarkSessionMFAAndRecentAuth(ctx context.Context, principal Principal) error {
 	securityStore, ok := s.store.(mfaSecurityStore)
 	if !ok {
