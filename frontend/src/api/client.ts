@@ -23,20 +23,105 @@ import type {
 
 const BASE = '/api/v1'
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
+type TokenResponse = {
+  status: string
+  access_token: string
+  token_type: string
+  expires_in: number
+}
+
+export type AuthSession = {
+  id: string
+  current: boolean
+  created_at: string
+  last_used_at: string
+  expires_at: string
+  user_agent_summary?: string
+  safe_ip_metadata?: string
+}
+
+let accessToken: string | null = null
+let refreshInFlight: Promise<string | null> | null = null
+
+function captureAccessToken(response: TokenResponse): TokenResponse {
+  accessToken = response.access_token
+  return response
+}
+
+export function clearAccessToken(): void {
+  accessToken = null
+}
+
+function mayRefresh(path: string): boolean {
+  if (!path.startsWith('/auth/')) return true
+  return (
+    path === '/auth/me' ||
+    path === '/auth/logout' ||
+    path === '/auth/logout-all' ||
+    path === '/auth/sessions' ||
+    path.startsWith('/auth/sessions/') ||
+    path.startsWith('/auth/mfa/') ||
+    path.startsWith('/auth/account/')
+  )
+}
+
+async function parseFailure(res: Response): Promise<Error> {
+  let body: ApiError | null = null
+  try {
+    body = (await res.json()) as ApiError
+  } catch {
+    // Ignore non-JSON error bodies.
+  }
+  return new Error(body?.error?.message ?? `Request failed (${res.status})`)
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight
+
+  refreshInFlight = (async () => {
+    const res = await fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    if (!res.ok) {
+      accessToken = null
+      return null
+    }
+    const response = (await res.json()) as TokenResponse
+    accessToken = response.access_token
+    return accessToken
+  })().finally(() => {
+    refreshInFlight = null
   })
 
-  if (!res.ok) {
-    let body: ApiError | null = null
-    try {
-      body = (await res.json()) as ApiError
-    } catch {
-      // ignore non-JSON error bodies
+  return refreshInFlight
+}
+
+async function request<T>(path: string, init?: RequestInit, retryAuth = true): Promise<T> {
+  const headers = new Headers(init?.headers)
+  if (init?.body != null && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+  if (accessToken) {
+    headers.set('Authorization', `Bearer ${accessToken}`)
+  }
+
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    credentials: init?.credentials ?? 'same-origin',
+    headers,
+  })
+
+  if (res.status === 401 && retryAuth && mayRefresh(path)) {
+    const refreshed = await refreshAccessToken()
+    if (refreshed) {
+      return request<T>(path, init, false)
     }
-    throw new Error(body?.error?.message ?? `Request failed (${res.status})`)
+  }
+
+  if (!res.ok) {
+    throw await parseFailure(res)
   }
 
   return (await res.json()) as T
@@ -75,28 +160,49 @@ export function createStory(input: CreateStoryInput): Promise<Story> {
   })
 }
 
-export function login(email: string, password: string): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/login', {
-    method: 'POST',
-    credentials: 'same-origin',
-    body: JSON.stringify({ email, password }),
-  })
+export async function login(email: string, password: string): Promise<TokenResponse> {
+  const response = await request<TokenResponse>(
+    '/auth/login',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    },
+    false,
+  )
+  return captureAccessToken(response)
 }
 
 export function getCurrentUser(): Promise<AuthUser> {
   return request<AuthUser>('/auth/me')
 }
 
-export function refreshSession(): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/refresh', {
-    method: 'POST',
-  })
+export async function refreshSession(): Promise<TokenResponse> {
+  const response = await request<TokenResponse>('/auth/refresh', { method: 'POST' }, false)
+  return captureAccessToken(response)
 }
 
-export function logout(): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/logout', {
-    method: 'POST',
-  })
+export async function logout(): Promise<{ status: string }> {
+  try {
+    return await request<{ status: string }>('/auth/logout', { method: 'POST' })
+  } finally {
+    clearAccessToken()
+  }
+}
+
+export async function logoutAll(): Promise<{ status: string }> {
+  try {
+    return await request<{ status: string }>('/auth/logout-all', { method: 'POST' })
+  } finally {
+    clearAccessToken()
+  }
+}
+
+export function listAuthSessions(): Promise<{ items: AuthSession[] }> {
+  return request<{ items: AuthSession[] }>('/auth/sessions')
+}
+
+export function revokeAuthSession(sessionID: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/auth/sessions/${sessionID}`, { method: 'DELETE' })
 }
 
 export function setupTOTP(): Promise<{ secret: string }> {
@@ -135,17 +241,25 @@ export function cancelAccountDeletion(): Promise<{ status: string }> {
 }
 
 export function register(email: string, password: string): Promise<{ id: string; email: string; status: string }> {
-  return request<{ id: string; email: string; status: string }>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  })
+  return request<{ id: string; email: string; status: string }>(
+    '/auth/register',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    },
+    false,
+  )
 }
 
 export function requestPasswordReset(email: string): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/password/forgot', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  })
+  return request<{ status: string }>(
+    '/auth/password/forgot',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+    false,
+  )
 }
 
 export function resetPassword(
@@ -153,24 +267,36 @@ export function resetPassword(
   token: string,
   newPassword: string,
 ): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/password/reset', {
-    method: 'POST',
-    body: JSON.stringify({ email, token, new_password: newPassword }),
-  })
+  return request<{ status: string }>(
+    '/auth/password/reset',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, token, new_password: newPassword }),
+    },
+    false,
+  )
 }
 
 export function verifyEmail(email: string, token: string): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/email/verify', {
-    method: 'POST',
-    body: JSON.stringify({ email, token }),
-  })
+  return request<{ status: string }>(
+    '/auth/email/verify',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, token }),
+    },
+    false,
+  )
 }
 
 export function resendEmailVerification(email: string): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/email/resend', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  })
+  return request<{ status: string }>(
+    '/auth/email/resend',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+    false,
+  )
 }
 
 export function listPublishedChapters(storyID: string): Promise<ChapterListResponse> {
