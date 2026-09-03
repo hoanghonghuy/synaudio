@@ -85,6 +85,10 @@ onMounted(load)
     <p class="eyebrow">Studio / Quản lý truyện</p>
     <h1>Quản lý truyện</h1>
     <p class="page-intro">Khởi tạo và theo dõi những câu chuyện đang được xây dựng trong Synaudio.</p>
+    <div class="story-row-actions">
+      <RouterLink class="control-link" to="/admin/audit">Audit & Provenance</RouterLink>
+      <RouterLink class="control-link" to="/account/security">Bảo mật tài khoản</RouterLink>
+    </div>
 
     <div class="admin-workspace">
       <section class="admin-list-panel" aria-labelledby="story-list-heading">
