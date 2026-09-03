@@ -3,7 +3,24 @@ package generation
 import (
 	"context"
 	"errors"
+	"strings"
+
+	"github.com/google/uuid"
 )
+
+// WriterBatchJob is one WRITER job plus the chapter whose current plan must be
+// frozen during batch establishment.
+type WriterBatchJob struct {
+	Job       GenerationJob
+	ChapterID string
+}
+
+// WriterBatchStore establishes a CHAPTER_GENERATION run and every frozen
+// WRITER input atomically. Implementations must not expose any job to workers
+// unless the complete batch commits successfully.
+type WriterBatchStore interface {
+	EstablishWriterBatch(ctx context.Context, run GenerationRun, jobs []WriterBatchJob) (GenerationRun, error)
+}
 
 // StartBatchGeneration creates a GenerationRun of type CHAPTER_GENERATION and
 // enqueues sequential WRITER jobs, one per chapter, in order. Each job freezes
@@ -13,18 +30,38 @@ func (s *Service) StartBatchGeneration(ctx context.Context, storyID string, chap
 		return GenerationRun{}, errors.New("chapter ids must not be empty")
 	}
 
-	run, err := s.CreateGenerationRun(ctx, "CHAPTER_GENERATION", storyID, "", requestedBy)
-	if err != nil {
-		return GenerationRun{}, err
+	batchStore, ok := s.store.(WriterBatchStore)
+	if !ok {
+		return GenerationRun{}, errors.New("atomic writer batch persistence not configured")
 	}
 
-	for _, chapterID := range chapterIDs {
-		if _, err := s.createWriterGenerationJob(ctx, run.ID, chapterID, 3); err != nil {
-			return GenerationRun{}, err
+	run := GenerationRun{
+		ID:          uuid.NewString(),
+		RunType:     "CHAPTER_GENERATION",
+		StoryID:     storyID,
+		Status:      "PENDING",
+		RequestedBy: requestedBy,
+	}
+
+	jobs := make([]WriterBatchJob, 0, len(chapterIDs))
+	for _, rawChapterID := range chapterIDs {
+		chapterID := strings.TrimSpace(rawChapterID)
+		if chapterID == "" {
+			return GenerationRun{}, ErrWriterPlanNotBound
 		}
+		jobs = append(jobs, WriterBatchJob{
+			Job: GenerationJob{
+				ID:          uuid.NewString(),
+				RunID:       run.ID,
+				JobType:     "WRITER",
+				Status:      "PENDING",
+				MaxAttempts: 3,
+			},
+			ChapterID: chapterID,
+		})
 	}
 
-	return run, nil
+	return batchStore.EstablishWriterBatch(ctx, run, jobs)
 }
 
 // MarkDownstreamStale marks all jobs after the given chapter as STALE.
