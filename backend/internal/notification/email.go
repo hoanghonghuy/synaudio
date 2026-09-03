@@ -22,7 +22,10 @@ const (
 	PurposePasswordReset     = "PASSWORD_RESET"
 )
 
-var ErrNoPendingDelivery = errors.New("no pending email delivery")
+var (
+	ErrNoPendingDelivery = errors.New("no pending email delivery")
+	ErrRateLimited       = errors.New("transactional email rate limited")
+)
 
 type OutboxItem struct {
 	ID               string
