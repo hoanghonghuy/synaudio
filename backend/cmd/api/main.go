@@ -135,7 +135,7 @@ func main() {
 		Logger:            log,
 		AdminCheck:        authService.ResolveAdmin,
 		AdminActor:        authService.ResolveUserID,
-		AuditRecord:       auditService.Record,
+		AuditRecord:       auditService.RecordReliable,
 		AuthHandler:       authHandler,
 		AuditHandler:      auditHandler,
 		StoryHandler:      storyHandler,
