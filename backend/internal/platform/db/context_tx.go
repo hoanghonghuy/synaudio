@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -48,4 +49,17 @@ func (c *contextualDBTX) Query(ctx context.Context, query string, args ...interf
 
 func (c *contextualDBTX) QueryRow(ctx context.Context, query string, args ...interface{}) pgx.Row {
 	return c.executor(ctx).QueryRow(ctx, query, args...)
+}
+
+// Begin preserves transaction support expected by persistence adapters such as
+// WRITER batch establishment. Inside an audited request it starts a nested pgx
+// transaction/savepoint; otherwise it delegates to the underlying pool.
+func (c *contextualDBTX) Begin(ctx context.Context) (pgx.Tx, error) {
+	beginner, ok := c.executor(ctx).(interface {
+		Begin(context.Context) (pgx.Tx, error)
+	})
+	if !ok {
+		return nil, errors.New("database transaction support unavailable")
+	}
+	return beginner.Begin(ctx)
 }
