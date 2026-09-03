@@ -24,6 +24,14 @@ type deletionRecoveryStore interface {
 	CancelAccountDeletionWithToken(ctx context.Context, userID, tokenHash string, now time.Time) error
 }
 
+type AccountDeletionPurgeEvent struct {
+	UserID  string
+	Outcome string
+	Err     error
+}
+
+type AccountDeletionPurgeObserver func(context.Context, AccountDeletionPurgeEvent) error
+
 // RequestAccountDeletion deactivates the account immediately and revokes active
 // sessions. The production store performs both transitions atomically.
 func (s *AuthService) RequestAccountDeletion(ctx context.Context, userID string) error {
@@ -99,10 +107,16 @@ func (s *AuthService) PurgeAccount(ctx context.Context, userID string) error {
 	return s.store.PurgeUser(ctx, userID)
 }
 
-// PurgeEligibleAccounts is the worker reconciliation boundary. Each account is
-// re-checked by PurgeAccountIfEligible so concurrent recovery cannot race an
-// eligibility snapshot into an early purge.
+// PurgeEligibleAccounts preserves the original reconciliation API for callers
+// that do not need per-account delivery evidence.
 func (s *AuthService) PurgeEligibleAccounts(ctx context.Context, limit int) (int, error) {
+	return s.PurgeEligibleAccountsObserved(ctx, limit, nil)
+}
+
+// PurgeEligibleAccountsObserved is the operational reconciliation boundary. It
+// reports each attempted purge without exposing PII or recovery credentials so
+// the worker can append durable lifecycle audit evidence.
+func (s *AuthService) PurgeEligibleAccountsObserved(ctx context.Context, limit int, observe AccountDeletionPurgeObserver) (int, error) {
 	lifecycle, ok := s.store.(deletionLifecycleStore)
 	if !ok {
 		return 0, errors.New("account deletion lifecycle persistence not configured")
@@ -114,13 +128,22 @@ func (s *AuthService) PurgeEligibleAccounts(ctx context.Context, limit int) (int
 	}
 	purged := 0
 	for _, id := range ids {
-		if err := lifecycle.PurgeAccountIfEligible(ctx, id, cutoff); err != nil {
+		err := lifecycle.PurgeAccountIfEligible(ctx, id, cutoff)
+		if err != nil {
+			if observe != nil {
+				_ = observe(ctx, AccountDeletionPurgeEvent{UserID: id, Outcome: "FAILED", Err: err})
+			}
 			if errors.Is(err, ErrDeletionGracePeriod) || errors.Is(err, ErrUserNotFound) {
 				continue
 			}
 			return purged, err
 		}
 		purged++
+		if observe != nil {
+			if err := observe(ctx, AccountDeletionPurgeEvent{UserID: id, Outcome: "SUCCEEDED"}); err != nil {
+				return purged, err
+			}
+		}
 	}
 	return purged, nil
 }
