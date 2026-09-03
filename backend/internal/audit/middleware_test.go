@@ -32,7 +32,7 @@ func TestWrapRouteRecordsSemanticSuccess(t *testing.T) {
 		resolve,
 	))
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/stories/story-1/archive", strings.NewReader(`{"password":"must-not-be-read"}`))
+	req := httptest.NewRequest(http.MethodPost, "/admin/stories/story-1/archive", strings.NewReader(`{"credential_marker":"redacted-test-value"}`))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -45,7 +45,7 @@ func TestWrapRouteRecordsSemanticSuccess(t *testing.T) {
 	if got.ActorUserID != "user-1" || got.ActorType != ActorUser || got.Result != ResultSucceeded {
 		t.Fatalf("unexpected actor/result: %#v", got)
 	}
-	if _, exists := got.Metadata["password"]; exists {
+	if _, exists := got.Metadata["credential_marker"]; exists {
 		t.Fatal("request body must never be copied into audit metadata")
 	}
 }
@@ -74,13 +74,14 @@ func TestWrapRouteRecordsDeniedMutation(t *testing.T) {
 	}
 }
 
-func TestWrapRouteSurfacesAuditFailureAfterMutation(t *testing.T) {
+func TestWrapRoutePreservesBusinessSuccessWhenAuditUnavailable(t *testing.T) {
 	mutated := false
 	record := func(_ context.Context, _ Event) (Event, error) {
 		return Event{}, errors.New("audit unavailable")
 	}
 	h := WrapRoute(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		mutated = true
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"id":"rev-1"}`))
 	}), http.MethodPost, "/admin/chapters/{chapterID}/content", record, nil)
@@ -90,11 +91,32 @@ func TestWrapRouteSurfacesAuditFailureAfterMutation(t *testing.T) {
 	if !mutated {
 		t.Fatal("expected wrapped mutation to execute")
 	}
-	if rec.Code != http.StatusServiceUnavailable || rec.Header().Get("X-Synaudio-Audit-Status") != "unavailable" {
-		t.Fatalf("expected explicit audit failure response, got %d headers=%v", rec.Code, rec.Header())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("audit failure must not replace committed business success, got %d", rec.Code)
 	}
-	if strings.Contains(rec.Body.String(), "rev-1") {
-		t.Fatal("must not return original success payload when audit persistence failed")
+	if rec.Header().Get("X-Synaudio-Audit-Status") != "unavailable" {
+		t.Fatalf("expected audit degradation signal, headers=%v", rec.Header())
+	}
+	if !strings.Contains(rec.Body.String(), "rev-1") {
+		t.Fatalf("expected original business response body, got %q", rec.Body.String())
+	}
+}
+
+func TestWrapAuthPreservesBusinessResultWhenAuditUnavailable(t *testing.T) {
+	record := func(_ context.Context, _ Event) (Event, error) {
+		return Event{}, errors.New("audit unavailable")
+	}
+	h := WrapAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), record, nil)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("audit failure must preserve auth result, got %d", rec.Code)
+	}
+	if rec.Header().Get("X-Synaudio-Audit-Status") != "unavailable" {
+		t.Fatalf("expected audit degradation signal, headers=%v", rec.Header())
 	}
 }
 
