@@ -71,6 +71,9 @@ onMounted(load)
     <p class="eyebrow">Story Control Center</p>
     <h1>Trung tâm điều khiển truyện</h1>
     <p class="page-intro">Ưu tiên các điểm cần quyết định trước khi tiếp tục tạo nội dung.</p>
+    <p>
+      <RouterLink class="secondary-link" :to="`/admin/stories/${storyID}/production`">Mở Chapter Production Pipeline →</RouterLink>
+    </p>
 
     <p v-if="loading" class="status-state" role="status" aria-live="polite">Đang tải dữ liệu điều khiển...</p>
     <div v-else-if="error" class="status-state error" role="alert">
