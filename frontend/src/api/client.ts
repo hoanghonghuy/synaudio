@@ -17,6 +17,7 @@ import type {
   CreativeDecisionListResponse,
   FavoriteListResponse,
   GenreListResponse,
+  ListenerLibrary,
   ListeningProgress,
   Story,
   StoryListResponse,
@@ -300,86 +301,50 @@ export function createStory(input: CreateStoryInput): Promise<Story> {
   })
 }
 
-export function updateStoryMetadata(
-  storyID: string,
-  input: { title: string; description: string },
-): Promise<Story> {
-  return request<Story>(`/admin/stories/${storyID}/metadata`, {
-    method: 'PUT',
-    body: JSON.stringify(input),
-  })
+export function updateStoryMetadata(storyID: string, input: { title: string; description: string }): Promise<Story> {
+  return request<Story>(`/admin/stories/${storyID}/metadata`, { method: 'PUT', body: JSON.stringify(input) })
 }
 
 export function uploadStoryCover(storyID: string, file: File): Promise<StoryAssetResponse> {
   const body = new FormData()
   body.append('file', file)
-  return request<StoryAssetResponse>(`/admin/stories/${storyID}/cover`, {
-    method: 'POST',
-    body,
-  })
+  return request<StoryAssetResponse>(`/admin/stories/${storyID}/cover`, { method: 'POST', body })
 }
 
 export function getStoryWorkflowSettings(storyID: string): Promise<StoryWorkflowSettings> {
   return request<StoryWorkflowSettings>(`/admin/stories/${storyID}/workflow-settings`)
 }
 
-export function updateStoryWorkflowSettings(
-  storyID: string,
-  input: StoryWorkflowSettings,
-): Promise<StoryWorkflowSettings> {
-  return request<StoryWorkflowSettings>(`/admin/stories/${storyID}/workflow-settings`, {
-    method: 'PUT',
-    body: JSON.stringify(input),
-  })
+export function updateStoryWorkflowSettings(storyID: string, input: StoryWorkflowSettings): Promise<StoryWorkflowSettings> {
+  return request<StoryWorkflowSettings>(`/admin/stories/${storyID}/workflow-settings`, { method: 'PUT', body: JSON.stringify(input) })
 }
 
 export function getStoryContentProfile(storyID: string): Promise<StoryContentProfile> {
   return request<StoryContentProfile>(`/admin/stories/${storyID}/content-profile`)
 }
 
-export function createStoryContentProfile(
-  storyID: string,
-  input: ContentProfileInput,
-): Promise<StoryContentProfile> {
-  return request<StoryContentProfile>(`/admin/stories/${storyID}/content-profile`, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+export function createStoryContentProfile(storyID: string, input: ContentProfileInput): Promise<StoryContentProfile> {
+  return request<StoryContentProfile>(`/admin/stories/${storyID}/content-profile`, { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function generateStoryFoundation(storyID: string, premise: string): Promise<FoundationResult> {
-  return request<FoundationResult>(`/admin/stories/${storyID}/foundation`, {
-    method: 'POST',
-    body: JSON.stringify({ premise }),
-  })
+  return request<FoundationResult>(`/admin/stories/${storyID}/foundation`, { method: 'POST', body: JSON.stringify({ premise }) })
 }
 
 export function getStoryBible(storyID: string): Promise<StoryBibleVersion> {
   return request<StoryBibleVersion>(`/admin/stories/${storyID}/bible`)
 }
 
-export function createStoryBibleVersion(
-  storyID: string,
-  content: Record<string, unknown>,
-): Promise<StoryBibleVersion> {
-  return request<StoryBibleVersion>(`/admin/stories/${storyID}/bible/versions`, {
-    method: 'POST',
-    body: JSON.stringify({ content }),
-  })
+export function createStoryBibleVersion(storyID: string, content: Record<string, unknown>): Promise<StoryBibleVersion> {
+  return request<StoryBibleVersion>(`/admin/stories/${storyID}/bible/versions`, { method: 'POST', body: JSON.stringify({ content }) })
 }
 
 export function getStoryEnding(storyID: string): Promise<EndingPlanVersion> {
   return request<EndingPlanVersion>(`/admin/stories/${storyID}/ending`)
 }
 
-export function createStoryEndingVersion(
-  storyID: string,
-  content: Record<string, unknown>,
-): Promise<EndingPlanVersion> {
-  return request<EndingPlanVersion>(`/admin/stories/${storyID}/ending/versions`, {
-    method: 'POST',
-    body: JSON.stringify({ content }),
-  })
+export function createStoryEndingVersion(storyID: string, content: Record<string, unknown>): Promise<EndingPlanVersion> {
+  return request<EndingPlanVersion>(`/admin/stories/${storyID}/ending/versions`, { method: 'POST', body: JSON.stringify({ content }) })
 }
 
 export function listStoryArcs(storyID: string): Promise<{ arcs: StoryArc[] }> {
@@ -387,24 +352,15 @@ export function listStoryArcs(storyID: string): Promise<{ arcs: StoryArc[] }> {
 }
 
 export function createStoryArc(storyID: string, content: Record<string, unknown>): Promise<StoryArc> {
-  return request<StoryArc>(`/admin/stories/${storyID}/arcs`, {
-    method: 'POST',
-    body: JSON.stringify({ content }),
-  })
+  return request<StoryArc>(`/admin/stories/${storyID}/arcs`, { method: 'POST', body: JSON.stringify({ content }) })
 }
 
 export function listStoryCharacters(storyID: string): Promise<{ characters: PlanningCharacter[] }> {
   return request<{ characters: PlanningCharacter[] }>(`/admin/stories/${storyID}/characters`)
 }
 
-export function createPlanningCharacter(
-  storyID: string,
-  input: { name: string; importance: string; profile: Record<string, unknown> },
-): Promise<PlanningCharacter> {
-  return request<PlanningCharacter>(`/admin/stories/${storyID}/characters`, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+export function createPlanningCharacter(storyID: string, input: { name: string; importance: string; profile: Record<string, unknown> }): Promise<PlanningCharacter> {
+  return request<PlanningCharacter>(`/admin/stories/${storyID}/characters`, { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function getActivationReadiness(storyID: string): Promise<ActivationReadiness> {
@@ -432,20 +388,11 @@ export function makeStoryPrivate(storyID: string): Promise<Story> {
 }
 
 export async function login(email: string, password: string): Promise<TokenResponse> {
-  const response = await request<TokenResponse>(
-    '/auth/login',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    },
-    false,
-  )
+  const response = await request<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }, false)
   return captureAccessToken(response)
 }
 
-export function getCurrentUser(): Promise<AuthUser> {
-  return request<AuthUser>('/auth/me')
-}
+export function getCurrentUser(): Promise<AuthUser> { return request<AuthUser>('/auth/me') }
 
 export async function refreshSession(): Promise<TokenResponse> {
   const response = await request<TokenResponse>('/auth/refresh', { method: 'POST' }, false)
@@ -453,288 +400,106 @@ export async function refreshSession(): Promise<TokenResponse> {
 }
 
 export async function logout(): Promise<{ status: string }> {
-  try {
-    return await request<{ status: string }>('/auth/logout', { method: 'POST' })
-  } finally {
-    clearAccessToken()
-  }
+  try { return await request<{ status: string }>('/auth/logout', { method: 'POST' }) } finally { clearAccessToken() }
 }
 
 export async function logoutAll(): Promise<{ status: string }> {
-  try {
-    return await request<{ status: string }>('/auth/logout-all', { method: 'POST' })
-  } finally {
-    clearAccessToken()
-  }
+  try { return await request<{ status: string }>('/auth/logout-all', { method: 'POST' }) } finally { clearAccessToken() }
 }
 
-export function listAuthSessions(): Promise<{ items: AuthSession[] }> {
-  return request<{ items: AuthSession[] }>('/auth/sessions')
+export function listAuthSessions(): Promise<{ items: AuthSession[] }> { return request<{ items: AuthSession[] }>('/auth/sessions') }
+export function revokeAuthSession(sessionID: string): Promise<{ status: string }> { return request<{ status: string }>(`/auth/sessions/${sessionID}`, { method: 'DELETE' }) }
+export function setupTOTP(): Promise<{ secret: string }> { return request<{ secret: string }>('/auth/mfa/totp/setup', { method: 'POST', body: JSON.stringify({}) }) }
+export function confirmTOTP(code: string): Promise<{ recovery_codes: string[] }> { return request<{ recovery_codes: string[] }>('/auth/mfa/totp/confirm', { method: 'POST', body: JSON.stringify({ code }) }) }
+export function disableTOTP(): Promise<{ status: string }> { return request<{ status: string }>('/auth/mfa/totp/disable', { method: 'POST', body: JSON.stringify({}) }) }
+export function requestAccountDeletion(): Promise<{ status: string }> { return request<{ status: string }>('/auth/account/deletion/request', { method: 'POST', body: JSON.stringify({}) }) }
+export function cancelAccountDeletion(): Promise<{ status: string }> { return request<{ status: string }>('/auth/account/deletion/cancel', { method: 'POST', body: JSON.stringify({}) }) }
+
+export function requestAccountDeletionRecovery(email: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/account/deletion/recovery/request', { method: 'POST', body: JSON.stringify({ email }) }, false)
 }
 
-export function revokeAuthSession(sessionID: string): Promise<{ status: string }> {
-  return request<{ status: string }>(`/auth/sessions/${sessionID}`, { method: 'DELETE' })
-}
-
-export function setupTOTP(): Promise<{ secret: string }> {
-  return request<{ secret: string }>('/auth/mfa/totp/setup', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  })
-}
-
-export function confirmTOTP(code: string): Promise<{ recovery_codes: string[] }> {
-  return request<{ recovery_codes: string[] }>('/auth/mfa/totp/confirm', {
-    method: 'POST',
-    body: JSON.stringify({ code }),
-  })
-}
-
-export function disableTOTP(): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/mfa/totp/disable', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  })
-}
-
-export function requestAccountDeletion(): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/account/deletion/request', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  })
-}
-
-export function cancelAccountDeletion(): Promise<{ status: string }> {
-  return request<{ status: string }>('/auth/account/deletion/cancel', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  })
+export function confirmAccountDeletionRecovery(email: string, token: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/account/deletion/recovery/confirm', { method: 'POST', body: JSON.stringify({ email, token }) }, false)
 }
 
 export function register(email: string, password: string): Promise<{ id: string; email: string; status: string }> {
-  return request<{ id: string; email: string; status: string }>(
-    '/auth/register',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    },
-    false,
-  )
+  return request<{ id: string; email: string; status: string }>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }, false)
 }
 
 export function requestPasswordReset(email: string): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    '/auth/password/forgot',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    },
-    false,
-  )
+  return request<{ status: string }>('/auth/password/forgot', { method: 'POST', body: JSON.stringify({ email }) }, false)
 }
 
-export function resetPassword(
-  email: string,
-  token: string,
-  newPassword: string,
-): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    '/auth/password/reset',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, token, new_password: newPassword }),
-    },
-    false,
-  )
+export function resetPassword(email: string, token: string, newPassword: string): Promise<{ status: string }> {
+  return request<{ status: string }>('/auth/password/reset', { method: 'POST', body: JSON.stringify({ email, token, new_password: newPassword }) }, false)
 }
 
 export function verifyEmail(email: string, token: string): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    '/auth/email/verify',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, token }),
-    },
-    false,
-  )
+  return request<{ status: string }>('/auth/email/verify', { method: 'POST', body: JSON.stringify({ email, token }) }, false)
 }
 
 export function resendEmailVerification(email: string): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    '/auth/email/resend',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    },
-    false,
-  )
+  return request<{ status: string }>('/auth/email/resend', { method: 'POST', body: JSON.stringify({ email }) }, false)
 }
 
-export function listPublishedChapters(storyID: string): Promise<ChapterListResponse> {
-  return request<ChapterListResponse>(`/stories/${storyID}/chapters`)
+export function listPublishedChapters(storyID: string): Promise<ChapterListResponse> { return request<ChapterListResponse>(`/stories/${storyID}/chapters`) }
+export function listAdminChapters(storyID: string): Promise<ChapterListResponse> { return request<ChapterListResponse>(`/admin/stories/${storyID}/chapters`) }
+export function createPlanningChapter(storyID: string, title: string): Promise<Chapter> { return request<Chapter>(`/admin/stories/${storyID}/chapters`, { method: 'POST', body: JSON.stringify({ title }) }) }
+export function createChapterPlanRevision(chapterID: string, plan: Record<string, unknown>): Promise<ChapterPlanRevision> { return request<ChapterPlanRevision>(`/admin/chapters/${chapterID}/plans`, { method: 'POST', body: JSON.stringify({ plan }) }) }
+export function listContentRevisions(chapterID: string): Promise<ContentRevisionListResponse> { return request<ContentRevisionListResponse>(`/admin/chapters/${chapterID}/content`) }
+export function listChapterReviews(chapterID: string): Promise<ChapterReviewListResponse> { return request<ChapterReviewListResponse>(`/admin/chapters/${chapterID}/reviews`) }
+
+export function editContent(chapterID: string, basedOnRevisionID: string, text: string): Promise<ContentRevision> {
+  return request<ContentRevision>(`/admin/chapters/${chapterID}/edit`, { method: 'POST', body: JSON.stringify({ based_on_revision_id: basedOnRevisionID, text }) })
 }
 
-export function listAdminChapters(storyID: string): Promise<ChapterListResponse> {
-  return request<ChapterListResponse>(`/admin/stories/${storyID}/chapters`)
+export function regenerateContent(chapterID: string, basedOnRevisionID: string): Promise<ContentRevision> {
+  return request<ContentRevision>(`/admin/chapters/${chapterID}/regenerate`, { method: 'POST', body: JSON.stringify({ based_on_revision_id: basedOnRevisionID }) })
 }
 
-export function createPlanningChapter(storyID: string, title: string): Promise<Chapter> {
-  return request<Chapter>(`/admin/stories/${storyID}/chapters`, {
-    method: 'POST',
-    body: JSON.stringify({ title }),
-  })
+export function approveContent(chapterID: string, revisionID: string): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`/admin/chapters/${chapterID}/approve`, { method: 'POST', body: JSON.stringify({ revision_id: revisionID }) })
 }
 
-export function createChapterPlanRevision(
-  chapterID: string,
-  plan: Record<string, unknown>,
-): Promise<ChapterPlanRevision> {
-  return request<ChapterPlanRevision>(`/admin/chapters/${chapterID}/plans`, {
-    method: 'POST',
-    body: JSON.stringify({ plan }),
-  })
+export function rejectContent(revisionID: string, reason: string): Promise<ContentRevision> {
+  return request<ContentRevision>(`/admin/revisions/${revisionID}/reject`, { method: 'POST', body: JSON.stringify({ reason }) })
 }
 
-export function listContentRevisions(chapterID: string): Promise<ContentRevisionListResponse> {
-  return request<ContentRevisionListResponse>(`/admin/chapters/${chapterID}/content`)
+export function runContentReview(chapterID: string, reviewType: 'CONTINUITY' | 'QUALITY' | 'SAFETY', revisionID: string, text: string): Promise<ChapterReview> {
+  const paths = { CONTINUITY: 'continuity', QUALITY: 'quality', SAFETY: 'safety' } as const
+  return request<ChapterReview>(`/admin/chapters/${chapterID}/${paths[reviewType]}`, { method: 'POST', body: JSON.stringify({ revision_id: revisionID, text }) })
 }
 
-export function listChapterReviews(chapterID: string): Promise<ChapterReviewListResponse> {
-  return request<ChapterReviewListResponse>(`/admin/chapters/${chapterID}/reviews`)
+export function getChapterContent(chapterID: string): Promise<ChapterContent> { return request<ChapterContent>(`/chapters/${chapterID}/content`) }
+export function getAudioURL(chapterID: string): Promise<AudioURLResponse> { return request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`) }
+export function getListenerLibrary(): Promise<ListenerLibrary> { return request<ListenerLibrary>('/me/library') }
+export function listFavorites(): Promise<FavoriteListResponse> { return request<FavoriteListResponse>('/me/favorites') }
+export function addFavorite(storyID: string): Promise<{ status: string }> { return request<{ status: string }>(`/me/favorites/${storyID}`, { method: 'PUT' }) }
+export function removeFavorite(storyID: string): Promise<{ status: string }> { return request<{ status: string }>(`/me/favorites/${storyID}`, { method: 'DELETE' }) }
+export function getProgress(chapterID: string): Promise<ListeningProgress> { return request<ListeningProgress>(`/me/progress/${chapterID}`) }
+
+export function saveProgress(chapterID: string, input: { position_ms: number; audio_asset_id: string; playback_session_id: string }): Promise<ListeningProgress> {
+  return request<ListeningProgress>(`/me/progress/${chapterID}`, { method: 'PUT', body: JSON.stringify(input) })
 }
 
-export function editContent(
-  chapterID: string,
-  basedOnRevisionID: string,
-  text: string,
-): Promise<ContentRevision> {
-  return request<ContentRevision>(`/admin/chapters/${chapterID}/edit`, {
-    method: 'POST',
-    body: JSON.stringify({
-      based_on_revision_id: basedOnRevisionID,
-      text,
-    }),
-  })
+export function completeProgress(chapterID: string): Promise<ListeningProgress> {
+  return request<ListeningProgress>(`/me/progress/${chapterID}/complete`, { method: 'POST' })
 }
 
-export function regenerateContent(
-  chapterID: string,
-  basedOnRevisionID: string,
-): Promise<ContentRevision> {
-  return request<ContentRevision>(`/admin/chapters/${chapterID}/regenerate`, {
-    method: 'POST',
-    body: JSON.stringify({
-      based_on_revision_id: basedOnRevisionID,
-    }),
-  })
-}
-
-export function approveContent(
-  chapterID: string,
-  revisionID: string,
-): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>(`/admin/chapters/${chapterID}/approve`, {
-    method: 'POST',
-    body: JSON.stringify({ revision_id: revisionID }),
-  })
-}
-
-export function rejectContent(
-  revisionID: string,
-  reason: string,
-): Promise<ContentRevision> {
-  return request<ContentRevision>(`/admin/revisions/${revisionID}/reject`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  })
-}
-
-export function runContentReview(
-  chapterID: string,
-  reviewType: 'CONTINUITY' | 'QUALITY' | 'SAFETY',
-  revisionID: string,
-  text: string,
-): Promise<ChapterReview> {
-  const paths = {
-    CONTINUITY: 'continuity',
-    QUALITY: 'quality',
-    SAFETY: 'safety',
-  } as const
-  return request<ChapterReview>(`/admin/chapters/${chapterID}/${paths[reviewType]}`, {
-    method: 'POST',
-    body: JSON.stringify({ revision_id: revisionID, text }),
-  })
-}
-
-export function getChapterContent(chapterID: string): Promise<ChapterContent> {
-  return request<ChapterContent>(`/chapters/${chapterID}/content`)
-}
-
-export function getAudioURL(chapterID: string): Promise<AudioURLResponse> {
-  return request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`)
-}
-
-export function listFavorites(): Promise<FavoriteListResponse> {
-  return request<FavoriteListResponse>('/me/favorites')
-}
-
-export function addFavorite(storyID: string): Promise<{ status: string }> {
-  return request<{ status: string }>(`/me/favorites/${storyID}`, {
-    method: 'PUT',
-  })
-}
-
-export function removeFavorite(storyID: string): Promise<{ status: string }> {
-  return request<{ status: string }>(`/me/favorites/${storyID}`, {
-    method: 'DELETE',
-  })
-}
-
-export function getProgress(chapterID: string): Promise<ListeningProgress> {
-  return request<ListeningProgress>(`/me/progress/${chapterID}`)
-}
-
-export function saveProgress(
-  chapterID: string,
-  input: { position_ms: number; audio_asset_id: string; playback_session_id: string },
-): Promise<ListeningProgress> {
-  return request<ListeningProgress>(`/me/progress/${chapterID}`, {
-    method: 'PUT',
-    body: JSON.stringify(input),
-  })
-}
-
-export function listCreativeDecisions(storyID: string): Promise<CreativeDecisionListResponse> {
-  return request<CreativeDecisionListResponse>(`/admin/stories/${storyID}/creative-decisions`)
-}
-
-export function listAttentionItems(storyID: string): Promise<AttentionListResponse> {
-  return request<AttentionListResponse>(`/admin/stories/${storyID}/attention`)
-}
-
-export function reviewArcCompletion(storyID: string, arcID: string): Promise<ArcCompletionResult> {
-  return request<ArcCompletionResult>(`/admin/stories/${storyID}/arcs/${arcID}/completion`)
-}
-
-export function analyzeThreadInactivity(storyID: string): Promise<ThreadInactivityResponse> {
-  return request<ThreadInactivityResponse>(`/admin/stories/${storyID}/thread-inactivity`)
-}
-
-export function listUsage(storyID: string): Promise<UsageListResponse> {
-  return request<UsageListResponse>(`/admin/stories/${storyID}/usage`)
-}
+export function listCreativeDecisions(storyID: string): Promise<CreativeDecisionListResponse> { return request<CreativeDecisionListResponse>(`/admin/stories/${storyID}/creative-decisions`) }
+export function listAttentionItems(storyID: string): Promise<AttentionListResponse> { return request<AttentionListResponse>(`/admin/stories/${storyID}/attention`) }
+export function reviewArcCompletion(storyID: string, arcID: string): Promise<ArcCompletionResult> { return request<ArcCompletionResult>(`/admin/stories/${storyID}/arcs/${arcID}/completion`) }
+export function analyzeThreadInactivity(storyID: string): Promise<ThreadInactivityResponse> { return request<ThreadInactivityResponse>(`/admin/stories/${storyID}/thread-inactivity`) }
+export function listUsage(storyID: string): Promise<UsageListResponse> { return request<UsageListResponse>(`/admin/stories/${storyID}/usage`) }
 
 export function listAuditEvents(filters: AuditFilters = {}): Promise<AuditListResponse> {
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== null && String(value).trim() !== '') {
-      qs.set(key, String(value))
-    }
+    if (value !== undefined && value !== null && String(value).trim() !== '') qs.set(key, String(value))
   }
   const suffix = qs.toString() ? `?${qs.toString()}` : ''
   return request<AuditListResponse>(`/admin/audit${suffix}`)
 }
 
-export function getAuditEvent(eventID: string): Promise<AuditEvent> {
-  return request<AuditEvent>(`/admin/audit/${eventID}`)
-}
+export function getAuditEvent(eventID: string): Promise<AuditEvent> { return request<AuditEvent>(`/admin/audit/${eventID}`) }
