@@ -107,6 +107,7 @@ func main() {
 	}))
 	var authHandler http.Handler = identity.NewAuthHandler(authService)
 	authHandler = identity.WrapSecurityAssurance(authHandler, authService)
+	adminSecurityHandler := identity.NewAdminSecurityHandler(authService)
 	if emailCfg.Mode != config.EmailModeDisabled {
 		emailStore := pgstore.NewEmailOutboxStore(database)
 		emailService, err := providers.BuildEmail(emailCfg, emailStore)
@@ -203,6 +204,7 @@ func main() {
 		AuditRecord:          auditService.RecordReliable,
 		AuditBoundary:        auditBoundary,
 		AuthHandler:          authHandler,
+		AdminSecurityHandler: adminSecurityHandler,
 		AuditHandler:         auditHandler,
 		StoryHandler:         storyHandler,
 		PlanningHandler:      planningHandler,
