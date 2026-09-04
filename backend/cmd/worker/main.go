@@ -12,6 +12,8 @@ import (
 
 	"github.com/synaudio/synaudio/backend/internal/audit"
 	"github.com/synaudio/synaudio/backend/internal/generation"
+	"github.com/synaudio/synaudio/backend/internal/identity"
+	"github.com/synaudio/synaudio/backend/internal/notification"
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
@@ -25,6 +27,11 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Error("config load failed", "error", err)
+		os.Exit(1)
+	}
+	emailCfg, err := config.LoadEmail(cfg.AppEnv, cfg.AppPublicURL)
+	if err != nil {
+		log.Error("email config load failed", "error", err)
 		os.Exit(1)
 	}
 
@@ -48,6 +55,16 @@ func main() {
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
 	auditService := audit.NewService(pgstore.NewAuditStore(queries))
+	identityService := identity.NewAuthService(pgstore.NewIdentityStore(queries))
+
+	var emailService *notification.Service
+	if emailCfg.Mode != config.EmailModeDisabled {
+		emailService, err = providers.BuildEmail(emailCfg, pgstore.NewEmailOutboxStore(pool))
+		if err != nil {
+			log.Error("email provider init failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	workerID := os.Getenv("WORKER_ID")
 	if workerID == "" {
@@ -83,6 +100,24 @@ func main() {
 		return err
 	}
 
+	deletionAudit := func(ctx context.Context, event identity.AccountDeletionPurgeEvent) error {
+		result := audit.ResultSucceeded
+		if event.Outcome == "FAILED" {
+			result = audit.ResultFailed
+		}
+		_, err := auditService.RecordReliable(ctx, audit.Event{
+			ActorType:    audit.ActorSystem,
+			Action:       "ACCOUNT_DELETION_PURGE_" + event.Outcome,
+			ResourceType: "USER",
+			ResourceID:   event.UserID,
+			Result:       result,
+			Metadata: map[string]any{
+				"worker_id": workerID,
+			},
+		})
+		return err
+	}
+
 	worker := generation.NewWorker(
 		generationService,
 		workerID,
@@ -92,15 +127,18 @@ func main() {
 
 	log.Info("worker started", "env", cfg.AppEnv, "worker_id", workerID)
 
-	// Reclaim stale jobs periodically.
 	reclaimTicker := time.NewTicker(30 * time.Second)
 	defer reclaimTicker.Stop()
 
-	// Reconcile durable audit intents independently from generation-job traffic.
 	auditTicker := time.NewTicker(15 * time.Second)
 	defer auditTicker.Stop()
 
-	// Poll for new jobs.
+	emailTicker := time.NewTicker(5 * time.Second)
+	defer emailTicker.Stop()
+
+	deletionTicker := time.NewTicker(time.Hour)
+	defer deletionTicker.Stop()
+
 	pollTicker := time.NewTicker(2 * time.Second)
 	defer pollTicker.Stop()
 
@@ -129,6 +167,29 @@ func main() {
 			} else if report.Claimed > 0 {
 				log.Info("audit outbox reconciled", "claimed", report.Claimed, "delivered", report.Delivered, "retrying", report.Retrying)
 			}
+		case <-emailTicker.C:
+			if emailService == nil {
+				continue
+			}
+			for i := 0; i < 20; i++ {
+				didWork, err := emailService.DeliverNext(ctx)
+				if err != nil {
+					log.Error("transactional email delivery failed", "error", err)
+					break
+				}
+				if !didWork {
+					break
+				}
+			}
+		case <-deletionTicker.C:
+			purged, err := identityService.PurgeEligibleAccountsObserved(ctx, 50, deletionAudit)
+			if err != nil {
+				log.Error("account deletion reconciliation failed", "error", err)
+				continue
+			}
+			if purged > 0 {
+				log.Info("eligible accounts purged", "count", purged)
+			}
 		case <-pollTicker.C:
 			if err := worker.ProcessOne(ctx); err != nil {
 				if err == generation.ErrNoRunnableJob {
@@ -140,7 +201,6 @@ func main() {
 	}
 }
 
-// processJob dispatches a claimed job to the appropriate durable handler.
 func processJob(svc *generation.Service, log *slog.Logger) generation.JobProcessor {
 	return func(ctx context.Context, job generation.GenerationJob) error {
 		switch job.JobType {
