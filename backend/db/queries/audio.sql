@@ -2,7 +2,7 @@
 -- Narration Revisions
 -- ============================================================
 
--- name: ReserveNarrationRevision :one
+-- name: NextNarrationRevision :one
 INSERT INTO chapter_media_version_counters (
     chapter_id, next_narration_revision, next_audio_version
 )
@@ -60,7 +60,7 @@ RETURNING id, narration_revision_id, segment_no, text, direction, status, provid
 -- Audio Assets
 -- ============================================================
 
--- name: ReserveAudioVersion :one
+-- name: NextAudioVersion :one
 INSERT INTO chapter_media_version_counters (
     chapter_id, next_narration_revision, next_audio_version
 )
