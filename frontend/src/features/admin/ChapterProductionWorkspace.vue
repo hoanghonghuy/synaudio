@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { listAdminChapters, listChapterReviews, listContentRevisions } from '../../api/client'
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
+import { createLatestSelectionGuard } from './latestSelection.mjs'
 
 const route = useRoute()
 const storyID = computed(() => route.params.storyID as string)
@@ -12,6 +13,7 @@ const revisions = ref<ContentRevision[]>([])
 const reviews = ref<ChapterReview[]>([])
 const loading = ref(false)
 const error = ref('')
+const chapterSelection = createLatestSelectionGuard()
 
 const latestRevision = computed(() => revisions.value[revisions.value.length - 1] ?? null)
 const approvedRevision = computed(() => [...revisions.value].reverse().find((revision) => revision.Status === 'APPROVED') ?? null)
@@ -95,6 +97,7 @@ const stages = computed(() => {
 })
 
 async function selectChapter(chapter: Chapter) {
+  const mayCommit = chapterSelection.begin(chapter.ID)
   activeChapter.value = chapter
   error.value = ''
   try {
@@ -102,9 +105,11 @@ async function selectChapter(chapter: Chapter) {
       listContentRevisions(chapter.ID),
       listChapterReviews(chapter.ID),
     ])
+    if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = revisionResponse.revisions
     reviews.value = reviewResponse.reviews
   } catch (e) {
+    if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = []
     reviews.value = []
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
