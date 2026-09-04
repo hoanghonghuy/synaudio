@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -24,12 +23,16 @@ type MinIO struct {
 }
 
 func NewMinIO(cfg config.Config) (*MinIO, error) {
-	endpoint, secure, host, err := parseStorageEndpoint(cfg.StorageEndpoint)
+	endpoint, secure, _, err := parseStorageEndpoint(cfg.StorageEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	if cfg.AppEnv == config.EnvProduction && !secure && !isLocalStorageHost(host) {
-		return nil, fmt.Errorf("insecure remote STORAGE_ENDPOINT is not allowed in production")
+	// Production object storage must always use TLS. Development remains free to
+	// use explicit HTTP endpoints such as local MinIO, but private/RFC1918 hosts
+	// are not treated as "local" exceptions in production because they can be
+	// remote network services.
+	if cfg.AppEnv == config.EnvProduction && !secure {
+		return nil, fmt.Errorf("insecure STORAGE_ENDPOINT is not allowed in production")
 	}
 
 	client, err := minio.New(endpoint, &minio.Options{
@@ -67,16 +70,6 @@ func parseStorageEndpoint(raw string) (endpoint string, secure bool, host string
 	}
 
 	return u.Host, u.Scheme == "https", u.Hostname(), nil
-}
-
-func isLocalStorageHost(host string) bool {
-	host = strings.ToLower(strings.TrimSpace(host))
-	switch host {
-	case "localhost", "minio", "127.0.0.1", "::1", "host.docker.internal":
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
 }
 
 // Put stores data at the given object key.
