@@ -134,7 +134,7 @@ func mountRoutes(
 	_ = chi.Walk(routes, func(method, route string, handler http.Handler, _ ...func(http.Handler) http.Handler) error {
 		if strings.HasPrefix(route, "/admin/") {
 			policy := adminPolicyFor(method, route)
-			if policy.Permission != "" && adminPermissionCheck != nil {
+			if policy.Permission != "" {
 				handler = requireAdminPermission(adminPermissionCheck, adminActor, policy.Permission)(handler)
 			} else {
 				handler = requireAdmin(adminCheck, adminActor)(handler)
