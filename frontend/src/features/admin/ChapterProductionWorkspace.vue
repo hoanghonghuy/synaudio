@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
+  editContent,
   listAdminChapters,
   listChapterReviews,
   listContentRevisions,
@@ -20,6 +21,7 @@ const loading = ref(false)
 const action = ref('')
 const error = ref('')
 const success = ref('')
+const draftText = ref('')
 const chapterSelection = createLatestSelectionGuard()
 
 const latestRevision = computed(() => revisions.value[revisions.value.length - 1] ?? null)
@@ -29,6 +31,7 @@ const latestRevisionReviews = computed(() => {
   return reviews.value.filter((review) => review.ContentRevisionID === latestRevision.value?.ID)
 })
 const reviewOutcomes = computed(() => new Map(latestRevisionReviews.value.map((review) => [review.ReviewType, review.Outcome])))
+const mayEditDraft = computed(() => Boolean(latestRevision.value && draftText.value.trim() && !action.value))
 
 const stages = computed(() => {
   const chapter = activeChapter.value
@@ -116,11 +119,35 @@ async function selectChapter(chapter: Chapter) {
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = revisionResponse.revisions
     reviews.value = reviewResponse.reviews
+    draftText.value = revisionResponse.revisions[revisionResponse.revisions.length - 1]?.ContentText ?? ''
   } catch (e) {
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = []
     reviews.value = []
+    draftText.value = ''
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
+  }
+}
+
+async function editLatestDraft() {
+  const chapter = activeChapter.value
+  const revision = latestRevision.value
+  const text = draftText.value.trim()
+  if (!chapter || !revision || !text || action.value) return
+
+  action.value = 'edit'
+  error.value = ''
+  success.value = ''
+  try {
+    await editContent(chapter.ID, revision.ID, text)
+    if (activeChapter.value?.ID !== chapter.ID) return
+    success.value = `Đã tạo Edit Draft từ revision #${revision.RevisionNo}; revision gốc vẫn được giữ để bảo toàn provenance.`
+    await selectChapter(chapter)
+  } catch (e) {
+    if (activeChapter.value?.ID !== chapter.ID) return
+    error.value = e instanceof Error ? e.message : 'Không thể tạo Edit Draft revision.'
+  } finally {
+    action.value = ''
   }
 }
 
@@ -211,7 +238,7 @@ onMounted(load)
         <section v-if="activeChapter" class="action-panel">
           <div>
             <strong>Production actions</strong>
-            <p>Regenerate tạo output/revision mới từ revision hiện tại. Retry của một failed attempt là semantics khác và chỉ được mở khi backend expose đúng attempt/job recovery endpoint.</p>
+            <p>Regenerate tạo output/revision mới từ revision hiện tại. Edit Draft tạo revision thủ công mới dựa trên đúng revision đang hiển thị. Retry của failed attempt là semantics khác và chỉ được mở khi backend expose đúng attempt/job recovery endpoint.</p>
           </div>
           <button
             type="button"
@@ -220,6 +247,24 @@ onMounted(load)
           >
             {{ action === 'regenerate' ? 'Đang Regenerate…' : 'Regenerate latest revision' }}
           </button>
+        </section>
+
+        <section v-if="latestRevision" class="edit-panel">
+          <div>
+            <strong>Edit Draft</strong>
+            <p>Chỉnh nội dung sẽ tạo ContentRevision mới dựa trên revision #{{ latestRevision.RevisionNo }}; không mutate revision cũ và không được coi là Regenerate hoặc Retry.</p>
+          </div>
+          <textarea
+            v-model="draftText"
+            rows="10"
+            :disabled="Boolean(action)"
+            aria-label="Edit draft content"
+          ></textarea>
+          <div class="edit-actions">
+            <button type="button" :disabled="!mayEditDraft" @click="editLatestDraft">
+              {{ action === 'edit' ? 'Đang lưu Edit Draft…' : 'Save as new revision' }}
+            </button>
+          </div>
         </section>
 
         <ol v-if="activeChapter" class="stage-list">
@@ -254,15 +299,18 @@ onMounted(load)
 .production-header h1, .chapter-heading h2 { margin: 4px 0 8px; }
 .eyebrow { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
 .workspace-grid { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 24px; }
-.chapter-panel, .pipeline-panel, .provenance-panel, .action-panel { border: 1px solid var(--border-color, #d8d8d8); border-radius: 16px; background: var(--surface, #fff); }
+.chapter-panel, .pipeline-panel, .provenance-panel, .action-panel, .edit-panel { border: 1px solid var(--border-color, #d8d8d8); border-radius: 16px; background: var(--surface, #fff); }
 .chapter-panel { padding: 18px; height: fit-content; }
 .chapter-button { width: 100%; text-align: left; display: grid; gap: 3px; padding: 12px; margin-top: 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; }
 .chapter-button.active { border-color: currentColor; }
 .chapter-button span, .chapter-button small { opacity: .65; }
 .pipeline-panel { padding: 22px; }
 .action-panel { margin-top: 20px; padding: 16px; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
-.action-panel p { margin: 5px 0 0; max-width: 720px; opacity: .72; }
+.action-panel p, .edit-panel p { margin: 5px 0 0; max-width: 720px; opacity: .72; }
 .action-panel button { white-space: nowrap; }
+.edit-panel { margin-top: 16px; padding: 16px; display: grid; gap: 12px; }
+.edit-panel textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; line-height: 1.5; padding: 12px; border: 1px solid var(--border-color, #ccc); border-radius: 10px; }
+.edit-actions { display: flex; justify-content: flex-end; }
 .stage-list { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 10px; }
 .stage-card { display: grid; grid-template-columns: 12px 1fr; gap: 14px; padding: 14px; border: 1px solid var(--border-color, #ddd); border-radius: 12px; }
 .stage-card p { margin: 4px 0 0; opacity: .72; }
