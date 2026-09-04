@@ -25,6 +25,14 @@ type mfaSessionConfirmationStore interface {
 	ConfirmMFAWithRecoveryCodesAndSession(ctx context.Context, userID, sessionID string, codeHashes []string, at time.Time) error
 }
 
+// mfaDisableGuardStore owns MFA removal for accounts that may carry ADMIN.
+// Implementations must serialize the Last Active Admin decision with disabling
+// the MFA method so concurrent privileged transitions cannot leave the final
+// ACTIVE administrator without mandatory MFA.
+type mfaDisableGuardStore interface {
+	DisableMFAMethodSafely(ctx context.Context, userID string) error
+}
+
 func (s *AuthService) SetupTOTP(ctx context.Context, userID string) (string, error) {
 	if _, err := s.store.GetUserByID(ctx, userID); err != nil {
 		return "", err
@@ -106,5 +114,9 @@ func (s *AuthService) ConsumeRecoveryCode(ctx context.Context, userID, rawCode s
 }
 
 func (s *AuthService) DisableTOTP(ctx context.Context, userID string) error {
-	return s.store.DisableMFAMethod(ctx, userID)
+	guardStore, ok := s.store.(mfaDisableGuardStore)
+	if !ok {
+		return errors.New("atomic MFA removal guard persistence not configured")
+	}
+	return guardStore.DisableMFAMethodSafely(ctx, userID)
 }
