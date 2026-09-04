@@ -2,10 +2,18 @@
 -- Narration Revisions
 -- ============================================================
 
--- name: NextNarrationRevision :one
-SELECT COALESCE(MAX(revision_no), 0) + 1
-FROM narration_revisions
-WHERE chapter_id = $1;
+-- name: ReserveNarrationRevision :one
+INSERT INTO chapter_media_version_counters (
+    chapter_id, next_narration_revision, next_audio_version
+)
+VALUES (
+    $1,
+    (SELECT COALESCE(MAX(revision_no), 0) + 2 FROM narration_revisions WHERE chapter_id = $1),
+    (SELECT COALESCE(MAX(version_no), 0) + 1 FROM audio_assets WHERE chapter_id = $1)
+)
+ON CONFLICT (chapter_id) DO UPDATE
+SET next_narration_revision = chapter_media_version_counters.next_narration_revision + 1
+RETURNING next_narration_revision - 1;
 
 -- name: CreateNarrationRevision :one
 INSERT INTO narration_revisions (id, chapter_id, revision_no, source_content_revision_id,
@@ -52,10 +60,18 @@ RETURNING id, narration_revision_id, segment_no, text, direction, status, provid
 -- Audio Assets
 -- ============================================================
 
--- name: NextAudioVersion :one
-SELECT COALESCE(MAX(version_no), 0) + 1
-FROM audio_assets
-WHERE chapter_id = $1;
+-- name: ReserveAudioVersion :one
+INSERT INTO chapter_media_version_counters (
+    chapter_id, next_narration_revision, next_audio_version
+)
+VALUES (
+    $1,
+    (SELECT COALESCE(MAX(revision_no), 0) + 1 FROM narration_revisions WHERE chapter_id = $1),
+    (SELECT COALESCE(MAX(version_no), 0) + 2 FROM audio_assets WHERE chapter_id = $1)
+)
+ON CONFLICT (chapter_id) DO UPDATE
+SET next_audio_version = chapter_media_version_counters.next_audio_version + 1
+RETURNING next_audio_version - 1;
 
 -- name: CreateAudioAsset :one
 INSERT INTO audio_assets (id, chapter_id, version_no, source_narration_revision_id,
