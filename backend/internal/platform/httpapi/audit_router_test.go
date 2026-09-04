@@ -23,6 +23,7 @@ func TestRouterAuditsRepresentativeCriticalAdminMutations(t *testing.T) {
 	var events []audit.Event
 	router := NewRouter(Dependencies{
 		AdminPermissionCheck: func(context.Context, *http.Request, string) (bool, error) { return true, nil },
+		AdminRecentAuthCheck: func(context.Context, *http.Request) error { return nil },
 		AdminActor:           func(context.Context, *http.Request) (string, error) { return actorID, nil },
 		AuditRecord: func(_ context.Context, event audit.Event) (audit.Event, error) {
 			events = append(events, event)
