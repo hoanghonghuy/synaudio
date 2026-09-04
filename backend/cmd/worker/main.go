@@ -75,6 +75,7 @@ func main() {
 	metricRegistry := platformmetrics.NewRegistry()
 	metricRegistry.WorkerHeartbeat(time.Now())
 	startWorkerMetrics(ctx, metricRegistry, log)
+	startBacklogSampler(ctx, pool, metricRegistry, log)
 
 	jobAudit := func(ctx context.Context, event generation.JobAuditEvent) error {
 		actorType := audit.ActorSystem
