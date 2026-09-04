@@ -61,6 +61,7 @@ export interface Chapter {
   Title: string
   Status: string
   ArcID: string
+  CurrentPlanRevisionID?: string
 }
 
 export interface ChapterListResponse {

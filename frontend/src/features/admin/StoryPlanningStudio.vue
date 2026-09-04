@@ -1,0 +1,560 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import {
+  activateStory,
+  archiveStory,
+  createChapterPlanRevision,
+  createPlanningChapter,
+  createPlanningCharacter,
+  createStoryArc,
+  createStoryBibleVersion,
+  createStoryContentProfile,
+  createStoryEndingVersion,
+  generateStoryFoundation,
+  getActivationReadiness,
+  getStoryBible,
+  getStoryContentProfile,
+  getStoryEnding,
+  getStoryWorkflowSettings,
+  listAdminChapters,
+  listAdminStories,
+  listCreativeDecisions,
+  listStoryArcs,
+  listStoryCharacters,
+  makeStoryPrivate,
+  makeStoryPublic,
+  restoreStory,
+  updateStoryMetadata,
+  updateStoryWorkflowSettings,
+  uploadStoryCover,
+} from '../../api/client'
+import { isExplicitNotFound } from '../../api/http-error'
+import type {
+  ActivationReadiness,
+  EndingPlanVersion,
+  PlanningCharacter,
+  StoryArc,
+  StoryBibleVersion,
+  StoryContentProfile,
+  StoryWorkflowSettings,
+} from '../../api/client'
+import type { Chapter, CreativeDecision, Story } from '../../api/types'
+
+const route = useRoute()
+const storyID = computed(() => String(route.params.storyID ?? ''))
+
+const story = ref<Story | null>(null)
+const chapters = ref<Chapter[]>([])
+const decisions = ref<CreativeDecision[]>([])
+const bible = ref<StoryBibleVersion | null>(null)
+const ending = ref<EndingPlanVersion | null>(null)
+const arcs = ref<StoryArc[]>([])
+const characters = ref<PlanningCharacter[]>([])
+const contentProfile = ref<StoryContentProfile | null>(null)
+const readiness = ref<ActivationReadiness | null>(null)
+const workflowLoaded = ref(false)
+const planningTruthLoaded = ref(false)
+
+const loading = ref(false)
+const mutating = ref(false)
+const error = ref('')
+const notice = ref('')
+const premise = ref('')
+const coverFile = ref<File | null>(null)
+
+const metadata = reactive({ title: '', description: '' })
+const settings = reactive<StoryWorkflowSettings>({
+  story_id: '',
+  batch_generation_size: 0,
+  creative_autonomy: '',
+  preferred_text_provider: '',
+  preferred_text_model: '',
+  preferred_tts_provider: '',
+  preferred_voice_id: '',
+  pause_before_tts: false,
+  auto_ai_review: false,
+  planning_horizon: 0,
+  fallback_policy: {},
+})
+const fallbackPolicyJSON = ref('{}')
+const profileDraft = reactive({
+  maturity_target: '',
+  allowed_themes: '',
+  disallowed_themes: '',
+  violence_level: '',
+  language_limits: '',
+  romance_limits: '',
+  constraints: '{}',
+})
+const bibleDraft = ref('{}')
+const endingDraft = ref('{}')
+const arcDraft = ref('{}')
+const characterDraft = reactive({ name: '', importance: '', profile: '{}' })
+const chapterTitle = ref('')
+const planDraft = reactive({ chapter_id: '', plan: '{}' })
+
+const unresolvedDecisions = computed(() =>
+  decisions.value.filter((item) => item.Status !== 'SELECTED' && item.Status !== 'REJECTED'),
+)
+const canActivate = computed(() =>
+  planningTruthLoaded.value && story.value?.status === 'DRAFT' && readiness.value?.ready === true,
+)
+const canMakePublic = computed(() =>
+  planningTruthLoaded.value &&
+  story.value?.visibility === 'PRIVATE' &&
+  (story.value?.status === 'ACTIVE' || story.value?.status === 'COMPLETED'),
+)
+
+const readinessLabels: Record<string, string> = {
+  planning_mode: 'Planning Mode',
+  generation_policy: 'Generation Policy',
+  content_profile: 'Content Profile',
+  story_bible: 'Story Bible',
+  ending_plan: 'Ending Plan',
+  initial_arc: 'Initial Arc',
+  main_character: 'Main Character',
+  planning_foundation: 'Planning foundation',
+}
+
+function labelForMissing(item: string): string {
+  return readinessLabels[item] ?? item.replaceAll('_', ' ')
+}
+
+function asJSON(value: unknown): string {
+  return JSON.stringify(value ?? {}, null, 2)
+}
+
+function parseObject(value: string, label: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value || '{}') as unknown
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      error.value = `${label} phải là JSON object.`
+      return null
+    }
+    return parsed as Record<string, unknown>
+  } catch {
+    error.value = `${label} phải là JSON hợp lệ.`
+    return null
+  }
+}
+
+function syncSettings(value: StoryWorkflowSettings | null) {
+  workflowLoaded.value = value !== null
+  settings.story_id = value?.story_id ?? storyID.value
+  settings.batch_generation_size = value?.batch_generation_size ?? 0
+  settings.creative_autonomy = value?.creative_autonomy ?? ''
+  settings.preferred_text_provider = value?.preferred_text_provider ?? ''
+  settings.preferred_text_model = value?.preferred_text_model ?? ''
+  settings.preferred_tts_provider = value?.preferred_tts_provider ?? ''
+  settings.preferred_voice_id = value?.preferred_voice_id ?? ''
+  settings.pause_before_tts = value?.pause_before_tts ?? false
+  settings.auto_ai_review = value?.auto_ai_review ?? false
+  settings.planning_horizon = value?.planning_horizon ?? 0
+  settings.fallback_policy = value?.fallback_policy ?? {}
+  fallbackPolicyJSON.value = asJSON(settings.fallback_policy)
+}
+
+function syncProfile(value: StoryContentProfile | null) {
+  contentProfile.value = value
+  const profile = value?.profile ?? {}
+  profileDraft.maturity_target = String(profile.maturity_target ?? '')
+  profileDraft.allowed_themes = Array.isArray(profile.allowed_themes) ? profile.allowed_themes.join(', ') : ''
+  profileDraft.disallowed_themes = Array.isArray(profile.disallowed_themes) ? profile.disallowed_themes.join(', ') : ''
+  profileDraft.violence_level = String(profile.violence_level ?? '')
+  profileDraft.language_limits = String(profile.language_limits ?? '')
+  profileDraft.romance_limits = String(profile.romance_limits ?? '')
+  profileDraft.constraints = asJSON(profile.constraints)
+}
+
+async function optionalNotFound<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise
+  } catch (e) {
+    if (isExplicitNotFound(e)) return null
+    throw e
+  }
+}
+
+async function loadWorkspace() {
+  loading.value = true
+  planningTruthLoaded.value = false
+  error.value = ''
+  try {
+    const [storyList, chapterList, decisionList, arcList, characterList, ready] = await Promise.all([
+      listAdminStories(),
+      listAdminChapters(storyID.value),
+      listCreativeDecisions(storyID.value),
+      listStoryArcs(storyID.value),
+      listStoryCharacters(storyID.value),
+      getActivationReadiness(storyID.value),
+    ])
+
+    story.value = storyList.stories.find((item) => item.id === storyID.value) ?? null
+    chapters.value = chapterList.chapters
+    decisions.value = decisionList.decisions
+    arcs.value = arcList.arcs
+    characters.value = characterList.characters
+    readiness.value = ready
+
+    if (!story.value) {
+      error.value = 'Không tìm thấy Story trong workspace Admin.'
+      return
+    }
+    metadata.title = story.value.title
+    metadata.description = story.value.description
+
+    const [workflow, currentProfile, currentBible, currentEnding] = await Promise.all([
+      optionalNotFound(getStoryWorkflowSettings(storyID.value)),
+      optionalNotFound(getStoryContentProfile(storyID.value)),
+      optionalNotFound(getStoryBible(storyID.value)),
+      optionalNotFound(getStoryEnding(storyID.value)),
+    ])
+    syncSettings(workflow)
+    syncProfile(currentProfile)
+    bible.value = currentBible
+    ending.value = currentEnding
+    if (currentBible) bibleDraft.value = asJSON(currentBible.Content)
+    if (currentEnding) endingDraft.value = asJSON(currentEnding.Content)
+    planningTruthLoaded.value = true
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Không thể tải Planning Studio.'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function runMutation(message: string, action: () => Promise<unknown>) {
+  if (!planningTruthLoaded.value) {
+    error.value = 'Planning truth chưa được tải đầy đủ. Hãy tải lại workspace trước khi thay đổi dữ liệu.'
+    return
+  }
+  mutating.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    await action()
+    notice.value = message
+    await loadWorkspace()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Thao tác thất bại.'
+  } finally {
+    mutating.value = false
+  }
+}
+
+async function saveMetadata() {
+  await runMutation('Đã cập nhật Story metadata.', () => updateStoryMetadata(storyID.value, metadata))
+}
+
+function chooseCover(event: Event) {
+  coverFile.value = (event.target as HTMLInputElement).files?.[0] ?? null
+}
+
+async function uploadCover() {
+  if (!coverFile.value) return
+  const file = coverFile.value
+  await runMutation('Đã upload cover mới.', () => uploadStoryCover(storyID.value, file))
+  coverFile.value = null
+}
+
+async function saveWorkflowSettings() {
+  const fallback = parseObject(fallbackPolicyJSON.value, 'Fallback Policy')
+  if (!fallback) return
+  await runMutation('Đã lưu Workflow Settings cho work tương lai.', () =>
+    updateStoryWorkflowSettings(storyID.value, { ...settings, story_id: storyID.value, fallback_policy: fallback }),
+  )
+}
+
+async function saveContentProfileVersion() {
+  const constraints = parseObject(profileDraft.constraints, 'Content Profile constraints')
+  if (!constraints) return
+  const split = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean)
+  await runMutation('Đã tạo Content Profile version mới.', () =>
+    createStoryContentProfile(storyID.value, {
+      maturity_target: profileDraft.maturity_target,
+      allowed_themes: split(profileDraft.allowed_themes),
+      disallowed_themes: split(profileDraft.disallowed_themes),
+      violence_level: profileDraft.violence_level,
+      language_limits: profileDraft.language_limits,
+      romance_limits: profileDraft.romance_limits,
+      constraints,
+    }),
+  )
+}
+
+async function generateFoundation() {
+  if (!premise.value.trim()) {
+    error.value = 'Cần nhập premise trước khi tạo planning foundation.'
+    return
+  }
+  await runMutation('Đã tạo Story foundation theo contract hiện tại.', () =>
+    generateStoryFoundation(storyID.value, premise.value.trim()),
+  )
+}
+
+async function saveBibleVersion() {
+  const content = parseObject(bibleDraft.value, 'Story Bible')
+  if (!content) return
+  await runMutation('Đã tạo Story Bible version mới.', () => createStoryBibleVersion(storyID.value, content))
+}
+
+async function saveEndingVersion() {
+  const content = parseObject(endingDraft.value, 'Ending Plan')
+  if (!content) return
+  await runMutation('Đã tạo Ending Plan version mới.', () => createStoryEndingVersion(storyID.value, content))
+}
+
+async function addArc() {
+  const content = parseObject(arcDraft.value, 'Arc')
+  if (!content) return
+  await runMutation('Đã tạo Arc mới với version đầu tiên.', () => createStoryArc(storyID.value, content))
+  arcDraft.value = '{}'
+}
+
+async function addCharacter() {
+  const profile = parseObject(characterDraft.profile, 'Character profile')
+  if (!profile) return
+  await runMutation('Đã tạo Character và profile version đầu tiên.', () =>
+    createPlanningCharacter(storyID.value, {
+      name: characterDraft.name,
+      importance: characterDraft.importance,
+      profile,
+    }),
+  )
+  characterDraft.name = ''
+  characterDraft.importance = ''
+  characterDraft.profile = '{}'
+}
+
+async function addChapter() {
+  if (!chapterTitle.value.trim()) return
+  await runMutation('Đã tạo planning Chapter.', () => createPlanningChapter(storyID.value, chapterTitle.value.trim()))
+  chapterTitle.value = ''
+}
+
+async function addPlanRevision() {
+  const plan = parseObject(planDraft.plan, 'Chapter Plan')
+  if (!plan || !planDraft.chapter_id) return
+  await runMutation('Đã tạo Chapter Plan revision mới.', () => createChapterPlanRevision(planDraft.chapter_id, plan))
+  planDraft.plan = '{}'
+}
+
+async function confirmAndRun(prompt: string, message: string, action: () => Promise<unknown>) {
+  if (!window.confirm(prompt)) return
+  await runMutation(message, action)
+}
+
+onMounted(loadWorkspace)
+</script>
+
+<template>
+  <section class="page admin planning-studio">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Studio / Story Planning</p>
+        <h1>{{ story?.title ?? 'Planning Studio' }}</h1>
+        <p class="page-intro">Một workspace cho planning, readiness và lifecycle theo backend/domain truth.</p>
+      </div>
+      <div class="story-row-actions">
+        <RouterLink class="control-link" to="/admin">Danh sách truyện</RouterLink>
+        <RouterLink class="control-link" :to="`/admin/stories/${storyID}/control`">Trung tâm điều khiển</RouterLink>
+        <RouterLink class="control-link" :to="`/admin/stories/${storyID}/review`">Duyệt nội dung</RouterLink>
+      </div>
+    </div>
+
+    <p v-if="loading" class="status-state" role="status">Đang tải Planning Studio...</p>
+    <div v-else-if="error && !story" class="status-state error" role="alert">
+      <strong>Không thể tải workspace.</strong><p>{{ error }}</p>
+      <button type="button" class="secondary-link" @click="loadWorkspace">Thử lại</button>
+    </div>
+
+    <template v-else-if="story">
+      <p v-if="notice" class="status-state" role="status">{{ notice }}</p>
+      <div v-if="error" class="status-state error" role="alert">
+        <p>{{ error }}</p>
+        <button v-if="!planningTruthLoaded" type="button" class="secondary-link" @click="loadWorkspace">Tải lại authoritative state</button>
+      </div>
+
+      <div class="admin-workspace">
+        <section class="admin-list-panel">
+          <div class="section-heading"><div><p class="eyebrow">Lifecycle</p><h2>Story state</h2></div></div>
+          <dl class="planning-summary">
+            <div><dt>Slug</dt><dd>{{ story.slug }}</dd></div>
+            <div><dt>Status</dt><dd><span class="badge">{{ story.status }}</span></dd></div>
+            <div><dt>Visibility</dt><dd><span class="badge">{{ story.visibility }}</span></dd></div>
+            <div><dt>Planning mode</dt><dd>{{ readiness?.story_workspace?.planning_mode || '—' }}</dd></div>
+            <div><dt>Planning phase</dt><dd>{{ readiness?.story_workspace?.planning_phase || '—' }}</dd></div>
+            <div><dt>Public rating</dt><dd>{{ readiness?.story_workspace?.public_rating || '—' }}</dd></div>
+            <div><dt>Public warnings</dt><dd>{{ readiness?.story_workspace?.public_warnings?.join(', ') || '—' }}</dd></div>
+            <div><dt>Cover asset</dt><dd>{{ readiness?.story_workspace?.cover_asset_id || 'Chưa có cover' }}</dd></div>
+          </dl>
+          <div class="action-row">
+            <button type="button" :disabled="mutating || !canActivate" @click="runMutation('Story đã ACTIVE.', () => activateStory(storyID))">Activate</button>
+            <button v-if="story.status !== 'ARCHIVED'" type="button" class="secondary-link" :disabled="mutating || !planningTruthLoaded" @click="confirmAndRun('Archive Story này?', 'Story đã được archive.', () => archiveStory(storyID))">Archive</button>
+            <button v-else type="button" class="secondary-link" :disabled="mutating || !planningTruthLoaded" @click="confirmAndRun('Restore Story này?', 'Story đã được restore.', () => restoreStory(storyID))">Restore</button>
+            <button v-if="story.visibility === 'PRIVATE'" type="button" class="secondary-link" :disabled="mutating || !canMakePublic" @click="confirmAndRun('Đưa Story ra PUBLIC?', 'Story đã PUBLIC.', () => makeStoryPublic(storyID))">Make public</button>
+            <button v-else type="button" class="secondary-link" :disabled="mutating || !planningTruthLoaded" @click="confirmAndRun('Chuyển Story về PRIVATE?', 'Story đã PRIVATE.', () => makeStoryPrivate(storyID))">Make private</button>
+          </div>
+        </section>
+
+        <section class="admin-list-panel">
+          <div class="section-heading">
+            <div><p class="eyebrow">Activation Gate</p><h2>Readiness</h2></div>
+            <span class="badge">{{ readiness?.ready ? 'READY' : 'BLOCKED' }}</span>
+          </div>
+          <p v-if="readiness?.ready" class="status-state">Backend xác nhận đủ điều kiện activation.</p>
+          <ul v-else class="readiness-list">
+            <li v-for="item in readiness?.missing ?? []" :key="item"><strong>{{ labelForMissing(item) }}</strong><span>Cần hoàn tất trước Activate.</span></li>
+          </ul>
+        </section>
+      </div>
+
+      <section class="admin-list-panel">
+        <div class="section-heading"><div><p class="eyebrow">Mutable metadata</p><h2>Story metadata & cover</h2></div></div>
+        <form class="planning-form" @submit.prevent="saveMetadata">
+          <label>Title<input v-model="metadata.title" type="text" required></label>
+          <label class="full-field">Description<textarea v-model="metadata.description" rows="4"></textarea></label>
+          <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Lưu metadata</button></div>
+        </form>
+        <div class="cover-form">
+          <input type="file" accept="image/jpeg,image/png,image/webp" @change="chooseCover">
+          <button type="button" :disabled="mutating || !planningTruthLoaded || !coverFile" @click="uploadCover">Upload cover</button>
+        </div>
+      </section>
+
+      <section class="admin-list-panel">
+        <div class="section-heading"><div><p class="eyebrow">Immutable contract</p><h2>Generation Policy</h2><p class="muted">Read-only snapshot; không có mutation trong workspace.</p></div></div>
+        <dl v-if="readiness?.generation_policy" class="planning-summary">
+          <div><dt>Policy version</dt><dd>{{ readiness.generation_policy.policy_version }}</dd></div>
+          <div><dt>Audio duration</dt><dd>{{ readiness.generation_policy.minimum_audio_duration_sec }}s – {{ readiness.generation_policy.target_audio_duration_sec }}s</dd></div>
+          <div><dt>Content origin</dt><dd>{{ readiness.generation_policy.content_origin }}</dd></div>
+          <div><dt>Language</dt><dd>{{ readiness.generation_policy.language }}</dd></div>
+          <div><dt>Narration</dt><dd>{{ readiness.generation_policy.narration_language }}</dd></div>
+        </dl>
+        <p v-else class="empty-state">Generation Policy chưa tồn tại hoặc không thể đọc.</p>
+      </section>
+
+      <section class="admin-list-panel">
+        <div class="section-heading"><div><p class="eyebrow">Mutable future-work controls</p><h2>Workflow Settings</h2></div><span class="badge">{{ workflowLoaded ? 'CONFIGURED' : 'NOT CONFIGURED' }}</span></div>
+        <form class="planning-form" @submit.prevent="saveWorkflowSettings">
+          <label>Batch size<input v-model.number="settings.batch_generation_size" type="number" min="0"></label>
+          <label>Creative autonomy<input v-model="settings.creative_autonomy" type="text"></label>
+          <label>Text provider<input v-model="settings.preferred_text_provider" type="text"></label>
+          <label>Text model<input v-model="settings.preferred_text_model" type="text"></label>
+          <label>TTS provider<input v-model="settings.preferred_tts_provider" type="text"></label>
+          <label>Voice ID<input v-model="settings.preferred_voice_id" type="text"></label>
+          <label>Planning horizon<input v-model.number="settings.planning_horizon" type="number" min="0"></label>
+          <label class="check-field"><input v-model="settings.pause_before_tts" type="checkbox"> Pause before TTS</label>
+          <label class="check-field"><input v-model="settings.auto_ai_review" type="checkbox"> Auto AI review</label>
+          <label class="full-field">Fallback Policy (JSON)<textarea v-model="fallbackPolicyJSON" rows="5" spellcheck="false"></textarea></label>
+          <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Lưu Workflow Settings</button></div>
+        </form>
+      </section>
+
+      <section class="admin-list-panel">
+        <div class="section-heading"><div><p class="eyebrow">Versioned safety profile</p><h2>Content Profile</h2><p class="muted">Lưu tạo version mới, không rewrite history.</p></div><span class="badge">v{{ contentProfile?.version_no ?? 0 }}</span></div>
+        <form class="planning-form" @submit.prevent="saveContentProfileVersion">
+          <label>Maturity target<input v-model="profileDraft.maturity_target" type="text"></label>
+          <label>Violence level<input v-model="profileDraft.violence_level" type="text"></label>
+          <label>Allowed themes<input v-model="profileDraft.allowed_themes" type="text" placeholder="comma-separated"></label>
+          <label>Disallowed themes<input v-model="profileDraft.disallowed_themes" type="text" placeholder="comma-separated"></label>
+          <label>Language limits<input v-model="profileDraft.language_limits" type="text"></label>
+          <label>Romance limits<input v-model="profileDraft.romance_limits" type="text"></label>
+          <label class="full-field">Constraints (JSON)<textarea v-model="profileDraft.constraints" rows="5" spellcheck="false"></textarea></label>
+          <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Content Profile version</button></div>
+        </form>
+      </section>
+
+      <section class="admin-list-panel">
+        <div class="section-heading"><div><p class="eyebrow">Planning foundation</p><h2>Bible · Ending · Arcs · Characters</h2><p class="muted">Có thể generate foundation hoặc tạo version/entity có chủ đích; history không bị overwrite.</p></div></div>
+        <form class="foundation-form" @submit.prevent="generateFoundation">
+          <label>Premise<textarea v-model="premise" rows="4" placeholder="Premise cho Story Architect"></textarea></label>
+          <button type="submit" :disabled="mutating || !planningTruthLoaded || !premise.trim()">Generate foundation</button>
+        </form>
+
+        <div class="admin-workspace artifact-grid">
+          <article class="artifact-card">
+            <div class="section-heading"><h3>Story Bible</h3><span class="badge">v{{ bible?.VersionNo ?? 0 }}</span></div>
+            <textarea v-model="bibleDraft" rows="12" spellcheck="false"></textarea>
+            <button type="button" :disabled="mutating || !planningTruthLoaded" @click="saveBibleVersion">Tạo Bible version mới</button>
+          </article>
+          <article class="artifact-card">
+            <div class="section-heading"><h3>Ending Plan</h3><span class="badge">v{{ ending?.VersionNo ?? 0 }}</span></div>
+            <textarea v-model="endingDraft" rows="12" spellcheck="false"></textarea>
+            <button type="button" :disabled="mutating || !planningTruthLoaded" @click="saveEndingVersion">Tạo Ending version mới</button>
+          </article>
+        </div>
+
+        <div class="planning-subsection">
+          <h3>Story Arcs</h3>
+          <form class="inline-json-form" @submit.prevent="addArc">
+            <textarea v-model="arcDraft" rows="4" spellcheck="false" placeholder="Arc content JSON"></textarea>
+            <button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Arc</button>
+          </form>
+          <div class="story-table-wrap"><table class="story-table"><thead><tr><th>Arc</th><th>Status</th><th>Current version</th></tr></thead><tbody>
+            <tr v-for="arc in arcs" :key="arc.ID"><th scope="row">Arc {{ arc.Ordinal }}</th><td>{{ arc.Status }}</td><td>{{ arc.CurrentVersionID || '—' }}</td></tr>
+            <tr v-if="arcs.length === 0"><td colspan="3">Chưa có Arc.</td></tr>
+          </tbody></table></div>
+        </div>
+
+        <div class="planning-subsection">
+          <h3>Characters</h3>
+          <form class="planning-form" @submit.prevent="addCharacter">
+            <label>Name<input v-model="characterDraft.name" type="text" required></label>
+            <label>Importance<input v-model="characterDraft.importance" type="text" required></label>
+            <label class="full-field">Profile JSON<textarea v-model="characterDraft.profile" rows="5" spellcheck="false"></textarea></label>
+            <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Character</button></div>
+          </form>
+          <div class="story-table-wrap"><table class="story-table"><thead><tr><th>Character</th><th>Importance</th><th>Current profile</th></tr></thead><tbody>
+            <tr v-for="character in characters" :key="character.ID"><th scope="row">{{ character.CanonicalName }}</th><td>{{ character.Importance }}</td><td>{{ character.CurrentProfileVersionID || '—' }}</td></tr>
+            <tr v-if="characters.length === 0"><td colspan="3">Chưa có Character.</td></tr>
+          </tbody></table></div>
+        </div>
+      </section>
+
+      <section class="admin-list-panel">
+        <div class="section-heading"><div><p class="eyebrow">Versioned chapter planning</p><h2>Chapter Plans</h2><p class="muted">Tạo Chapter hoặc revision mới; không destructive edit lịch sử.</p></div><span class="count-label">{{ chapters.length }}</span></div>
+        <div class="admin-workspace artifact-grid">
+          <form class="artifact-card" @submit.prevent="addChapter"><h3>Tạo Chapter</h3><label>Title<input v-model="chapterTitle" type="text" required></label><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Chapter</button></form>
+          <form class="artifact-card" @submit.prevent="addPlanRevision"><h3>Tạo Plan revision</h3><label>Chapter<select v-model="planDraft.chapter_id" required><option value="" disabled>Chọn chapter</option><option v-for="chapter in chapters" :key="chapter.ID" :value="chapter.ID">#{{ chapter.ChapterNumber }} — {{ chapter.Title }}</option></select></label><label>Plan JSON<textarea v-model="planDraft.plan" rows="6" spellcheck="false"></textarea></label><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo revision</button></form>
+        </div>
+        <div class="story-table-wrap"><table class="story-table"><thead><tr><th>Chapter</th><th>Status</th><th>Arc</th><th>Current plan</th></tr></thead><tbody>
+          <tr v-for="chapter in chapters" :key="chapter.ID"><th scope="row">#{{ chapter.ChapterNumber }} — {{ chapter.Title }}</th><td><span class="badge">{{ chapter.Status }}</span></td><td>{{ chapter.ArcID || '—' }}</td><td>{{ chapter.CurrentPlanRevisionID || '—' }}</td></tr>
+          <tr v-if="chapters.length === 0"><td colspan="4">Chưa có Chapter.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="admin-list-panel">
+        <div class="section-heading"><div><p class="eyebrow">Decision pressure</p><h2>Creative Decisions</h2></div><span class="count-label">{{ unresolvedDecisions.length }} pending</span></div>
+        <p class="muted">{{ decisions.length }} decision records. Control Center là entry point xử lý chi tiết.</p>
+      </section>
+    </template>
+  </section>
+</template>
+
+<style scoped>
+.planning-studio { display: grid; gap: 1.5rem; }
+.planning-summary { display: grid; gap: .75rem; margin: 0; }
+.planning-summary > div { display: grid; grid-template-columns: minmax(9rem, .35fr) 1fr; gap: 1rem; padding-block: .75rem; border-bottom: 1px solid var(--border, #d9d9d9); }
+.planning-summary dt { font-weight: 700; }
+.planning-summary dd { margin: 0; overflow-wrap: anywhere; }
+.action-row, .cover-form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1rem; }
+.readiness-list { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
+.readiness-list li { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem; border: 1px solid var(--border, #d9d9d9); border-radius: .5rem; }
+.planning-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.planning-form label, .foundation-form label, .artifact-card label { display: grid; gap: .4rem; font-weight: 600; }
+.planning-form input, .planning-form textarea, .foundation-form textarea, .artifact-card input, .artifact-card textarea, .artifact-card select, .inline-json-form textarea { width: 100%; box-sizing: border-box; }
+.full-field { grid-column: 1 / -1; }
+.check-field { display: flex !important; align-items: center; gap: .5rem !important; }
+.foundation-form, .inline-json-form { display: grid; gap: .75rem; margin-bottom: 1.25rem; }
+.artifact-grid { margin-block: 1rem; }
+.artifact-card { min-width: 0; display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--border, #d9d9d9); border-radius: .65rem; }
+.planning-subsection { display: grid; gap: .75rem; margin-top: 1.5rem; }
+@media (max-width: 760px) {
+  .planning-form { grid-template-columns: 1fr; }
+  .full-field { grid-column: auto; }
+  .planning-summary > div { grid-template-columns: 1fr; gap: .25rem; }
+  .readiness-list li { display: grid; }
+}
+</style>

@@ -135,12 +135,14 @@ func main() {
 		planning.WithMemoryExtractor(aiProviders.MemoryExtractor),
 	)
 	planningHandler := planning.NewHandler(planningService)
+	planningWorkspaceHandler := planning.NewWorkspaceHandler(planningService)
 
 	storyService := story.NewService(storyStore,
 		story.WithObjectStorage(objStorage),
 		story.WithActivationChecker(planningService),
 	)
 	storyHandler := story.NewHandler(storyService)
+	storyReadinessHandler := story.NewReadinessHandler(storyService)
 
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
@@ -193,20 +195,22 @@ func main() {
 			}
 			return nil
 		},
-		DependencyChecks: dependencyChecks,
-		Logger:            log,
-		AdminCheck:        authService.ResolveAdmin,
-		AdminActor:        authService.ResolveUserID,
-		AuditRecord:       auditService.RecordReliable,
-		AuditBoundary:     auditBoundary,
-		AuthHandler:       authHandler,
-		AuditHandler:      auditHandler,
-		StoryHandler:      storyHandler,
-		PlanningHandler:   planningHandler,
-		GenerationHandler: generationHandler,
-		AudioHandler:      audioHandler,
-		ListenerHandler:   listenerHandler,
-		RetconHandler:     retconHandler,
+		DependencyChecks:          dependencyChecks,
+		Logger:                    log,
+		AdminCheck:                authService.ResolveAdmin,
+		AdminActor:                authService.ResolveUserID,
+		AuditRecord:               auditService.RecordReliable,
+		AuditBoundary:             auditBoundary,
+		AuthHandler:               authHandler,
+		AuditHandler:              auditHandler,
+		StoryHandler:              storyHandler,
+		StoryReadinessHandler:     storyReadinessHandler,
+		PlanningHandler:           planningHandler,
+		PlanningWorkspaceHandler:  planningWorkspaceHandler,
+		GenerationHandler:         generationHandler,
+		AudioHandler:              audioHandler,
+		ListenerHandler:           listenerHandler,
+		RetconHandler:             retconHandler,
 	})
 
 	server := &http.Server{
