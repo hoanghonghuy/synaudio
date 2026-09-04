@@ -41,16 +41,41 @@ func TestParseStorageEndpointRejectsAmbiguousValues(t *testing.T) {
 	}
 }
 
-func TestNewMinIORejectsRemoteHTTPInProduction(t *testing.T) {
-	_, err := NewMinIO(config.Config{
-		AppEnv:           config.EnvProduction,
-		StorageEndpoint:  "http://storage.example.com",
+func TestNewMinIORejectsHTTPInProduction(t *testing.T) {
+	for _, endpoint := range []string{
+		"http://storage.example.com",
+		"http://10.0.0.25:9000",
+		"http://172.16.4.5:9000",
+		"http://192.168.1.20:9000",
+		"http://127.0.0.1:9000",
+		"http://minio:9000",
+	} {
+		_, err := NewMinIO(config.Config{
+			AppEnv:           config.EnvProduction,
+			StorageEndpoint:  endpoint,
+			StorageBucket:    "bucket",
+			StorageAccessKey: "key",
+			StorageSecretKey: "secret",
+		})
+		if err == nil || !strings.Contains(err.Error(), "insecure STORAGE_ENDPOINT") {
+			t.Fatalf("expected production HTTP endpoint %q rejection, got %v", endpoint, err)
+		}
+	}
+}
+
+func TestNewMinIOAllowsExplicitLocalHTTPInDevelopment(t *testing.T) {
+	store, err := NewMinIO(config.Config{
+		AppEnv:           config.EnvDevelopment,
+		StorageEndpoint:  "http://minio:9000",
 		StorageBucket:    "bucket",
 		StorageAccessKey: "key",
 		StorageSecretKey: "secret",
 	})
-	if err == nil || !strings.Contains(err.Error(), "insecure remote STORAGE_ENDPOINT") {
-		t.Fatalf("expected insecure production endpoint rejection, got %v", err)
+	if err != nil {
+		t.Fatalf("new development storage client: %v", err)
+	}
+	if endpoint := store.client.EndpointURL(); endpoint.Scheme != "http" || endpoint.Host != "minio:9000" {
+		t.Fatalf("unexpected development endpoint: %q", endpoint.String())
 	}
 }
 
