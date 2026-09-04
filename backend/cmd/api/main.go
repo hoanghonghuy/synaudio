@@ -215,13 +215,24 @@ func main() {
 	})
 
 	metricRegistry := metrics.NewRegistry()
-	rootHandler := http.NewServeMux()
-	rootHandler.Handle("/metrics", metricRegistry.Handler())
-	rootHandler.Handle("/", metricRegistry.HTTPMiddleware(router))
+	metricsServer, err := metrics.NewPrivateServer(os.Getenv("API_METRICS_ADDR"), metricRegistry.Handler())
+	if err != nil {
+		log.Error("metrics config invalid", "error", err)
+		os.Exit(1)
+	}
+	if metricsServer != nil {
+		go func() {
+			log.Info("api metrics listening", "addr", metricsServer.Addr)
+			if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Error("api metrics server failed", "error", err)
+				os.Exit(1)
+			}
+		}()
+	}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           rootHandler,
+		Handler:           metricRegistry.HTTPMiddleware(router),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -237,5 +248,8 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = server.Shutdown(shutdownCtx)
+	if metricsServer != nil {
+		_ = metricsServer.Shutdown(shutdownCtx)
+	}
 	log.Info("api stopped")
 }
