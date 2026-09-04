@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,6 +15,28 @@ type backlogSnapshot struct {
 	depth      int64
 	oldest     pgtype.Timestamptz
 	deadLetter int64
+}
+
+func startBacklogSampler(ctx context.Context, pool *pgxpool.Pool, registry *platformmetrics.Registry, log *slog.Logger) {
+	sample := func() {
+		if err := refreshBacklogMetrics(ctx, pool, registry, time.Now()); err != nil && ctx.Err() == nil {
+			log.Error("backlog metrics refresh failed", "error", err)
+		}
+	}
+
+	sample()
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sample()
+			}
+		}
+	}()
 }
 
 func refreshBacklogMetrics(ctx context.Context, pool *pgxpool.Pool, registry *platformmetrics.Registry, now time.Time) error {
