@@ -3,6 +3,7 @@ package pgstore
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
@@ -10,16 +11,22 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 )
 
+type transactionBeginner interface {
+	Begin(context.Context) (pgx.Tx, error)
+}
+
 // AudioStore implements audio.Store backed by PostgreSQL via sqlc.
 type AudioStore struct {
-	q        *db.Queries
-	executor db.DBTX
+	q       *db.Queries
+	beginTx transactionBeginner
 }
 
 func NewAudioStore(q *db.Queries, executor ...db.DBTX) *AudioStore {
 	store := &AudioStore{q: q}
 	if len(executor) > 0 {
-		store.executor = executor[0]
+		if beginner, ok := executor[0].(transactionBeginner); ok {
+			store.beginTx = beginner
+		}
 	}
 	return store
 }
@@ -29,16 +36,12 @@ func NewAudioStore(q *db.Queries, executor ...db.DBTX) *AudioStore {
 // ============================================================
 
 func (s *AudioStore) NextNarrationRevision(ctx context.Context, chapterID string) (int, error) {
-	if s.executor == nil {
-		n, err := s.q.NextNarrationRevision(ctx, toUUID(chapterID))
-		return int(n), err
-	}
-	n, err := db.ReserveNarrationRevision(ctx, s.executor, toUUID(chapterID))
+	n, err := s.q.NextNarrationRevision(ctx, toUUID(chapterID))
 	return int(n), err
 }
 
-func (s *AudioStore) CreateNarrationRevision(ctx context.Context, r audio.NarrationRevision) (audio.NarrationRevision, error) {
-	row, err := s.q.CreateNarrationRevision(ctx, db.CreateNarrationRevisionParams{
+func createNarrationRevision(ctx context.Context, q *db.Queries, r audio.NarrationRevision) (audio.NarrationRevision, error) {
+	row, err := q.CreateNarrationRevision(ctx, db.CreateNarrationRevisionParams{
 		ID:                      toUUID(r.ID),
 		ChapterID:               toUUID(r.ChapterID),
 		RevisionNo:              int32(r.RevisionNo),
@@ -52,6 +55,43 @@ func (s *AudioStore) CreateNarrationRevision(ctx context.Context, r audio.Narrat
 		return audio.NarrationRevision{}, err
 	}
 	return toNarrationRevision(row), nil
+}
+
+func (s *AudioStore) CreateNarrationRevision(ctx context.Context, r audio.NarrationRevision) (audio.NarrationRevision, error) {
+	return createNarrationRevision(ctx, s.q, r)
+}
+
+// CreateNarrationRevisionAtomically serializes version allocation per chapter and
+// inserts the immutable revision before releasing the transaction-scoped lock.
+// No schema/counter migration is required, and UNIQUE(chapter_id, revision_no)
+// remains the database backstop.
+func (s *AudioStore) CreateNarrationRevisionAtomically(ctx context.Context, r audio.NarrationRevision) (audio.NarrationRevision, error) {
+	if s.beginTx == nil {
+		return audio.NarrationRevision{}, errors.New("atomic narration version allocation requires transaction-capable database")
+	}
+	tx, err := s.beginTx.Begin(ctx)
+	if err != nil {
+		return audio.NarrationRevision{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "narration-version:"+r.ChapterID); err != nil {
+		return audio.NarrationRevision{}, fmt.Errorf("lock narration version allocation: %w", err)
+	}
+	qtx := s.q.WithTx(tx)
+	n, err := qtx.NextNarrationRevision(ctx, toUUID(r.ChapterID))
+	if err != nil {
+		return audio.NarrationRevision{}, err
+	}
+	r.RevisionNo = int(n)
+	created, err := createNarrationRevision(ctx, qtx, r)
+	if err != nil {
+		return audio.NarrationRevision{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return audio.NarrationRevision{}, err
+	}
+	return created, nil
 }
 
 func (s *AudioStore) GetNarrationRevision(ctx context.Context, revisionID string) (audio.NarrationRevision, error) {
@@ -122,16 +162,12 @@ func (s *AudioStore) UpdateTTSSegment(ctx context.Context, seg audio.TTSSegment)
 // ============================================================
 
 func (s *AudioStore) NextAudioVersion(ctx context.Context, chapterID string) (int, error) {
-	if s.executor == nil {
-		n, err := s.q.NextAudioVersion(ctx, toUUID(chapterID))
-		return int(n), err
-	}
-	n, err := db.ReserveAudioVersion(ctx, s.executor, toUUID(chapterID))
+	n, err := s.q.NextAudioVersion(ctx, toUUID(chapterID))
 	return int(n), err
 }
 
-func (s *AudioStore) CreateAudioAsset(ctx context.Context, a audio.AudioAsset) (audio.AudioAsset, error) {
-	row, err := s.q.CreateAudioAsset(ctx, db.CreateAudioAssetParams{
+func createAudioAsset(ctx context.Context, q *db.Queries, a audio.AudioAsset) (audio.AudioAsset, error) {
+	row, err := q.CreateAudioAsset(ctx, db.CreateAudioAssetParams{
 		ID:                        toUUID(a.ID),
 		ChapterID:                 toUUID(a.ChapterID),
 		VersionNo:                 int32(a.VersionNo),
@@ -149,6 +185,43 @@ func (s *AudioStore) CreateAudioAsset(ctx context.Context, a audio.AudioAsset) (
 		return audio.AudioAsset{}, err
 	}
 	return toAudioAsset(row), nil
+}
+
+func (s *AudioStore) CreateAudioAsset(ctx context.Context, a audio.AudioAsset) (audio.AudioAsset, error) {
+	return createAudioAsset(ctx, s.q, a)
+}
+
+// CreateAudioAssetAtomically serializes version allocation per chapter and
+// commits the READY metadata row in the same transaction. The media object key
+// is attempt-unique, so an upload performed before this metadata transaction
+// cannot collide with another concurrent synthesis attempt.
+func (s *AudioStore) CreateAudioAssetAtomically(ctx context.Context, a audio.AudioAsset) (audio.AudioAsset, error) {
+	if s.beginTx == nil {
+		return audio.AudioAsset{}, errors.New("atomic audio version allocation requires transaction-capable database")
+	}
+	tx, err := s.beginTx.Begin(ctx)
+	if err != nil {
+		return audio.AudioAsset{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "audio-version:"+a.ChapterID); err != nil {
+		return audio.AudioAsset{}, fmt.Errorf("lock audio version allocation: %w", err)
+	}
+	qtx := s.q.WithTx(tx)
+	n, err := qtx.NextAudioVersion(ctx, toUUID(a.ChapterID))
+	if err != nil {
+		return audio.AudioAsset{}, err
+	}
+	a.VersionNo = int(n)
+	created, err := createAudioAsset(ctx, qtx, a)
+	if err != nil {
+		return audio.AudioAsset{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return audio.AudioAsset{}, err
+	}
+	return created, nil
 }
 
 func (s *AudioStore) GetAudioAsset(ctx context.Context, assetID string) (audio.AudioAsset, error) {
