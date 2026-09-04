@@ -20,6 +20,7 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
+	"github.com/synaudio/synaudio/backend/internal/platform/metrics"
 	"github.com/synaudio/synaudio/backend/internal/platform/pgstore"
 	"github.com/synaudio/synaudio/backend/internal/platform/providers"
 	"github.com/synaudio/synaudio/backend/internal/platform/storage"
@@ -135,18 +136,20 @@ func main() {
 		planning.WithMemoryExtractor(aiProviders.MemoryExtractor),
 	)
 	planningHandler := planning.NewHandler(planningService)
+	planningWorkspaceHandler := planning.NewWorkspaceHandler(planningService)
 
 	storyService := story.NewService(storyStore,
 		story.WithObjectStorage(objStorage),
 		story.WithActivationChecker(planningService),
 	)
 	storyHandler := story.NewHandler(storyService)
+	storyReadinessHandler := story.NewReadinessHandler(storyService)
 
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
 	generationHandler := generation.NewHandler(generationService, authService.ResolveUserID)
 
-	audioStore := pgstore.NewAudioStore(queries, database)
+	audioStore := pgstore.NewAudioStore(queries)
 	audioService := audio.NewService(audioStore,
 		audio.WithTTS(ttsProvider),
 		audio.WithObjectStorage(objStorage),
@@ -193,25 +196,43 @@ func main() {
 			}
 			return nil
 		},
-		DependencyChecks: dependencyChecks,
-		Logger:            log,
-		AdminCheck:        authService.ResolveAdmin,
-		AdminActor:        authService.ResolveUserID,
-		AuditRecord:       auditService.RecordReliable,
-		AuditBoundary:     auditBoundary,
-		AuthHandler:       authHandler,
-		AuditHandler:      auditHandler,
-		StoryHandler:      storyHandler,
-		PlanningHandler:   planningHandler,
-		GenerationHandler: generationHandler,
-		AudioHandler:      audioHandler,
-		ListenerHandler:   listenerHandler,
-		RetconHandler:     retconHandler,
+		DependencyChecks:         dependencyChecks,
+		Logger:                   log,
+		AdminCheck:               authService.ResolveAdmin,
+		AdminActor:               authService.ResolveUserID,
+		AuditRecord:              auditService.RecordReliable,
+		AuditBoundary:            auditBoundary,
+		AuthHandler:              authHandler,
+		AuditHandler:             auditHandler,
+		StoryHandler:             storyHandler,
+		StoryReadinessHandler:    storyReadinessHandler,
+		PlanningHandler:          planningHandler,
+		PlanningWorkspaceHandler: planningWorkspaceHandler,
+		GenerationHandler:        generationHandler,
+		AudioHandler:             audioHandler,
+		ListenerHandler:          listenerHandler,
+		RetconHandler:            retconHandler,
 	})
+
+	metricRegistry := metrics.NewRegistry()
+	metricsServer, err := metrics.NewPrivateServer(os.Getenv("API_METRICS_ADDR"), metricRegistry.Handler())
+	if err != nil {
+		log.Error("metrics config invalid", "error", err)
+		os.Exit(1)
+	}
+	if metricsServer != nil {
+		go func() {
+			log.Info("api metrics listening", "addr", metricsServer.Addr)
+			if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Error("api metrics server failed", "error", err)
+				os.Exit(1)
+			}
+		}()
+	}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           router,
+		Handler:           metricRegistry.HTTPMiddleware(router),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -227,5 +248,8 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = server.Shutdown(shutdownCtx)
+	if metricsServer != nil {
+		_ = metricsServer.Shutdown(shutdownCtx)
+	}
 	log.Info("api stopped")
 }

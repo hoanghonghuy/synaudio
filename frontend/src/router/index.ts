@@ -6,6 +6,7 @@ import AuditPage from '../features/admin/AuditPage.vue'
 import StoryReader from '../features/reader/StoryReader.vue'
 import ListenerLibraryPage from '../features/library/LibraryPage.vue'
 import StoryControlCenter from '../features/admin/StoryControlCenter.vue'
+import StoryPlanningStudio from '../features/admin/StoryPlanningStudio.vue'
 import AuthPage from '../features/auth/AuthPage.vue'
 import ForgotPasswordPage from '../features/auth/ForgotPasswordPage.vue'
 import ResetPasswordPage from '../features/auth/ResetPasswordPage.vue'
@@ -81,6 +82,12 @@ export const router = createRouter({
       path: '/stories/:storyID',
       name: 'story-detail',
       component: StoryDetail,
+    },
+    {
+      path: '/admin/stories/:storyID/planning',
+      name: 'story-planning',
+      component: StoryPlanningStudio,
+      meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
       path: '/admin/stories/:storyID/control',
