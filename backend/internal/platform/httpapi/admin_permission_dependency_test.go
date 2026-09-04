@@ -58,3 +58,38 @@ func TestUnmappedAdminRouteFailsClosedWhenPermissionCheckerMissing(t *testing.T)
 		t.Fatal("unmapped privileged route must not fall back to broad admin authorization when permission checker is missing")
 	}
 }
+
+func TestHighRiskAdminRouteFailsClosedWhenRecentAuthCheckerMissing(t *testing.T) {
+	src := chi.NewRouter()
+	executed := false
+	src.Post("/admin/users/{userID}/roles/admin", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		executed = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	permissionCalled := false
+	router := NewRouter(Dependencies{
+		AdminPermissionCheck: func(_ context.Context, _ *http.Request, permission string) (bool, error) {
+			permissionCalled = true
+			if permission != "ADMIN_ROLE_GRANT" {
+				t.Fatalf("expected ADMIN_ROLE_GRANT permission, got %q", permission)
+			}
+			return true, nil
+		},
+		AdminRecentAuthCheck: nil,
+		AdminActor:           func(context.Context, *http.Request) (string, error) { return "actor", nil },
+		AdminSecurityHandler: src,
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/target/roles/admin", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected high-risk privileged route to fail closed with 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if executed {
+		t.Fatal("high-risk privileged handler must not execute when recent-auth checker is missing")
+	}
+	if permissionCalled {
+		t.Fatal("recent-auth middleware should reject the request before the permission-protected handler chain executes")
+	}
+}
