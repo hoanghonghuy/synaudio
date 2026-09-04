@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { listAdminChapters, listChapterReviews, listContentRevisions } from '../../api/client'
+import {
+  listAdminChapters,
+  listChapterReviews,
+  listContentRevisions,
+  regenerateContent,
+} from '../../api/client'
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
 import { createLatestSelectionGuard } from './latestSelection.mjs'
 
@@ -12,7 +17,9 @@ const activeChapter = ref<Chapter | null>(null)
 const revisions = ref<ContentRevision[]>([])
 const reviews = ref<ChapterReview[]>([])
 const loading = ref(false)
+const action = ref('')
 const error = ref('')
+const success = ref('')
 const chapterSelection = createLatestSelectionGuard()
 
 const latestRevision = computed(() => revisions.value[revisions.value.length - 1] ?? null)
@@ -100,6 +107,7 @@ async function selectChapter(chapter: Chapter) {
   const mayCommit = chapterSelection.begin(chapter.ID)
   activeChapter.value = chapter
   error.value = ''
+  success.value = ''
   try {
     const [revisionResponse, reviewResponse] = await Promise.all([
       listContentRevisions(chapter.ID),
@@ -113,6 +121,27 @@ async function selectChapter(chapter: Chapter) {
     revisions.value = []
     reviews.value = []
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
+  }
+}
+
+async function regenerateLatest() {
+  const chapter = activeChapter.value
+  const revision = latestRevision.value
+  if (!chapter || !revision || action.value) return
+
+  action.value = 'regenerate'
+  error.value = ''
+  success.value = ''
+  try {
+    await regenerateContent(chapter.ID, revision.ID)
+    if (activeChapter.value?.ID !== chapter.ID) return
+    success.value = `Đã tạo Regenerate từ revision #${revision.RevisionNo}; đây là revision mới, không phải Retry của attempt cũ.`
+    await selectChapter(chapter)
+  } catch (e) {
+    if (activeChapter.value?.ID !== chapter.ID) return
+    error.value = e instanceof Error ? e.message : 'Không thể Regenerate content revision.'
+  } finally {
+    action.value = ''
   }
 }
 
@@ -177,6 +206,21 @@ onMounted(load)
         </div>
 
         <p v-if="error" class="status-state error" role="alert">{{ error }}</p>
+        <p v-if="success" class="status-state success" role="status">{{ success }}</p>
+
+        <section v-if="activeChapter" class="action-panel">
+          <div>
+            <strong>Production actions</strong>
+            <p>Regenerate tạo output/revision mới từ revision hiện tại. Retry của một failed attempt là semantics khác và chỉ được mở khi backend expose đúng attempt/job recovery endpoint.</p>
+          </div>
+          <button
+            type="button"
+            :disabled="!latestRevision || Boolean(action)"
+            @click="regenerateLatest"
+          >
+            {{ action === 'regenerate' ? 'Đang Regenerate…' : 'Regenerate latest revision' }}
+          </button>
+        </section>
 
         <ol v-if="activeChapter" class="stage-list">
           <li v-for="stage in stages" :key="stage.key" class="stage-card" :data-state="stage.state">
@@ -210,12 +254,15 @@ onMounted(load)
 .production-header h1, .chapter-heading h2 { margin: 4px 0 8px; }
 .eyebrow { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
 .workspace-grid { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 24px; }
-.chapter-panel, .pipeline-panel, .provenance-panel { border: 1px solid var(--border-color, #d8d8d8); border-radius: 16px; background: var(--surface, #fff); }
+.chapter-panel, .pipeline-panel, .provenance-panel, .action-panel { border: 1px solid var(--border-color, #d8d8d8); border-radius: 16px; background: var(--surface, #fff); }
 .chapter-panel { padding: 18px; height: fit-content; }
 .chapter-button { width: 100%; text-align: left; display: grid; gap: 3px; padding: 12px; margin-top: 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; }
 .chapter-button.active { border-color: currentColor; }
 .chapter-button span, .chapter-button small { opacity: .65; }
 .pipeline-panel { padding: 22px; }
+.action-panel { margin-top: 20px; padding: 16px; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.action-panel p { margin: 5px 0 0; max-width: 720px; opacity: .72; }
+.action-panel button { white-space: nowrap; }
 .stage-list { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 10px; }
 .stage-card { display: grid; grid-template-columns: 12px 1fr; gap: 14px; padding: 14px; border: 1px solid var(--border-color, #ddd); border-radius: 12px; }
 .stage-card p { margin: 4px 0 0; opacity: .72; }
@@ -228,6 +275,7 @@ onMounted(load)
 .provenance-panel dl div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
 .provenance-panel dt { font-weight: 700; }
 .provenance-panel dd { margin: 0; overflow-wrap: anywhere; }
+.status-state.success { color: #137c43; }
 .muted { opacity: .65; }
-@media (max-width: 800px) { .workspace-grid { grid-template-columns: 1fr; } .production-header, .chapter-heading { flex-direction: column; } }
+@media (max-width: 800px) { .workspace-grid { grid-template-columns: 1fr; } .production-header, .chapter-heading, .action-panel { flex-direction: column; } }
 </style>
