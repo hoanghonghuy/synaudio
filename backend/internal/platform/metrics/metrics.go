@@ -12,6 +12,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type backlogGauge struct {
+	depth            int64
+	oldestAgeSeconds float64
+	deadLetter       int64
+}
+
 type Registry struct {
 	mu sync.RWMutex
 
@@ -23,6 +29,7 @@ type Registry struct {
 	workerLoopItems    map[string]uint64
 	generationJobs     map[string]uint64
 	generationDuration map[string]float64
+	backlogs            map[string]backlogGauge
 }
 
 func NewRegistry() *Registry {
@@ -33,6 +40,7 @@ func NewRegistry() *Registry {
 		workerLoopItems:    make(map[string]uint64),
 		generationJobs:     make(map[string]uint64),
 		generationDuration: make(map[string]float64),
+		backlogs:           make(map[string]backlogGauge),
 	}
 }
 
@@ -123,6 +131,22 @@ func (r *Registry) ObserveGenerationDuration(jobType, outcome, errorClass string
 	r.mu.Unlock()
 }
 
+func (r *Registry) SetBacklog(queue string, depth int64, oldestAge time.Duration, deadLetter int64) {
+	queue = boundedQueue(queue)
+	if depth < 0 {
+		depth = 0
+	}
+	if oldestAge < 0 {
+		oldestAge = 0
+	}
+	if deadLetter < 0 {
+		deadLetter = 0
+	}
+	r.mu.Lock()
+	r.backlogs[queue] = backlogGauge{depth: depth, oldestAgeSeconds: oldestAge.Seconds(), deadLetter: deadLetter}
+	r.mu.Unlock()
+}
+
 func generationKey(jobType, outcome, errorClass string) string {
 	return strings.Join([]string{boundedJobType(jobType), boundedOutcome(outcome), boundedErrorClass(errorClass)}, "\x00")
 }
@@ -183,6 +207,19 @@ func (r *Registry) writePrometheus(w http.ResponseWriter) {
 		parts := strings.Split(key, "\x00")
 		_, _ = fmt.Fprintf(w, "synaudio_generation_attempt_duration_seconds_sum{job_type=%q,outcome=%q,error_class=%q} %g\n", parts[0], parts[1], parts[2], r.generationDuration[key])
 	}
+
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_backlog_depth Current authoritative pending/retry backlog depth by bounded queue.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_backlog_depth gauge")
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_backlog_oldest_age_seconds Age in seconds of the oldest pending/retry item by bounded queue.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_backlog_oldest_age_seconds gauge")
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_backlog_dead_letter Current dead-letter item count by bounded queue.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_backlog_dead_letter gauge")
+	for _, queue := range sortedBacklogKeys(r.backlogs) {
+		gauge := r.backlogs[queue]
+		_, _ = fmt.Fprintf(w, "synaudio_backlog_depth{queue=%q} %d\n", queue, gauge.depth)
+		_, _ = fmt.Fprintf(w, "synaudio_backlog_oldest_age_seconds{queue=%q} %g\n", queue, gauge.oldestAgeSeconds)
+		_, _ = fmt.Fprintf(w, "synaudio_backlog_dead_letter{queue=%q} %d\n", queue, gauge.deadLetter)
+	}
 }
 
 func boundedMethod(v string) string {
@@ -213,6 +250,15 @@ func boundedLoop(v string) string {
 func boundedResult(v string) string {
 	switch v {
 	case "claimed", "delivered", "retrying", "dead_letter", "reclaimed", "processed", "purged":
+		return v
+	default:
+		return "other"
+	}
+}
+
+func boundedQueue(v string) string {
+	switch v {
+	case "generation", "audit_outbox", "email_delivery":
 		return v
 	default:
 		return "other"
@@ -250,6 +296,15 @@ func boundedErrorClass(v string) string {
 }
 
 func sortedKeys[V ~uint64 | ~float64](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedBacklogKeys(m map[string]backlogGauge) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)
