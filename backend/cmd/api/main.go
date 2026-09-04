@@ -35,6 +35,11 @@ func main() {
 		log.Error("config load failed", "error", err)
 		os.Exit(1)
 	}
+	emailCfg, err := config.LoadEmail(cfg.AppEnv, cfg.AppPublicURL)
+	if err != nil {
+		log.Error("email config load failed", "error", err)
+		os.Exit(1)
+	}
 
 	aiProviders, err := providers.BuildAI(cfg)
 	if err != nil {
@@ -44,6 +49,28 @@ func main() {
 	ttsProvider, err := providers.BuildTTS(cfg)
 	if err != nil {
 		log.Error("TTS provider init failed", "error", err)
+		os.Exit(1)
+	}
+
+	audioProcessorSettings, err := config.LoadAudioProcessorSettings(cfg.AppEnv)
+	if err != nil {
+		log.Error("audio processor config failed", "error", err)
+		os.Exit(1)
+	}
+	var audioProcessor audio.AudioProcessor
+	var ffmpegProcessor *audio.FFmpegProcessor
+	switch audioProcessorSettings.Mode {
+	case config.AudioProcessorMock:
+		audioProcessor = audio.NewMockAudioProcessor()
+	case config.AudioProcessorFFmpeg:
+		ffmpegProcessor = audio.NewFFmpegProcessor(audioProcessorSettings.Binary)
+		if err := ffmpegProcessor.Validate(); err != nil {
+			log.Error("FFmpeg processor unavailable", "error", err)
+			os.Exit(1)
+		}
+		audioProcessor = ffmpegProcessor
+	default:
+		log.Error("unsupported audio processor mode", "mode", audioProcessorSettings.Mode)
 		os.Exit(1)
 	}
 
@@ -57,7 +84,8 @@ func main() {
 	}
 	defer pool.Close()
 
-	queries := db.New(db.Contextual(pool))
+	database := db.Contextual(pool)
+	queries := db.New(database)
 	auditBoundary := audit.TransactionBoundary(func(parent context.Context, run func(context.Context) error) error {
 		tx, err := pool.Begin(parent)
 		if err != nil {
@@ -77,7 +105,19 @@ func main() {
 		RefreshSessionTTL:     cfg.RefreshSessionTTL,
 		RefreshSessionIdleTTL: cfg.RefreshSessionIdleTTL,
 	}))
-	authHandler := identity.NewAuthHandler(authService)
+	var authHandler http.Handler = identity.NewAuthHandler(authService)
+	if emailCfg.Mode != config.EmailModeDisabled {
+		emailStore := pgstore.NewEmailOutboxStore(database)
+		emailService, err := providers.BuildEmail(emailCfg, emailStore)
+		if err != nil {
+			log.Error("email provider init failed", "error", err)
+			os.Exit(1)
+		}
+		identityBoundary := identity.TransactionBoundary(func(parent context.Context, run func(context.Context) error) error {
+			return db.InTransaction(parent, database, run)
+		})
+		authHandler = identity.WrapTransactionalEmail(authHandler, authService, emailService, identityBoundary)
+	}
 
 	auditStore := pgstore.NewAuditStore(queries)
 	auditService := audit.NewService(auditStore)
@@ -113,6 +153,7 @@ func main() {
 		audio.WithTTS(ttsProvider),
 		audio.WithObjectStorage(objStorage),
 		audio.WithPresigner(objStorage),
+		audio.WithAudioProcessor(audioProcessor),
 	)
 	audioHandler := audio.NewHandler(audioService)
 
@@ -124,6 +165,22 @@ func main() {
 	retconService := retcon.NewService(retconStore)
 	retconHandler := retcon.NewHandler(retconService)
 
+	dependencyChecks := map[string]func() error{
+		"database": func() error {
+			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			return pool.Ping(pingCtx)
+		},
+		"storage": func() error {
+			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			return objStorage.Ping(pingCtx)
+		},
+	}
+	if ffmpegProcessor != nil {
+		dependencyChecks["ffmpeg"] = ffmpegProcessor.Validate
+	}
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		ReadyCheck: func() error {
 			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -131,35 +188,29 @@ func main() {
 			if err := pool.Ping(pingCtx); err != nil {
 				return httpapi.ErrDependencyUnavailable
 			}
+			if ffmpegProcessor != nil {
+				if err := ffmpegProcessor.Validate(); err != nil {
+					return httpapi.ErrDependencyUnavailable
+				}
+			}
 			return nil
 		},
-		DependencyChecks: map[string]func() error{
-			"database": func() error {
-				pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				return pool.Ping(pingCtx)
-			},
-			"storage": func() error {
-				pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				return objStorage.Ping(pingCtx)
-			},
-		},
-		Logger:                   log,
-		AdminCheck:               authService.ResolveAdmin,
-		AdminActor:               authService.ResolveUserID,
-		AuditRecord:              auditService.RecordReliable,
-		AuditBoundary:            auditBoundary,
-		AuthHandler:              authHandler,
-		AuditHandler:             auditHandler,
-		StoryHandler:             storyHandler,
-		StoryReadinessHandler:    storyReadinessHandler,
-		PlanningHandler:          planningHandler,
-		PlanningWorkspaceHandler: planningWorkspaceHandler,
-		GenerationHandler:        generationHandler,
-		AudioHandler:             audioHandler,
-		ListenerHandler:          listenerHandler,
-		RetconHandler:            retconHandler,
+		DependencyChecks:          dependencyChecks,
+		Logger:                    log,
+		AdminCheck:                authService.ResolveAdmin,
+		AdminActor:                authService.ResolveUserID,
+		AuditRecord:               auditService.RecordReliable,
+		AuditBoundary:             auditBoundary,
+		AuthHandler:               authHandler,
+		AuditHandler:              auditHandler,
+		StoryHandler:              storyHandler,
+		StoryReadinessHandler:     storyReadinessHandler,
+		PlanningHandler:           planningHandler,
+		PlanningWorkspaceHandler:  planningWorkspaceHandler,
+		GenerationHandler:         generationHandler,
+		AudioHandler:              audioHandler,
+		ListenerHandler:           listenerHandler,
+		RetconHandler:             retconHandler,
 	})
 
 	server := &http.Server{
@@ -169,7 +220,7 @@ func main() {
 	}
 
 	go func() {
-		log.Info("api listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
+		log.Info("api listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv, "audio_processor", audioProcessorSettings.Mode)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("api server failed", "error", err)
 			os.Exit(1)
