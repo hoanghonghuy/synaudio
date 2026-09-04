@@ -27,6 +27,7 @@ type Dependencies struct {
 	AuditRecord          audit.RecordFunc
 	AuditBoundary        audit.TransactionBoundary
 	AuthHandler          http.Handler
+	AdminSecurityHandler http.Handler
 	AuditHandler         http.Handler
 	StoryHandler         http.Handler
 	PlanningHandler      http.Handler
@@ -93,6 +94,7 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	api := chi.NewRouter()
 	for _, h := range []http.Handler{
+		deps.AdminSecurityHandler,
 		deps.AuditHandler,
 		deps.StoryHandler,
 		deps.PlanningHandler,
@@ -141,8 +143,6 @@ func mountRoutes(
 				handler = requireRecentAdminAuth(adminRecentAuthCheck)(handler)
 			}
 		}
-		// Audit wraps authorization too, so denied security-sensitive mutations
-		// are recorded as DENIED instead of disappearing before the audit layer.
 		handler = audit.WrapRouteTransactional(handler, method, route, auditRecord, adminActor, auditBoundary)
 		dst.Method(method, route, handler)
 		return nil
@@ -151,7 +151,6 @@ func mountRoutes(
 
 type adminActorContextKey struct{}
 
-// AdminActorID returns the authenticated admin actor attached by the router.
 func AdminActorID(ctx context.Context) string {
 	actorID, _ := ctx.Value(adminActorContextKey{}).(string)
 	return actorID
@@ -161,10 +160,7 @@ func withAdminActor(ctx context.Context, actorID string) context.Context {
 	return context.WithValue(ctx, adminActorContextKey{}, actorID)
 }
 
-func requireAdmin(
-	check func(context.Context, *http.Request) (bool, error),
-	actor func(context.Context, *http.Request) (string, error),
-) func(http.Handler) http.Handler {
+func requireAdmin(check func(context.Context, *http.Request) (bool, error), actor func(context.Context, *http.Request) (string, error)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if actor != nil {
@@ -207,11 +203,7 @@ func requireAdmin(
 	}
 }
 
-func requireAdminPermission(
-	check func(context.Context, *http.Request, string) (bool, error),
-	actor func(context.Context, *http.Request) (string, error),
-	permission string,
-) func(http.Handler) http.Handler {
+func requireAdminPermission(check func(context.Context, *http.Request, string) (bool, error), actor func(context.Context, *http.Request) (string, error), permission string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if actor == nil || check == nil {
@@ -260,10 +252,5 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	writeJSON(w, status, map[string]any{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
-	})
+	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
 }
