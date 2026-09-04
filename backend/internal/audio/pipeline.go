@@ -8,6 +8,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// objectDeleter is an optional cleanup capability implemented by production
+// object storage. Version reservations and per-attempt object keys keep orphaned
+// objects harmless even when cleanup itself is unavailable or fails.
+type objectDeleter interface {
+	Delete(ctx context.Context, key string) error
+}
+
 // SynthesizeNarration runs the full audio pipeline for a narration revision:
 // segment the script, synthesize each segment, concatenate via the audio
 // processor, and register a new audio asset version.
@@ -58,13 +65,17 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		return AudioAsset{}, err
 	}
 
-	storageKey := fmt.Sprintf("chapters/%s/audio/v%d/chapter.mp3", nar.ChapterID, versionNo)
+	// Generate the asset identity before the durable write and include it in the
+	// object key. The durable version reservation prevents version reuse; the
+	// asset ID additionally makes every synthesis attempt own a distinct key.
+	assetID := uuid.NewString()
+	storageKey := fmt.Sprintf("chapters/%s/audio/v%d/%s.mp3", nar.ChapterID, versionNo, assetID)
 	if err := s.objectStorage.Put(ctx, storageKey, processed.Data); err != nil {
 		return AudioAsset{}, fmt.Errorf("persist final audio: %w", err)
 	}
 
 	asset := AudioAsset{
-		ID:                        uuid.NewString(),
+		ID:                        assetID,
 		ChapterID:                 nar.ChapterID,
 		VersionNo:                 versionNo,
 		SourceNarrationRevisionID: narrationRevisionID,
@@ -77,5 +88,19 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		IsActive:                  false,
 	}
 
-	return s.store.CreateAudioAsset(ctx, asset)
+	persisted, err := s.store.CreateAudioAsset(ctx, asset)
+	if err == nil {
+		return persisted, nil
+	}
+
+	// Metadata is the READY authority. If metadata registration fails after the
+	// object write, remove only this attempt's unique object. If cleanup fails,
+	// the durable version reservation plus unique asset key still guarantee the
+	// orphan cannot overwrite or be mistaken for a later valid asset.
+	if cleaner, ok := s.objectStorage.(objectDeleter); ok {
+		if cleanupErr := cleaner.Delete(ctx, storageKey); cleanupErr != nil {
+			return AudioAsset{}, fmt.Errorf("register audio asset: %w (cleanup %q failed: %v)", err, storageKey, cleanupErr)
+		}
+	}
+	return AudioAsset{}, fmt.Errorf("register audio asset: %w", err)
 }
