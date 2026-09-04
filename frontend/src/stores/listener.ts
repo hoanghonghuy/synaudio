@@ -7,6 +7,7 @@ import {
   saveProgress,
 } from '../api/client'
 import type { Favorite, ListeningProgress } from '../api/types'
+import { mergeGuestProgressIfAbsent } from './guest-progress-merge.ts'
 
 const GUEST_FAVORITES_KEY = 'synaudio.guest.favorites'
 const GUEST_PROGRESS_KEY = 'synaudio.guest.progress'
@@ -133,22 +134,27 @@ export const useListenerStore = defineStore('listener', {
       this.progress[chapterID] = saved
     },
 
-    // Merge guest progress into server on login (idempotent).
+    // Guest records do not carry an authoritative server-comparable timestamp.
+    // Import only on an explicit server "not found". Any network/auth/5xx uncertainty
+    // leaves the guest record intact for a later retry and never writes server state.
     async mergeGuestProgress() {
       if (this.isGuest) return
       const guest = readGuestProgress()
       for (const [chapterID, g] of Object.entries(guest)) {
-        try {
-          await this.loadProgress(chapterID)
-        } catch {
-          // no server progress yet
-        }
-        const existing = this.progress[chapterID]
-        if (!existing || existing.PositionMs < g.positionMs) {
-          await this.saveProgress(chapterID, g.positionMs, g.audioAssetID)
+        const outcome = await mergeGuestProgressIfAbsent(
+          () => this.loadProgress(chapterID),
+          () => this.saveProgress(chapterID, g.positionMs, g.audioAssetID),
+        )
+        if (outcome !== 'deferred') {
+          delete guest[chapterID]
         }
       }
-      localStorage.removeItem(GUEST_PROGRESS_KEY)
+
+      if (Object.keys(guest).length === 0) {
+        localStorage.removeItem(GUEST_PROGRESS_KEY)
+      } else {
+        writeGuestProgress(guest)
+      }
     },
   },
 })

@@ -4,12 +4,15 @@ import StoryDetail from '../features/catalog/StoryDetail.vue'
 import AdminShell from '../features/admin/AdminShell.vue'
 import AuditPage from '../features/admin/AuditPage.vue'
 import StoryReader from '../features/reader/StoryReader.vue'
+import ListenerLibraryPage from '../features/library/LibraryPage.vue'
 import StoryControlCenter from '../features/admin/StoryControlCenter.vue'
+import StoryPlanningStudio from '../features/admin/StoryPlanningStudio.vue'
 import AuthPage from '../features/auth/AuthPage.vue'
 import ForgotPasswordPage from '../features/auth/ForgotPasswordPage.vue'
 import ResetPasswordPage from '../features/auth/ResetPasswordPage.vue'
 import VerifyEmailPage from '../features/auth/VerifyEmailPage.vue'
 import SecurityPage from '../features/auth/SecurityPage.vue'
+import AccountDeletionRecoveryPage from '../features/auth/AccountDeletionRecoveryPage.vue'
 import ContentReviewPage from '../features/admin/ContentReviewPage.vue'
 import { useAuthStore } from '../stores/auth'
 
@@ -20,6 +23,12 @@ export const router = createRouter({
       path: '/',
       name: 'home',
       component: HomePage,
+    },
+    {
+      path: '/library',
+      name: 'library',
+      component: ListenerLibraryPage,
+      meta: { requiresAuth: true },
     },
     {
       path: '/admin',
@@ -54,6 +63,11 @@ export const router = createRouter({
       component: VerifyEmailPage,
     },
     {
+      path: '/account-deletion-recovery',
+      name: 'account-deletion-recovery',
+      component: AccountDeletionRecoveryPage,
+    },
+    {
       path: '/account/security',
       name: 'account-security',
       component: SecurityPage,
@@ -68,6 +82,12 @@ export const router = createRouter({
       path: '/stories/:storyID',
       name: 'story-detail',
       component: StoryDetail,
+    },
+    {
+      path: '/admin/stories/:storyID/planning',
+      name: 'story-planning',
+      component: StoryPlanningStudio,
+      meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
       path: '/admin/stories/:storyID/control',

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -22,18 +23,53 @@ type MinIO struct {
 }
 
 func NewMinIO(cfg config.Config) (*MinIO, error) {
-	endpoint := strings.TrimPrefix(cfg.StorageEndpoint, "http://")
-	endpoint = strings.TrimPrefix(endpoint, "https://")
+	endpoint, secure, _, err := parseStorageEndpoint(cfg.StorageEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	// Production object storage must always use TLS. Development remains free to
+	// use explicit HTTP endpoints such as local MinIO, but private/RFC1918 hosts
+	// are not treated as "local" exceptions in production because they can be
+	// remote network services.
+	if cfg.AppEnv == config.EnvProduction && !secure {
+		return nil, fmt.Errorf("insecure STORAGE_ENDPOINT is not allowed in production")
+	}
 
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.StorageAccessKey, cfg.StorageSecretKey, ""),
-		Secure: false,
+		Secure: secure,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create minio client: %w", err)
 	}
 
 	return &MinIO{client: client, bucket: cfg.StorageBucket}, nil
+}
+
+// parseStorageEndpoint accepts only an explicit HTTP(S) authority. S3 client
+// transport must never be guessed from a stripped or missing scheme because
+// that can silently downgrade an intended HTTPS endpoint.
+func parseStorageEndpoint(raw string) (endpoint string, secure bool, host string, err error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false, "", fmt.Errorf("STORAGE_ENDPOINT is required")
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false, "", fmt.Errorf("invalid STORAGE_ENDPOINT: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", false, "", fmt.Errorf("STORAGE_ENDPOINT must use http or https")
+	}
+	if u.Host == "" || u.Hostname() == "" {
+		return "", false, "", fmt.Errorf("STORAGE_ENDPOINT must include a host")
+	}
+	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return "", false, "", fmt.Errorf("STORAGE_ENDPOINT must contain only scheme and authority")
+	}
+
+	return u.Host, u.Scheme == "https", u.Hostname(), nil
 }
 
 // Put stores data at the given object key.

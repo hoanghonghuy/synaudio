@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // SegmentAudio is the synthesized audio for a single TTS segment.
@@ -56,10 +57,23 @@ type FFmpegProcessor struct {
 }
 
 func NewFFmpegProcessor(bin string) *FFmpegProcessor {
-	if bin == "" {
+	if strings.TrimSpace(bin) == "" {
 		bin = "ffmpeg"
 	}
-	return &FFmpegProcessor{bin: bin}
+	return &FFmpegProcessor{bin: strings.TrimSpace(bin)}
+}
+
+// Validate checks that the configured executable can be resolved before the
+// runtime accepts narration work. Process still returns execution errors later
+// if the binary disappears or becomes unusable after startup.
+func (p *FFmpegProcessor) Validate() error {
+	if p == nil || strings.TrimSpace(p.bin) == "" {
+		return fmt.Errorf("ffmpeg binary is not configured")
+	}
+	if _, err := exec.LookPath(p.bin); err != nil {
+		return fmt.Errorf("ffmpeg binary %q unavailable: %w", p.bin, err)
+	}
+	return nil
 }
 
 // Process writes each segment to a temp file, then runs ffmpeg to concatenate

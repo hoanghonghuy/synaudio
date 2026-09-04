@@ -42,6 +42,7 @@ type JobAuditEvent struct {
 	Outcome    string
 	ErrorClass string
 	ErrorCode  string
+	Duration   time.Duration
 }
 
 type JobAuditFunc func(ctx context.Context, event JobAuditEvent) error
@@ -85,13 +86,16 @@ func (w *Worker) ProcessOne(ctx context.Context) error {
 		return err
 	}
 
+	started := time.Now()
 	runErr := w.process(ctx, job)
+	duration := time.Since(started)
 
 	if runErr == nil {
 		if err := w.recordAudit(ctx, JobAuditEvent{
 			Job:       job,
 			AttemptID: attempt.ID,
 			Outcome:   "SUCCEEDED",
+			Duration:  duration,
 		}); err != nil {
 			return err
 		}
@@ -111,6 +115,7 @@ func (w *Worker) ProcessOne(ctx context.Context) error {
 		Outcome:    "FAILED",
 		ErrorClass: class,
 		ErrorCode:  code,
+		Duration:   duration,
 	}); err != nil {
 		return err
 	}
