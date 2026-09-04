@@ -9,6 +9,7 @@ import {
   regenerateContent,
 } from '../../api/client'
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
+import { rewriteContent } from './chapterProductionApi'
 import { createLatestSelectionGuard } from './latestSelection.mjs'
 
 const route = useRoute()
@@ -22,6 +23,7 @@ const action = ref('')
 const error = ref('')
 const success = ref('')
 const draftText = ref('')
+const rewriteFeedback = ref('')
 const chapterSelection = createLatestSelectionGuard()
 
 const latestRevision = computed(() => revisions.value[revisions.value.length - 1] ?? null)
@@ -32,6 +34,7 @@ const latestRevisionReviews = computed(() => {
 })
 const reviewOutcomes = computed(() => new Map(latestRevisionReviews.value.map((review) => [review.ReviewType, review.Outcome])))
 const mayEditDraft = computed(() => Boolean(latestRevision.value && draftText.value.trim() && !action.value))
+const mayRewrite = computed(() => Boolean(latestRevision.value && rewriteFeedback.value.trim() && !action.value))
 
 const stages = computed(() => {
   const chapter = activeChapter.value
@@ -111,6 +114,7 @@ async function selectChapter(chapter: Chapter) {
   activeChapter.value = chapter
   error.value = ''
   success.value = ''
+  rewriteFeedback.value = ''
   try {
     const [revisionResponse, reviewResponse] = await Promise.all([
       listContentRevisions(chapter.ID),
@@ -167,6 +171,29 @@ async function regenerateLatest() {
   } catch (e) {
     if (activeChapter.value?.ID !== chapter.ID) return
     error.value = e instanceof Error ? e.message : 'Không thể Regenerate content revision.'
+  } finally {
+    action.value = ''
+  }
+}
+
+async function rewriteLatest() {
+  const chapter = activeChapter.value
+  const revision = latestRevision.value
+  const feedback = rewriteFeedback.value.trim()
+  if (!chapter || !revision || !feedback || action.value) return
+
+  action.value = 'rewrite'
+  error.value = ''
+  success.value = ''
+  try {
+    await rewriteContent(chapter.ID, revision.ID, feedback)
+    if (activeChapter.value?.ID !== chapter.ID) return
+    success.value = `Đã tạo Rewrite từ revision #${revision.RevisionNo} với feedback riêng; revision gốc vẫn giữ nguyên và Rewrite không phải Regenerate/Edit/Retry.`
+    rewriteFeedback.value = ''
+    await selectChapter(chapter)
+  } catch (e) {
+    if (activeChapter.value?.ID !== chapter.ID) return
+    error.value = e instanceof Error ? e.message : 'Không thể Rewrite content revision.'
   } finally {
     action.value = ''
   }
@@ -238,7 +265,7 @@ onMounted(load)
         <section v-if="activeChapter" class="action-panel">
           <div>
             <strong>Production actions</strong>
-            <p>Regenerate tạo output/revision mới từ revision hiện tại. Edit Draft tạo revision thủ công mới dựa trên đúng revision đang hiển thị. Retry của failed attempt là semantics khác và chỉ được mở khi backend expose đúng attempt/job recovery endpoint.</p>
+            <p>Regenerate tạo output mới từ revision hiện tại. Rewrite tạo revision AI mới theo feedback operator. Edit Draft tạo revision thủ công mới. Retry của failed attempt là semantics khác và chỉ được mở khi backend expose đúng attempt/job recovery endpoint.</p>
           </div>
           <button
             type="button"
@@ -251,8 +278,27 @@ onMounted(load)
 
         <section v-if="latestRevision" class="edit-panel">
           <div>
+            <strong>Rewrite with feedback</strong>
+            <p>Rewrite gọi backend-authoritative AI rewrite trên đúng revision #{{ latestRevision.RevisionNo }}. Feedback là input riêng của Rewrite; action này không alias Regenerate, Edit Draft hoặc Retry.</p>
+          </div>
+          <textarea
+            v-model="rewriteFeedback"
+            rows="4"
+            :disabled="Boolean(action)"
+            aria-label="Rewrite feedback"
+            placeholder="Nhập feedback cụ thể cho bản rewrite..."
+          ></textarea>
+          <div class="edit-actions">
+            <button type="button" :disabled="!mayRewrite" @click="rewriteLatest">
+              {{ action === 'rewrite' ? 'Đang Rewrite…' : 'Rewrite as new revision' }}
+            </button>
+          </div>
+        </section>
+
+        <section v-if="latestRevision" class="edit-panel">
+          <div>
             <strong>Edit Draft</strong>
-            <p>Chỉnh nội dung sẽ tạo ContentRevision mới dựa trên revision #{{ latestRevision.RevisionNo }}; không mutate revision cũ và không được coi là Regenerate hoặc Retry.</p>
+            <p>Chỉnh nội dung sẽ tạo ContentRevision mới dựa trên revision #{{ latestRevision.RevisionNo }}; không mutate revision cũ và không được coi là Regenerate, Rewrite hoặc Retry.</p>
           </div>
           <textarea
             v-model="draftText"
