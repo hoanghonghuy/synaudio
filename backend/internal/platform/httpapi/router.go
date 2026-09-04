@@ -139,7 +139,7 @@ func mountRoutes(
 			} else {
 				handler = requireAdmin(adminCheck, adminActor)(handler)
 			}
-			if policy.RecentAuth && adminRecentAuthCheck != nil {
+			if policy.RecentAuth {
 				handler = requireRecentAdminAuth(adminRecentAuthCheck)(handler)
 			}
 		}
