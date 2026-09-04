@@ -106,6 +106,8 @@ func main() {
 		RefreshSessionIdleTTL: cfg.RefreshSessionIdleTTL,
 	}))
 	var authHandler http.Handler = identity.NewAuthHandler(authService)
+	authHandler = identity.WrapSecurityAssurance(authHandler, authService)
+	adminSecurityHandler := identity.NewAdminSecurityHandler(authService)
 	if emailCfg.Mode != config.EmailModeDisabled {
 		emailStore := pgstore.NewEmailOutboxStore(database)
 		emailService, err := providers.BuildEmail(emailCfg, emailStore)
@@ -193,20 +195,23 @@ func main() {
 			}
 			return nil
 		},
-		DependencyChecks: dependencyChecks,
-		Logger:            log,
-		AdminCheck:        authService.ResolveAdmin,
-		AdminActor:        authService.ResolveUserID,
-		AuditRecord:       auditService.RecordReliable,
-		AuditBoundary:     auditBoundary,
-		AuthHandler:       authHandler,
-		AuditHandler:      auditHandler,
-		StoryHandler:      storyHandler,
-		PlanningHandler:   planningHandler,
-		GenerationHandler: generationHandler,
-		AudioHandler:      audioHandler,
-		ListenerHandler:   listenerHandler,
-		RetconHandler:     retconHandler,
+		DependencyChecks:     dependencyChecks,
+		Logger:               log,
+		AdminCheck:           authService.ResolveAdmin,
+		AdminPermissionCheck: authService.ResolveAdminPermission,
+		AdminRecentAuthCheck: authService.RequireRecentAuth,
+		AdminActor:           authService.ResolveUserID,
+		AuditRecord:          auditService.RecordReliable,
+		AuditBoundary:        auditBoundary,
+		AuthHandler:          authHandler,
+		AdminSecurityHandler: adminSecurityHandler,
+		AuditHandler:         auditHandler,
+		StoryHandler:         storyHandler,
+		PlanningHandler:      planningHandler,
+		GenerationHandler:    generationHandler,
+		AudioHandler:         audioHandler,
+		ListenerHandler:      listenerHandler,
+		RetconHandler:        retconHandler,
 	})
 
 	server := &http.Server{

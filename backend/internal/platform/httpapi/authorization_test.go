@@ -15,7 +15,7 @@ func TestAdminRoutesRequireAuthentication(t *testing.T) {
 		StoryHandler: adminTestHandler(),
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/secret", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -24,15 +24,18 @@ func TestAdminRoutesRequireAuthentication(t *testing.T) {
 	}
 }
 
-func TestAdminRoutesRejectNonAdminUsers(t *testing.T) {
+func TestAdminRoutesRejectUsersWithoutPermission(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Dependencies{
-		AdminCheck: func(context.Context, *http.Request) (bool, error) {
+		AdminActor: func(context.Context, *http.Request) (string, error) {
+			return "actor", nil
+		},
+		AdminPermissionCheck: func(context.Context, *http.Request, string) (bool, error) {
 			return false, nil
 		},
 		StoryHandler: adminTestHandler(),
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/secret", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -41,15 +44,18 @@ func TestAdminRoutesRejectNonAdminUsers(t *testing.T) {
 	}
 }
 
-func TestAdminRoutesAllowAdminUsers(t *testing.T) {
+func TestAdminRoutesAllowUsersWithPermission(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Dependencies{
-		AdminCheck: func(context.Context, *http.Request) (bool, error) {
+		AdminActor: func(context.Context, *http.Request) (string, error) {
+			return "actor", nil
+		},
+		AdminPermissionCheck: func(context.Context, *http.Request, string) (bool, error) {
 			return true, nil
 		},
 		StoryHandler: adminTestHandler(),
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/secret", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -76,7 +82,7 @@ func TestPublicRoutesRemainAccessibleWithoutAdmin(t *testing.T) {
 
 func adminTestHandler() http.Handler {
 	r := chi.NewRouter()
-	r.Get("/admin/secret", func(w http.ResponseWriter, _ *http.Request) {
+	r.Get("/admin/users", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	return r

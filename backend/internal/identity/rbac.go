@@ -2,7 +2,9 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"time"
 )
 
 // Authorize reports whether the user holds the given permission through any
@@ -28,26 +30,80 @@ func (s *AuthService) Authorize(ctx context.Context, userID, permission string) 
 	return false, nil
 }
 
-// ResolveAdmin checks the refresh-cookie session and verifies the ADMIN role.
-func (s *AuthService) ResolveAdmin(ctx context.Context, r *http.Request) (bool, error) {
-	userID, err := s.ResolveUserID(ctx, r)
+func (s *AuthService) privilegedPrincipal(ctx context.Context, r *http.Request) (Principal, User, bool, error) {
+	principal, user, err := s.AuthenticateRequest(ctx, r)
 	if err != nil {
-		return false, err
+		return Principal{}, User{}, false, err
 	}
-	roles, err := s.store.GetUserRoles(ctx, userID)
+	if user.Status != StatusActive || user.EmailVerifiedAt == "" {
+		return principal, user, false, nil
+	}
+	roles, err := s.store.GetUserRoles(ctx, principal.UserID)
 	if err != nil {
-		return false, err
+		return principal, user, false, err
 	}
+	admin := false
 	for _, role := range roles {
 		if role == RoleAdmin {
-			return true, nil
+			admin = true
+			break
 		}
 	}
-	return false, nil
+	if !admin {
+		return principal, user, false, nil
+	}
+	securityStore, ok := s.store.(mfaSecurityStore)
+	if !ok {
+		return principal, user, false, errors.New("privileged security persistence not configured")
+	}
+	assured, err := securityStore.HasPrivilegedSessionAssurance(ctx, principal.UserID, principal.SessionID, s.settings.Now().UTC())
+	return principal, user, assured, err
+}
+
+// ResolveAdmin is the broad privileged boundary. ADMIN role alone is never
+// sufficient: the account must remain ACTIVE and verified, MFA must currently
+// be enabled, and this exact logical session must carry MFA assurance.
+func (s *AuthService) ResolveAdmin(ctx context.Context, r *http.Request) (bool, error) {
+	_, _, allowed, err := s.privilegedPrincipal(ctx, r)
+	return allowed, err
+}
+
+// ResolveAdminPermission combines privileged-session assurance with a concrete
+// operation permission. Routers should prefer this over a role-only admin gate.
+func (s *AuthService) ResolveAdminPermission(ctx context.Context, r *http.Request, permission string) (bool, error) {
+	principal, _, allowed, err := s.privilegedPrincipal(ctx, r)
+	if err != nil || !allowed {
+		return false, err
+	}
+	return s.Authorize(ctx, principal.UserID, permission)
+}
+
+// RequireRecentAuth enforces the frozen 10-minute high-risk action window.
+// Successful TOTP confirmation refreshes recent_auth_at for the exact session.
+func (s *AuthService) RequireRecentAuth(ctx context.Context, r *http.Request) error {
+	principal, _, allowed, err := s.privilegedPrincipal(ctx, r)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrForbidden
+	}
+	securityStore, ok := s.store.(mfaSecurityStore)
+	if !ok {
+		return ErrForbidden
+	}
+	fresh, err := securityStore.HasRecentAuth(ctx, principal.UserID, principal.SessionID, s.settings.Now().UTC().Add(-10*time.Minute))
+	if err != nil {
+		return err
+	}
+	if !fresh {
+		return ErrForbidden
+	}
+	return nil
 }
 
 // GrantAdmin grants the ADMIN role to the target user, requiring the actor to
-// already hold the ADMIN role.
+// already hold the operation-specific permission.
 func (s *AuthService) GrantAdmin(ctx context.Context, actorID, targetID string) error {
 	if ok, err := s.Authorize(ctx, actorID, PermAdminRoleGrant); err != nil {
 		return err
@@ -58,8 +114,18 @@ func (s *AuthService) GrantAdmin(ctx context.Context, actorID, targetID string) 
 	return s.store.GrantRole(ctx, targetID, RoleAdmin)
 }
 
-// RevokeAdmin removes the ADMIN role from the target user, enforcing the
-// Last Active Admin Guard.
+// AdminRoleGuardStore is the persistence boundary for role revocation that
+// must not race the Last Active Admin invariant. Implementations must serialize
+// competing privileged transitions and perform the active-admin check and role
+// removal in one transaction.
+type AdminRoleGuardStore interface {
+	RevokeAdminRoleSafely(ctx context.Context, targetID string) error
+}
+
+// RevokeAdmin removes the ADMIN role from the target user. The Last Active
+// Admin decision is deliberately delegated to one atomic persistence operation;
+// a read-count followed by a separate delete can let concurrent requests both
+// observe two admins and revoke both.
 func (s *AuthService) RevokeAdmin(ctx context.Context, actorID, targetID string) error {
 	if ok, err := s.Authorize(ctx, actorID, PermAdminRoleRevoke); err != nil {
 		return err
@@ -67,13 +133,9 @@ func (s *AuthService) RevokeAdmin(ctx context.Context, actorID, targetID string)
 		return ErrForbidden
 	}
 
-	count, err := s.store.CountActiveAdmins(ctx)
-	if err != nil {
-		return err
+	guardStore, ok := s.store.(AdminRoleGuardStore)
+	if !ok {
+		return errors.New("atomic last-admin guard persistence not configured")
 	}
-	if count <= 1 {
-		return ErrLastAdmin
-	}
-
-	return s.store.RevokeRole(ctx, targetID, RoleAdmin)
+	return guardStore.RevokeAdminRoleSafely(ctx, targetID)
 }
