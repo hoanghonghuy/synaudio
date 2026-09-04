@@ -18,6 +18,12 @@ func adminPolicyFor(method, route string) adminRoutePolicy {
 		return adminRoutePolicy{Permission: "AUDIT_VIEW"}
 	}
 
+	if route == "/admin/users" && method == http.MethodGet {
+		return adminRoutePolicy{Permission: "USER_STATUS_MANAGE"}
+	}
+	if route == "/admin/users/{userID}" && method == http.MethodGet {
+		return adminRoutePolicy{Permission: "USER_STATUS_MANAGE"}
+	}
 	if hasPrefix(route, "/admin/users/") {
 		switch {
 		case hasSuffix(route, "/roles/admin") && method == http.MethodPost:
