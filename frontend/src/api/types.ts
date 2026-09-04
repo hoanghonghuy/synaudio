@@ -144,6 +144,40 @@ export interface ListeningProgress {
   RelistenStatus?: 'NO_RELISTEN_NEEDED' | 'RELISTEN_RECOMMENDED' | 'RELISTEN_REQUIRED'
 }
 
+export type RelistenStatus = 'NO_RELISTEN_NEEDED' | 'RELISTEN_RECOMMENDED' | 'RELISTEN_REQUIRED'
+
+export interface LibraryItem {
+  story_id: string
+  story_slug: string
+  story_title: string
+  story_description: string
+  chapter_id: string
+  chapter_number: number
+  chapter_title: string
+  position_ms: number
+  completed_at?: string
+  relisten_status: RelistenStatus
+  last_listened_at?: string
+  updated_at?: string
+  audio_asset_id?: string
+  audio_duration_ms?: number
+}
+
+export interface FavoriteStory {
+  story_id: string
+  slug: string
+  title: string
+  description: string
+  favorited_at: string
+}
+
+export interface ListenerLibrary {
+  continue_listening?: LibraryItem
+  recent: LibraryItem[]
+  completed: LibraryItem[]
+  favorites: FavoriteStory[]
+}
+
 export interface CreativeDecision {
   ID: string
   StoryID: string
