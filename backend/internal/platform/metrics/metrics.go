@@ -18,19 +18,21 @@ type Registry struct {
 	apiRequests map[string]uint64
 	apiDuration map[string]float64
 
-	workerHeartbeat int64
-	workerLoopRuns  map[string]uint64
-	workerLoopItems map[string]uint64
-	generationJobs map[string]uint64
+	workerHeartbeat    int64
+	workerLoopRuns     map[string]uint64
+	workerLoopItems    map[string]uint64
+	generationJobs     map[string]uint64
+	generationDuration map[string]float64
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		apiRequests:     make(map[string]uint64),
-		apiDuration:     make(map[string]float64),
-		workerLoopRuns:  make(map[string]uint64),
-		workerLoopItems: make(map[string]uint64),
-		generationJobs:  make(map[string]uint64),
+		apiRequests:        make(map[string]uint64),
+		apiDuration:        make(map[string]float64),
+		workerLoopRuns:     make(map[string]uint64),
+		workerLoopItems:    make(map[string]uint64),
+		generationJobs:     make(map[string]uint64),
+		generationDuration: make(map[string]float64),
 	}
 }
 
@@ -108,10 +110,21 @@ func (r *Registry) AddWorkerItems(loop, result string, n int) {
 }
 
 func (r *Registry) ObserveGenerationJob(jobType, outcome, errorClass string) {
-	key := strings.Join([]string{boundedJobType(jobType), boundedOutcome(outcome), boundedErrorClass(errorClass)}, "\x00")
+	key := generationKey(jobType, outcome, errorClass)
 	r.mu.Lock()
 	r.generationJobs[key]++
 	r.mu.Unlock()
+}
+
+func (r *Registry) ObserveGenerationDuration(jobType, outcome, errorClass string, duration time.Duration) {
+	key := generationKey(jobType, outcome, errorClass)
+	r.mu.Lock()
+	r.generationDuration[key] += duration.Seconds()
+	r.mu.Unlock()
+}
+
+func generationKey(jobType, outcome, errorClass string) string {
+	return strings.Join([]string{boundedJobType(jobType), boundedOutcome(outcome), boundedErrorClass(errorClass)}, "\x00")
 }
 
 func (r *Registry) Handler() http.Handler {
@@ -162,6 +175,13 @@ func (r *Registry) writePrometheus(w http.ResponseWriter) {
 	for _, key := range sortedKeys(r.generationJobs) {
 		parts := strings.Split(key, "\x00")
 		_, _ = fmt.Fprintf(w, "synaudio_generation_jobs_total{job_type=%q,outcome=%q,error_class=%q} %d\n", parts[0], parts[1], parts[2], r.generationJobs[key])
+	}
+
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_generation_attempt_duration_seconds_sum Cumulative generation attempt execution duration using bounded job/outcome/error labels.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_generation_attempt_duration_seconds_sum counter")
+	for _, key := range sortedKeys(r.generationDuration) {
+		parts := strings.Split(key, "\x00")
+		_, _ = fmt.Fprintf(w, "synaudio_generation_attempt_duration_seconds_sum{job_type=%q,outcome=%q,error_class=%q} %g\n", parts[0], parts[1], parts[2], r.generationDuration[key])
 	}
 }
 
