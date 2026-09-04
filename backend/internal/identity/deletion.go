@@ -14,9 +14,12 @@ const (
 var ErrDeletionGracePeriod = errors.New("account deletion grace period has not elapsed")
 
 type deletionLifecycleStore interface {
-	RequestAccountDeletion(ctx context.Context, userID string) error
 	PurgeAccountIfEligible(ctx context.Context, userID string, cutoff time.Time) error
 	ListPurgeEligibleAccounts(ctx context.Context, cutoff time.Time, limit int) ([]string, error)
+}
+
+type accountDeletionGuardStore interface {
+	RequestAccountDeletionSafely(ctx context.Context, userID string) error
 }
 
 type deletionRecoveryStore interface {
@@ -33,18 +36,17 @@ type AccountDeletionPurgeEvent struct {
 type AccountDeletionPurgeObserver func(context.Context, AccountDeletionPurgeEvent) error
 
 // RequestAccountDeletion deactivates the account immediately and revokes active
-// sessions. The production store performs both transitions atomically.
+// sessions. Persistence must serialize this transition with the Last Active
+// Admin guard so privileged self-deletion cannot remove the final ACTIVE admin.
 func (s *AuthService) RequestAccountDeletion(ctx context.Context, userID string) error {
 	if _, err := s.store.GetUserByID(ctx, userID); err != nil {
 		return err
 	}
-	if lifecycle, ok := s.store.(deletionLifecycleStore); ok {
-		return lifecycle.RequestAccountDeletion(ctx, userID)
+	guardStore, ok := s.store.(accountDeletionGuardStore)
+	if !ok {
+		return errors.New("atomic account deletion guard persistence not configured")
 	}
-	if err := s.store.DeactivateUser(ctx, userID); err != nil {
-		return err
-	}
-	return s.store.RevokeSessions(ctx, userID)
+	return guardStore.RequestAccountDeletionSafely(ctx, userID)
 }
 
 // RequestAccountDeletionRecovery issues a short-lived, one-time ownership proof
