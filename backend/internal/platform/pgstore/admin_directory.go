@@ -2,7 +2,6 @@ package pgstore
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/synaudio/synaudio/backend/internal/identity"
@@ -92,4 +91,3 @@ func splitRoleCodes(value string) []string {
 }
 
 var _ identity.AdminUserDirectoryStore = (*IdentityStore)(nil)
-var _ = errors.New
