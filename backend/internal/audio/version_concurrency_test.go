@@ -19,27 +19,27 @@ type concurrentReservationStore struct {
 	mu sync.Mutex
 }
 
-func (s *concurrentReservationStore) NextNarrationRevision(ctx context.Context, chapterID string) (int, error) {
+func (s *concurrentReservationStore) CreateNarrationRevisionAtomically(ctx context.Context, r NarrationRevision) (NarrationRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.fakeStore.NextNarrationRevision(ctx, chapterID)
-}
 
-func (s *concurrentReservationStore) CreateNarrationRevision(ctx context.Context, r NarrationRevision) (NarrationRevision, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	revisionNo, err := s.fakeStore.NextNarrationRevision(ctx, r.ChapterID)
+	if err != nil {
+		return NarrationRevision{}, err
+	}
+	r.RevisionNo = revisionNo
 	return s.fakeStore.CreateNarrationRevision(ctx, r)
 }
 
-func (s *concurrentReservationStore) NextAudioVersion(ctx context.Context, chapterID string) (int, error) {
+func (s *concurrentReservationStore) CreateAudioAssetAtomically(ctx context.Context, a AudioAsset) (AudioAsset, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.fakeStore.NextAudioVersion(ctx, chapterID)
-}
 
-func (s *concurrentReservationStore) CreateAudioAsset(ctx context.Context, a AudioAsset) (AudioAsset, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	versionNo, err := s.fakeStore.NextAudioVersion(ctx, a.ChapterID)
+	if err != nil {
+		return AudioAsset{}, err
+	}
+	a.VersionNo = versionNo
 	return s.fakeStore.CreateAudioAsset(ctx, a)
 }
 
