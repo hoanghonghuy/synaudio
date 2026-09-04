@@ -8,7 +8,7 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/identity"
 )
 
-func TestRequestAccountDeletionDeactivatesImmediately(t *testing.T) {
+func TestRequestAccountDeletionDeactivatesImmediatelyAndRevokesSessions(t *testing.T) {
 	store := newFakeStore()
 	svc := identity.NewAuthService(store)
 
@@ -24,6 +24,9 @@ func TestRequestAccountDeletionDeactivatesImmediately(t *testing.T) {
 	}
 	if got.Status != identity.StatusDeactivated {
 		t.Fatalf("expected DEACTIVATED, got %q", got.Status)
+	}
+	if !store.sessionsRevoked {
+		t.Fatal("expected all active sessions revoked when deletion starts")
 	}
 }
 

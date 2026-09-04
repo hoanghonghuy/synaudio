@@ -263,6 +263,28 @@ export function cancelAccountDeletion(): Promise<{ status: string }> {
   })
 }
 
+export function requestAccountDeletionRecovery(email: string): Promise<{ status: string }> {
+  return request<{ status: string }>(
+    '/auth/account/deletion/recovery/request',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+    false,
+  )
+}
+
+export function confirmAccountDeletionRecovery(email: string, token: string): Promise<{ status: string }> {
+  return request<{ status: string }>(
+    '/auth/account/deletion/recovery/confirm',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, token }),
+    },
+    false,
+  )
+}
+
 export function register(email: string, password: string): Promise<{ id: string; email: string; status: string }> {
   return request<{ id: string; email: string; status: string }>(
     '/auth/register',
