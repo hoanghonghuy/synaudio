@@ -146,7 +146,7 @@ func main() {
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
 	generationHandler := generation.NewHandler(generationService, authService.ResolveUserID)
 
-	audioStore := pgstore.NewAudioStore(queries)
+	audioStore := pgstore.NewAudioStore(queries, database)
 	audioService := audio.NewService(audioStore,
 		audio.WithTTS(ttsProvider),
 		audio.WithObjectStorage(objStorage),
