@@ -18,6 +18,17 @@ func adminPolicyFor(method, route string) adminRoutePolicy {
 		return adminRoutePolicy{Permission: "AUDIT_VIEW"}
 	}
 
+	if hasPrefix(route, "/admin/users/") {
+		switch {
+		case hasSuffix(route, "/roles/admin") && method == http.MethodPost:
+			return adminRoutePolicy{Permission: "ADMIN_ROLE_GRANT", RecentAuth: true}
+		case hasSuffix(route, "/roles/admin") && method == http.MethodDelete:
+			return adminRoutePolicy{Permission: "ADMIN_ROLE_REVOKE", RecentAuth: true}
+		case hasSuffix(route, "/status") && method == http.MethodPatch:
+			return adminRoutePolicy{Permission: "ADMIN_STATUS_MANAGE", RecentAuth: true}
+		}
+	}
+
 	if hasPrefix(route, "/admin/retcons") {
 		switch {
 		case method == http.MethodGet:
@@ -46,7 +57,6 @@ func adminPolicyFor(method, route string) adminRoutePolicy {
 		case hasSuffix(route, "/cover"):
 			return adminRoutePolicy{Permission: "STORY_METADATA_EDIT"}
 		case hasSegment(route, "/content-profile"):
-			if method == http.MethodGet { return adminRoutePolicy{Permission: "STORY_METADATA_EDIT"} }
 			return adminRoutePolicy{Permission: "STORY_METADATA_EDIT"}
 		case hasSegment(route, "/bible"):
 			if method == http.MethodGet { return adminRoutePolicy{Permission: "STORY_BIBLE_VIEW"} }
