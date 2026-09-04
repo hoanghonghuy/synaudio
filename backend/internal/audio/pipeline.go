@@ -9,8 +9,8 @@ import (
 )
 
 // objectDeleter is an optional cleanup capability implemented by production
-// object storage. Version reservations and per-attempt object keys keep orphaned
-// objects harmless even when cleanup itself is unavailable or fails.
+// object storage. Attempt-unique object keys keep orphaned objects harmless even
+// when cleanup itself is unavailable or fails.
 type objectDeleter interface {
 	Delete(ctx context.Context, key string) error
 }
@@ -60,16 +60,12 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		return AudioAsset{}, fmt.Errorf("process audio: %w", err)
 	}
 
-	versionNo, err := s.store.NextAudioVersion(ctx, nar.ChapterID)
-	if err != nil {
-		return AudioAsset{}, err
-	}
-
-	// Generate the asset identity before the durable write and include it in the
-	// object key. The durable version reservation prevents version reuse; the
-	// asset ID additionally makes every synthesis attempt own a distinct key.
+	// The object is written before READY metadata exists, so its identity must not
+	// depend on a version number that has not yet been committed. A UUID-qualified
+	// attempt key guarantees concurrent synthesis attempts never overwrite each
+	// other; the version is allocated atomically when metadata is inserted.
 	assetID := uuid.NewString()
-	storageKey := fmt.Sprintf("chapters/%s/audio/v%d/%s.mp3", nar.ChapterID, versionNo, assetID)
+	storageKey := fmt.Sprintf("chapters/%s/audio/attempts/%s.mp3", nar.ChapterID, assetID)
 	if err := s.objectStorage.Put(ctx, storageKey, processed.Data); err != nil {
 		return AudioAsset{}, fmt.Errorf("persist final audio: %w", err)
 	}
@@ -77,7 +73,6 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 	asset := AudioAsset{
 		ID:                        assetID,
 		ChapterID:                 nar.ChapterID,
-		VersionNo:                 versionNo,
 		SourceNarrationRevisionID: narrationRevisionID,
 		Status:                    "READY",
 		StorageKey:                storageKey,
@@ -88,15 +83,15 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		IsActive:                  false,
 	}
 
-	persisted, err := s.store.CreateAudioAsset(ctx, asset)
+	persisted, err := s.persistAudioAsset(ctx, asset)
 	if err == nil {
 		return persisted, nil
 	}
 
 	// Metadata is the READY authority. If metadata registration fails after the
 	// object write, remove only this attempt's unique object. If cleanup fails,
-	// the durable version reservation plus unique asset key still guarantee the
-	// orphan cannot overwrite or be mistaken for a later valid asset.
+	// the UUID-qualified key still guarantees the orphan cannot overwrite or be
+	// mistaken for a later valid asset.
 	if cleaner, ok := s.objectStorage.(objectDeleter); ok {
 		if cleanupErr := cleaner.Delete(ctx, storageKey); cleanupErr != nil {
 			return AudioAsset{}, fmt.Errorf("register audio asset: %w (cleanup %q failed: %v)", err, storageKey, cleanupErr)
