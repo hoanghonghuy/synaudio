@@ -96,6 +96,15 @@ func (m *MinIO) Get(ctx context.Context, key string) ([]byte, error) {
 	return data, nil
 }
 
+// Delete removes exactly one object key. Audio synthesis uses this only as
+// compensating cleanup after its own metadata registration fails.
+func (m *MinIO) Delete(ctx context.Context, key string) error {
+	if err := m.client.RemoveObject(ctx, m.bucket, key, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("delete object %q: %w", key, err)
+	}
+	return nil
+}
+
 // PresignedGetObject returns a presigned URL for downloading an object.
 func (m *MinIO) PresignedGetObject(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	url, err := m.client.PresignedGetObject(ctx, m.bucket, key, expiry, nil)
