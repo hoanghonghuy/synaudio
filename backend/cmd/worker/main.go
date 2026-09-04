@@ -88,6 +88,7 @@ func main() {
 			metricOutcome = "failure"
 		}
 		metricRegistry.ObserveGenerationJob(event.Job.JobType, metricOutcome, event.ErrorClass)
+		metricRegistry.ObserveGenerationDuration(event.Job.JobType, metricOutcome, event.ErrorClass, event.Duration)
 		_, err := auditService.RecordReliable(ctx, audit.Event{
 			ActorType:       actorType,
 			Action:          "GENERATION_JOB_" + event.Outcome,
