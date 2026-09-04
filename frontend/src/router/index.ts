@@ -11,6 +11,7 @@ import ForgotPasswordPage from '../features/auth/ForgotPasswordPage.vue'
 import ResetPasswordPage from '../features/auth/ResetPasswordPage.vue'
 import VerifyEmailPage from '../features/auth/VerifyEmailPage.vue'
 import SecurityPage from '../features/auth/SecurityPage.vue'
+import AccountDeletionRecoveryPage from '../features/auth/AccountDeletionRecoveryPage.vue'
 import ContentReviewPage from '../features/admin/ContentReviewPage.vue'
 import { useAuthStore } from '../stores/auth'
 
@@ -59,6 +60,11 @@ export const router = createRouter({
       path: '/auth/verify-email',
       name: 'verify-email',
       component: VerifyEmailPage,
+    },
+    {
+      path: '/account-deletion-recovery',
+      name: 'account-deletion-recovery',
+      component: AccountDeletionRecoveryPage,
     },
     {
       path: '/account/security',

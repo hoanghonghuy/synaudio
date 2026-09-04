@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import {
-  cancelAccountDeletion,
   confirmTOTP,
   disableTOTP,
   listAuthSessions,
@@ -28,7 +27,6 @@ const success = ref('')
 
 const mfaEnabled = computed(() => auth.user?.mfa_enabled ?? false)
 const hasRecoveryCodes = computed(() => recoveryCodes.value.length > 0)
-const accountDeactivated = computed(() => auth.user?.status === 'DEACTIVATED')
 
 async function beginSetup() {
   loading.value = true
@@ -126,31 +124,17 @@ async function logoutEverywhere() {
 }
 
 async function requestDeletion() {
-  if (!window.confirm('Tài khoản sẽ bị vô hiệu hóa ngay lập tức. Bạn có chắc muốn bắt đầu yêu cầu xóa tài khoản không?')) return
+  if (!window.confirm('Tài khoản sẽ bị vô hiệu hóa ngay lập tức và mọi phiên đăng nhập sẽ bị thu hồi. Bạn có chắc muốn bắt đầu yêu cầu xóa tài khoản không?')) return
   deleting.value = true
   error.value = ''
   success.value = ''
+  const email = auth.user?.email ?? ''
   try {
     await requestAccountDeletion()
-    if (auth.user) auth.user.status = 'DEACTIVATED'
-    success.value = 'Tài khoản đã được vô hiệu hóa.'
+    await auth.clearLocalSession()
+    await router.replace({ path: '/account-deletion-recovery', query: email ? { email } : undefined })
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Không thể yêu cầu xóa tài khoản.'
-  } finally {
-    deleting.value = false
-  }
-}
-
-async function cancelDeletion() {
-  deleting.value = true
-  error.value = ''
-  success.value = ''
-  try {
-    await cancelAccountDeletion()
-    if (auth.user) auth.user.status = 'ACTIVE'
-    success.value = 'Yêu cầu xóa tài khoản đã được hủy.'
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Không thể hủy yêu cầu xóa tài khoản.'
   } finally {
     deleting.value = false
   }
@@ -267,13 +251,13 @@ onMounted(async () => {
       <section class="security-card account-danger-zone" aria-labelledby="account-lifecycle-heading">
         <p class="eyebrow">Quản lý tài khoản</p>
         <h2 id="account-lifecycle-heading">Xóa tài khoản</h2>
-        <p>Yêu cầu này vô hiệu hóa tài khoản ngay lập tức. Dữ liệu cá nhân chỉ được ẩn danh sau thời gian chờ theo chính sách hệ thống.</p>
-        <div v-if="accountDeactivated" class="status-state error" role="status">
-          <strong>Tài khoản đang chờ xóa.</strong>
-        </div>
+        <p>
+          Yêu cầu này vô hiệu hóa tài khoản và thu hồi mọi phiên đăng nhập ngay lập tức. Trong thời gian chờ 30 ngày, có thể hủy yêu cầu bằng liên kết xác minh một lần gửi qua email; sau thời hạn, hệ thống mới được phép ẩn danh dữ liệu.
+        </p>
         <div class="recovery-actions">
-          <button v-if="accountDeactivated" class="secondary-button" type="button" :disabled="deleting" @click="cancelDeletion">{{ deleting ? 'Đang xử lý...' : 'Hủy yêu cầu xóa' }}</button>
-          <button v-else class="danger-button" type="button" :disabled="deleting" @click="requestDeletion">{{ deleting ? 'Đang xử lý...' : 'Yêu cầu xóa tài khoản' }}</button>
+          <button class="danger-button" type="button" :disabled="deleting" @click="requestDeletion">
+            {{ deleting ? 'Đang xử lý...' : 'Yêu cầu xóa tài khoản' }}
+          </button>
         </div>
       </section>
     </div>
