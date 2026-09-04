@@ -20,6 +20,7 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
+	"github.com/synaudio/synaudio/backend/internal/platform/metrics"
 	"github.com/synaudio/synaudio/backend/internal/platform/pgstore"
 	"github.com/synaudio/synaudio/backend/internal/platform/providers"
 	"github.com/synaudio/synaudio/backend/internal/platform/storage"
@@ -195,27 +196,32 @@ func main() {
 			}
 			return nil
 		},
-		DependencyChecks:          dependencyChecks,
-		Logger:                    log,
-		AdminCheck:                authService.ResolveAdmin,
-		AdminActor:                authService.ResolveUserID,
-		AuditRecord:               auditService.RecordReliable,
-		AuditBoundary:             auditBoundary,
-		AuthHandler:               authHandler,
-		AuditHandler:              auditHandler,
-		StoryHandler:              storyHandler,
-		StoryReadinessHandler:     storyReadinessHandler,
-		PlanningHandler:           planningHandler,
-		PlanningWorkspaceHandler:  planningWorkspaceHandler,
-		GenerationHandler:         generationHandler,
-		AudioHandler:              audioHandler,
-		ListenerHandler:           listenerHandler,
-		RetconHandler:             retconHandler,
+		DependencyChecks:         dependencyChecks,
+		Logger:                   log,
+		AdminCheck:               authService.ResolveAdmin,
+		AdminActor:               authService.ResolveUserID,
+		AuditRecord:              auditService.RecordReliable,
+		AuditBoundary:            auditBoundary,
+		AuthHandler:              authHandler,
+		AuditHandler:             auditHandler,
+		StoryHandler:             storyHandler,
+		StoryReadinessHandler:    storyReadinessHandler,
+		PlanningHandler:          planningHandler,
+		PlanningWorkspaceHandler: planningWorkspaceHandler,
+		GenerationHandler:        generationHandler,
+		AudioHandler:             audioHandler,
+		ListenerHandler:          listenerHandler,
+		RetconHandler:            retconHandler,
 	})
+
+	metricRegistry := metrics.NewRegistry()
+	rootHandler := http.NewServeMux()
+	rootHandler.Handle("/metrics", metricRegistry.Handler())
+	rootHandler.Handle("/", metricRegistry.HTTPMiddleware(router))
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           router,
+		Handler:           rootHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
