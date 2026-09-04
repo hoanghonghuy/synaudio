@@ -12,11 +12,16 @@ import (
 
 // AudioStore implements audio.Store backed by PostgreSQL via sqlc.
 type AudioStore struct {
-	q *db.Queries
+	q        *db.Queries
+	executor db.DBTX
 }
 
-func NewAudioStore(q *db.Queries) *AudioStore {
-	return &AudioStore{q: q}
+func NewAudioStore(q *db.Queries, executor ...db.DBTX) *AudioStore {
+	store := &AudioStore{q: q}
+	if len(executor) > 0 {
+		store.executor = executor[0]
+	}
+	return store
 }
 
 // ============================================================
@@ -24,7 +29,11 @@ func NewAudioStore(q *db.Queries) *AudioStore {
 // ============================================================
 
 func (s *AudioStore) NextNarrationRevision(ctx context.Context, chapterID string) (int, error) {
-	n, err := s.q.NextNarrationRevision(ctx, toUUID(chapterID))
+	if s.executor == nil {
+		n, err := s.q.NextNarrationRevision(ctx, toUUID(chapterID))
+		return int(n), err
+	}
+	n, err := db.ReserveNarrationRevision(ctx, s.executor, toUUID(chapterID))
 	return int(n), err
 }
 
@@ -113,7 +122,11 @@ func (s *AudioStore) UpdateTTSSegment(ctx context.Context, seg audio.TTSSegment)
 // ============================================================
 
 func (s *AudioStore) NextAudioVersion(ctx context.Context, chapterID string) (int, error) {
-	n, err := s.q.NextAudioVersion(ctx, toUUID(chapterID))
+	if s.executor == nil {
+		n, err := s.q.NextAudioVersion(ctx, toUUID(chapterID))
+		return int(n), err
+	}
+	n, err := db.ReserveAudioVersion(ctx, s.executor, toUUID(chapterID))
 	return int(n), err
 }
 
