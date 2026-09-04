@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -22,18 +24,59 @@ type MinIO struct {
 }
 
 func NewMinIO(cfg config.Config) (*MinIO, error) {
-	endpoint := strings.TrimPrefix(cfg.StorageEndpoint, "http://")
-	endpoint = strings.TrimPrefix(endpoint, "https://")
+	endpoint, secure, host, err := parseStorageEndpoint(cfg.StorageEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.AppEnv == config.EnvProduction && !secure && !isLocalStorageHost(host) {
+		return nil, fmt.Errorf("insecure remote STORAGE_ENDPOINT is not allowed in production")
+	}
 
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.StorageAccessKey, cfg.StorageSecretKey, ""),
-		Secure: false,
+		Secure: secure,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create minio client: %w", err)
 	}
 
 	return &MinIO{client: client, bucket: cfg.StorageBucket}, nil
+}
+
+// parseStorageEndpoint accepts only an explicit HTTP(S) authority. S3 client
+// transport must never be guessed from a stripped or missing scheme because
+// that can silently downgrade an intended HTTPS endpoint.
+func parseStorageEndpoint(raw string) (endpoint string, secure bool, host string, err error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false, "", fmt.Errorf("STORAGE_ENDPOINT is required")
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false, "", fmt.Errorf("invalid STORAGE_ENDPOINT: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", false, "", fmt.Errorf("STORAGE_ENDPOINT must use http or https")
+	}
+	if u.Host == "" || u.Hostname() == "" {
+		return "", false, "", fmt.Errorf("STORAGE_ENDPOINT must include a host")
+	}
+	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return "", false, "", fmt.Errorf("STORAGE_ENDPOINT must contain only scheme and authority")
+	}
+
+	return u.Host, u.Scheme == "https", u.Hostname(), nil
+}
+
+func isLocalStorageHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch host {
+	case "localhost", "minio", "127.0.0.1", "::1", "host.docker.internal":
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
 }
 
 // Put stores data at the given object key.
