@@ -13,13 +13,13 @@ import (
 func startWorkerMetrics(ctx context.Context, registry *platformmetrics.Registry, log *slog.Logger) {
 	addr := os.Getenv("WORKER_METRICS_ADDR")
 	if addr == "" {
-		addr = ":9091"
+		addr = "127.0.0.1:9091"
 	}
 
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           registry.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
+	server, err := platformmetrics.NewPrivateServer(addr, registry.Handler())
+	if err != nil {
+		log.Error("worker metrics config invalid", "error", err)
+		return
 	}
 
 	go func() {
