@@ -9,18 +9,18 @@ WITH frozen_input AS (
     JOIN chapter_plan_revisions p
       ON p.id = c.current_plan_revision_id
      AND p.chapter_id = c.id
-    WHERE c.id = $9
+    WHERE c.id = sqlc.arg('chapter_id')
       AND c.current_plan_revision_id IS NOT NULL
 ), created_job AS (
     INSERT INTO generation_jobs (
         id, run_id, job_type, status, priority, input_fingerprint,
         attempt_count, max_attempts
     )
-    SELECT $1, $2, $3, $4, $5, $6, $7, $8
+    SELECT sqlc.arg('id'), sqlc.arg('run_id'), sqlc.arg('job_type'), sqlc.arg('status'),
+           sqlc.arg('priority'), sqlc.arg('input_fingerprint'), sqlc.arg('attempt_count'),
+           sqlc.arg('max_attempts')
     FROM frozen_input
-    RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
-              attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
-              completed_at, last_error_class, last_error_code, output_ref, created_at
+    RETURNING id
 ), bound_input AS (
     INSERT INTO generation_job_writer_inputs (job_id, chapter_id, plan_revision_id)
     SELECT j.id, f.chapter_id, f.plan_revision_id
@@ -28,12 +28,10 @@ WITH frozen_input AS (
     CROSS JOIN frozen_input f
     RETURNING job_id
 )
-SELECT j.id, j.run_id, j.job_type, j.status, j.priority, j.available_at,
-       j.input_fingerprint, j.attempt_count, j.max_attempts, j.locked_by,
-       j.lock_expires_at, j.started_at, j.completed_at, j.last_error_class,
-       j.last_error_code, j.output_ref, j.created_at
-FROM created_job j
-JOIN bound_input b ON b.job_id = j.id;
+SELECT g.*
+FROM generation_jobs g
+JOIN bound_input b ON b.job_id = g.id
+WHERE g.id = sqlc.arg('id');
 
 -- name: GetWriterJobInput :one
 SELECT wi.job_id, wi.chapter_id, wi.plan_revision_id, p.plan, p.base_canon_version_id
