@@ -9,7 +9,12 @@ import {
   regenerateContent,
 } from '../../api/client'
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
-import { rewriteContent } from './chapterProductionApi'
+import {
+  getGenerationRun,
+  rewriteContent,
+  startChapterGeneration,
+  type GenerationRun,
+} from './chapterProductionApi'
 import { createLatestSelectionGuard } from './latestSelection.mjs'
 
 const route = useRoute()
@@ -18,6 +23,7 @@ const chapters = ref<Chapter[]>([])
 const activeChapter = ref<Chapter | null>(null)
 const revisions = ref<ContentRevision[]>([])
 const reviews = ref<ChapterReview[]>([])
+const generationRun = ref<GenerationRun | null>(null)
 const loading = ref(false)
 const action = ref('')
 const error = ref('')
@@ -35,11 +41,13 @@ const latestRevisionReviews = computed(() => {
 const reviewOutcomes = computed(() => new Map(latestRevisionReviews.value.map((review) => [review.ReviewType, review.Outcome])))
 const mayEditDraft = computed(() => Boolean(latestRevision.value && draftText.value.trim() && !action.value))
 const mayRewrite = computed(() => Boolean(latestRevision.value && rewriteFeedback.value.trim() && !action.value))
+const mayStartGeneration = computed(() => Boolean(activeChapter.value?.CurrentPlanRevisionID && !action.value))
 
 const stages = computed(() => {
   const chapter = activeChapter.value
   const latest = latestRevision.value
   const approved = approvedRevision.value
+  const run = generationRun.value
   const hasPlan = Boolean(chapter?.CurrentPlanRevisionID)
   const hasGeneratedContent = Boolean(latest)
   const requiredReviews = ['CONTINUITY', 'QUALITY', 'SAFETY']
@@ -55,12 +63,14 @@ const stages = computed(() => {
     {
       key: 'generation',
       label: 'Generation',
-      state: hasGeneratedContent ? 'ready' : hasPlan ? 'waiting' : 'blocked',
-      detail: latest
-        ? `Revision #${latest.RevisionNo} · ${latest.SourceType}${latest.GenerationRunID ? ` · run ${latest.GenerationRunID}` : ''}`
-        : hasPlan
-          ? 'Plan đã sẵn sàng; chưa có content revision để quan sát.'
-          : 'Cần Chapter Plan trước khi đi vào generation.',
+      state: run?.Status === 'FAILED' ? 'blocked' : hasGeneratedContent ? 'ready' : run ? 'waiting' : hasPlan ? 'waiting' : 'blocked',
+      detail: run
+        ? `Run ${run.ID} · ${run.RunType} · ${run.Status}${run.WaitingReason ? ` · ${run.WaitingReason}` : ''}${latest ? ` · output revision #${latest.RevisionNo}` : ''}`
+        : latest
+          ? `Revision #${latest.RevisionNo} · ${latest.SourceType}${latest.GenerationRunID ? ` · run ${latest.GenerationRunID}` : ''}`
+          : hasPlan
+            ? 'Plan đã sẵn sàng; có thể bắt đầu generation run backend-authoritative.'
+            : 'Cần Chapter Plan trước khi đi vào generation.',
     },
     {
       key: 'review',
@@ -109,12 +119,25 @@ const stages = computed(() => {
   ]
 })
 
+async function loadGenerationRun(runID: string, chapterID: string, mayCommit: () => boolean) {
+  if (!runID) return null
+  try {
+    const run = await getGenerationRun(runID)
+    if (!mayCommit() || activeChapter.value?.ID !== chapterID) return null
+    return run
+  } catch {
+    if (!mayCommit() || activeChapter.value?.ID !== chapterID) return null
+    return null
+  }
+}
+
 async function selectChapter(chapter: Chapter) {
   const mayCommit = chapterSelection.begin(chapter.ID)
   activeChapter.value = chapter
   error.value = ''
   success.value = ''
   rewriteFeedback.value = ''
+  generationRun.value = null
   try {
     const [revisionResponse, reviewResponse] = await Promise.all([
       listContentRevisions(chapter.ID),
@@ -123,13 +146,56 @@ async function selectChapter(chapter: Chapter) {
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = revisionResponse.revisions
     reviews.value = reviewResponse.reviews
-    draftText.value = revisionResponse.revisions[revisionResponse.revisions.length - 1]?.ContentText ?? ''
+    const latest = revisionResponse.revisions[revisionResponse.revisions.length - 1] ?? null
+    draftText.value = latest?.ContentText ?? ''
+    if (latest?.GenerationRunID) {
+      generationRun.value = await loadGenerationRun(latest.GenerationRunID, chapter.ID, mayCommit)
+    }
   } catch (e) {
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = []
     reviews.value = []
+    generationRun.value = null
     draftText.value = ''
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
+  }
+}
+
+async function startGeneration() {
+  const chapter = activeChapter.value
+  if (!chapter || !chapter.CurrentPlanRevisionID || action.value) return
+
+  action.value = 'start-generation'
+  error.value = ''
+  success.value = ''
+  try {
+    const run = await startChapterGeneration(storyID.value, chapter.ID)
+    if (activeChapter.value?.ID !== chapter.ID) return
+    generationRun.value = run
+    success.value = `Đã tạo Generation Run ${run.ID} với WRITER input được backend freeze từ Chapter Plan hiện hành.`
+  } catch (e) {
+    if (activeChapter.value?.ID !== chapter.ID) return
+    error.value = e instanceof Error ? e.message : 'Không thể bắt đầu Chapter Generation.'
+  } finally {
+    action.value = ''
+  }
+}
+
+async function refreshGeneration() {
+  const chapter = activeChapter.value
+  const run = generationRun.value
+  if (!chapter || !run || action.value) return
+  action.value = 'refresh-generation'
+  error.value = ''
+  try {
+    const refreshed = await getGenerationRun(run.ID)
+    if (activeChapter.value?.ID !== chapter.ID) return
+    generationRun.value = refreshed
+  } catch (e) {
+    if (activeChapter.value?.ID !== chapter.ID) return
+    error.value = e instanceof Error ? e.message : 'Không thể refresh Generation Run.'
+  } finally {
+    action.value = ''
   }
 }
 
@@ -262,16 +328,28 @@ onMounted(load)
         <p v-if="error" class="status-state error" role="alert">{{ error }}</p>
         <p v-if="success" class="status-state success" role="status">{{ success }}</p>
 
+        <section v-if="activeChapter" class="action-panel generation-actions">
+          <div>
+            <strong>Generation Run</strong>
+            <p v-if="generationRun">Run {{ generationRun.ID }} · {{ generationRun.RunType }} · {{ generationRun.Status }}<span v-if="generationRun.WaitingReason"> · {{ generationRun.WaitingReason }}</span></p>
+            <p v-else>Start dùng backend atomic batch establishment với đúng một chapter; WRITER job chỉ visible sau khi backend freeze Chapter Plan input thành công.</p>
+          </div>
+          <div class="inline-actions">
+            <button v-if="!generationRun" type="button" :disabled="!mayStartGeneration" @click="startGeneration">
+              {{ action === 'start-generation' ? 'Đang bắt đầu…' : 'Start Generation' }}
+            </button>
+            <button v-else type="button" :disabled="Boolean(action)" @click="refreshGeneration">
+              {{ action === 'refresh-generation' ? 'Đang refresh…' : 'Refresh Run' }}
+            </button>
+          </div>
+        </section>
+
         <section v-if="activeChapter" class="action-panel">
           <div>
             <strong>Production actions</strong>
-            <p>Regenerate tạo output mới từ revision hiện tại. Rewrite tạo revision AI mới theo feedback operator. Edit Draft tạo revision thủ công mới. Retry của failed attempt là semantics khác và chỉ được mở khi backend expose đúng attempt/job recovery endpoint.</p>
+            <p>Regenerate tạo output mới từ revision hiện tại. Rewrite tạo revision AI mới theo feedback operator. Edit Draft tạo revision thủ công mới. Retry của failed attempt là semantics khác và vẫn chỉ mở khi backend expose đúng job recovery endpoint.</p>
           </div>
-          <button
-            type="button"
-            :disabled="!latestRevision || Boolean(action)"
-            @click="regenerateLatest"
-          >
+          <button type="button" :disabled="!latestRevision || Boolean(action)" @click="regenerateLatest">
             {{ action === 'regenerate' ? 'Đang Regenerate…' : 'Regenerate latest revision' }}
           </button>
         </section>
@@ -281,13 +359,7 @@ onMounted(load)
             <strong>Rewrite with feedback</strong>
             <p>Rewrite gọi backend-authoritative AI rewrite trên đúng revision #{{ latestRevision.RevisionNo }}. Feedback là input riêng của Rewrite; action này không alias Regenerate, Edit Draft hoặc Retry.</p>
           </div>
-          <textarea
-            v-model="rewriteFeedback"
-            rows="4"
-            :disabled="Boolean(action)"
-            aria-label="Rewrite feedback"
-            placeholder="Nhập feedback cụ thể cho bản rewrite..."
-          ></textarea>
+          <textarea v-model="rewriteFeedback" rows="4" :disabled="Boolean(action)" aria-label="Rewrite feedback" placeholder="Nhập feedback cụ thể cho bản rewrite..."></textarea>
           <div class="edit-actions">
             <button type="button" :disabled="!mayRewrite" @click="rewriteLatest">
               {{ action === 'rewrite' ? 'Đang Rewrite…' : 'Rewrite as new revision' }}
@@ -300,12 +372,7 @@ onMounted(load)
             <strong>Edit Draft</strong>
             <p>Chỉnh nội dung sẽ tạo ContentRevision mới dựa trên revision #{{ latestRevision.RevisionNo }}; không mutate revision cũ và không được coi là Regenerate, Rewrite hoặc Retry.</p>
           </div>
-          <textarea
-            v-model="draftText"
-            rows="10"
-            :disabled="Boolean(action)"
-            aria-label="Edit draft content"
-          ></textarea>
+          <textarea v-model="draftText" rows="10" :disabled="Boolean(action)" aria-label="Edit draft content"></textarea>
           <div class="edit-actions">
             <button type="button" :disabled="!mayEditDraft" @click="editLatestDraft">
               {{ action === 'edit' ? 'Đang lưu Edit Draft…' : 'Save as new revision' }}
@@ -316,10 +383,7 @@ onMounted(load)
         <ol v-if="activeChapter" class="stage-list">
           <li v-for="stage in stages" :key="stage.key" class="stage-card" :data-state="stage.state">
             <div class="stage-state" aria-hidden="true"></div>
-            <div>
-              <strong>{{ stage.label }}</strong>
-              <p>{{ stage.detail }}</p>
-            </div>
+            <div><strong>{{ stage.label }}</strong><p>{{ stage.detail }}</p></div>
           </li>
         </ol>
 
@@ -329,7 +393,7 @@ onMounted(load)
             <div><dt>Revision</dt><dd>{{ latestRevision.ID }}</dd></div>
             <div><dt>Based on</dt><dd>{{ latestRevision.BasedOnRevisionID || '—' }}</dd></div>
             <div><dt>Plan revision</dt><dd>{{ latestRevision.PlanRevisionID || '—' }}</dd></div>
-            <div><dt>Generation run</dt><dd>{{ latestRevision.GenerationRunID || '—' }}</dd></div>
+            <div><dt>Generation run</dt><dd>{{ latestRevision.GenerationRunID || generationRun?.ID || '—' }}</dd></div>
             <div><dt>Base canon</dt><dd>{{ latestRevision.BaseCanonVersionID || '—' }}</dd></div>
           </dl>
         </section>
@@ -354,6 +418,7 @@ onMounted(load)
 .action-panel { margin-top: 20px; padding: 16px; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
 .action-panel p, .edit-panel p { margin: 5px 0 0; max-width: 720px; opacity: .72; }
 .action-panel button { white-space: nowrap; }
+.inline-actions { display: flex; gap: 8px; }
 .edit-panel { margin-top: 16px; padding: 16px; display: grid; gap: 12px; }
 .edit-panel textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; line-height: 1.5; padding: 12px; border: 1px solid var(--border-color, #ccc); border-radius: 10px; }
 .edit-actions { display: flex; justify-content: flex-end; }
