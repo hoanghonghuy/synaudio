@@ -75,12 +75,12 @@ ORDER BY last_used_at DESC NULLS LAST, created_at DESC
 
 type ListActiveAuthSessionsParams struct {
 	UserID     pgtype.UUID        `json:"user_id"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	Now        pgtype.Timestamptz `json:"now"`
+	IdleCutoff pgtype.Timestamptz `json:"idle_cutoff"`
 }
 
 func (q *Queries) ListActiveAuthSessions(ctx context.Context, arg ListActiveAuthSessionsParams) ([]UserSession, error) {
-	rows, err := q.db.Query(ctx, listActiveAuthSessions, arg.UserID, arg.ExpiresAt, arg.LastUsedAt)
+	rows, err := q.db.Query(ctx, listActiveAuthSessions, arg.UserID, arg.Now, arg.IdleCutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -149,29 +149,29 @@ func (q *Queries) RevokeAuthSessionByIDForUser(ctx context.Context, arg RevokeAu
 
 const rotateAuthSession = `-- name: RotateAuthSession :one
 UPDATE user_sessions
-SET refresh_token_hash = $2,
-    last_used_at = $3
-WHERE refresh_token_hash = $1
+SET refresh_token_hash = $1,
+    last_used_at = $2
+WHERE refresh_token_hash = $3
   AND revoked_at IS NULL
-  AND expires_at > $3
+  AND expires_at > $2
   AND COALESCE(last_used_at, created_at) >= $4
 RETURNING id, user_id, refresh_token_hash, created_at, last_used_at, expires_at,
           revoked_at, mfa_verified_at, recent_auth_at, user_agent_summary, safe_ip_metadata
 `
 
 type RotateAuthSessionParams struct {
-	RefreshTokenHash   string             `json:"refresh_token_hash"`
-	RefreshTokenHash_2 string             `json:"refresh_token_hash_2"`
-	LastUsedAt         pgtype.Timestamptz `json:"last_used_at"`
-	LastUsedAt_2       pgtype.Timestamptz `json:"last_used_at_2"`
+	NewRefreshHash   string             `json:"new_refresh_hash"`
+	Now              pgtype.Timestamptz `json:"now"`
+	RefreshTokenHash string             `json:"refresh_token_hash"`
+	IdleCutoff       pgtype.Timestamptz `json:"idle_cutoff"`
 }
 
 func (q *Queries) RotateAuthSession(ctx context.Context, arg RotateAuthSessionParams) (UserSession, error) {
 	row := q.db.QueryRow(ctx, rotateAuthSession,
+		arg.NewRefreshHash,
+		arg.Now,
 		arg.RefreshTokenHash,
-		arg.RefreshTokenHash_2,
-		arg.LastUsedAt,
-		arg.LastUsedAt_2,
+		arg.IdleCutoff,
 	)
 	var i UserSession
 	err := row.Scan(
@@ -192,23 +192,23 @@ func (q *Queries) RotateAuthSession(ctx context.Context, arg RotateAuthSessionPa
 
 const touchAuthSession = `-- name: TouchAuthSession :one
 UPDATE user_sessions
-SET last_used_at = $2
-WHERE id = $1
+SET last_used_at = $1
+WHERE id = $2
   AND revoked_at IS NULL
-  AND expires_at > $2
+  AND expires_at > $1
   AND COALESCE(last_used_at, created_at) >= $3
 RETURNING id, user_id, refresh_token_hash, created_at, last_used_at, expires_at,
           revoked_at, mfa_verified_at, recent_auth_at, user_agent_summary, safe_ip_metadata
 `
 
 type TouchAuthSessionParams struct {
-	ID           pgtype.UUID        `json:"id"`
-	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`
-	LastUsedAt_2 pgtype.Timestamptz `json:"last_used_at_2"`
+	Now        pgtype.Timestamptz `json:"now"`
+	ID         pgtype.UUID        `json:"id"`
+	IdleCutoff pgtype.Timestamptz `json:"idle_cutoff"`
 }
 
 func (q *Queries) TouchAuthSession(ctx context.Context, arg TouchAuthSessionParams) (UserSession, error) {
-	row := q.db.QueryRow(ctx, touchAuthSession, arg.ID, arg.LastUsedAt, arg.LastUsedAt_2)
+	row := q.db.QueryRow(ctx, touchAuthSession, arg.Now, arg.ID, arg.IdleCutoff)
 	var i UserSession
 	err := row.Scan(
 		&i.ID,
