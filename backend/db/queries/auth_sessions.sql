@@ -13,22 +13,22 @@ RETURNING id, user_id, refresh_token_hash, created_at, last_used_at, expires_at,
 
 -- name: RotateAuthSession :one
 UPDATE user_sessions
-SET refresh_token_hash = $2,
-    last_used_at = $3
-WHERE refresh_token_hash = $1
+SET refresh_token_hash = sqlc.arg('new_refresh_hash'),
+    last_used_at = sqlc.arg('now')
+WHERE refresh_token_hash = sqlc.arg('refresh_token_hash')
   AND revoked_at IS NULL
-  AND expires_at > $3
-  AND COALESCE(last_used_at, created_at) >= $4
+  AND expires_at > sqlc.arg('now')
+  AND COALESCE(last_used_at, created_at) >= sqlc.arg('idle_cutoff')
 RETURNING id, user_id, refresh_token_hash, created_at, last_used_at, expires_at,
           revoked_at, mfa_verified_at, recent_auth_at, user_agent_summary, safe_ip_metadata;
 
 -- name: TouchAuthSession :one
 UPDATE user_sessions
-SET last_used_at = $2
-WHERE id = $1
+SET last_used_at = sqlc.arg('now')
+WHERE id = sqlc.arg('id')
   AND revoked_at IS NULL
-  AND expires_at > $2
-  AND COALESCE(last_used_at, created_at) >= $3
+  AND expires_at > sqlc.arg('now')
+  AND COALESCE(last_used_at, created_at) >= sqlc.arg('idle_cutoff')
 RETURNING id, user_id, refresh_token_hash, created_at, last_used_at, expires_at,
           revoked_at, mfa_verified_at, recent_auth_at, user_agent_summary, safe_ip_metadata;
 
@@ -49,8 +49,8 @@ WHERE id = $1
 SELECT id, user_id, refresh_token_hash, created_at, last_used_at, expires_at,
        revoked_at, mfa_verified_at, recent_auth_at, user_agent_summary, safe_ip_metadata
 FROM user_sessions
-WHERE user_id = $1
+WHERE user_id = sqlc.arg('user_id')
   AND revoked_at IS NULL
-  AND expires_at > $2
-  AND COALESCE(last_used_at, created_at) >= $3
+  AND expires_at > sqlc.arg('now')
+  AND COALESCE(last_used_at, created_at) >= sqlc.arg('idle_cutoff')
 ORDER BY last_used_at DESC NULLS LAST, created_at DESC;
