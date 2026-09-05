@@ -17,6 +17,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
+      - name: Verify sqlc generated code
+        working-directory: .
+        run: make sqlc-check
+      - name: Verify sqlc drift gate regression
+        working-directory: .
+        run: make sqlc-check-regression
       - name: Test
         run: go test ./...
       - name: Vet
