@@ -22,7 +22,7 @@ sqlc-check: sqlc
 	git diff --exit-code -- backend/internal/platform/db
 
 sqlc-check-regression:
-	./scripts/test-sqlc-drift-gate.sh
+	bash ./scripts/test-sqlc-drift-gate.sh
 
 backend-test:
 	cd backend && go test ./...
