@@ -82,17 +82,17 @@ WHERE chapter_id = $1 AND is_active = true;
 
 -- name: SetActiveAudioAsset :many
 WITH eligible_target AS (
-    SELECT id
-    FROM audio_assets
-    WHERE chapter_id = $1
-      AND id = $2
-      AND status = 'READY'
+    SELECT aa.id
+    FROM audio_assets AS aa
+    WHERE aa.chapter_id = $1
+      AND aa.id = $2
+      AND aa.status = 'READY'
     FOR UPDATE
 )
-UPDATE audio_assets
-SET is_active = (id = $2)
-WHERE chapter_id = $1
+UPDATE audio_assets AS aa
+SET is_active = (aa.id = $2)
+WHERE aa.chapter_id = $1
   AND EXISTS (SELECT 1 FROM eligible_target)
-RETURNING id, chapter_id, version_no, source_narration_revision_id, status, storage_key,
-          mime_type, size_bytes, duration_ms, bitrate_kbps, checksum, is_active,
-          generation_run_id, created_at;
+RETURNING aa.id, aa.chapter_id, aa.version_no, aa.source_narration_revision_id, aa.status, aa.storage_key,
+          aa.mime_type, aa.size_bytes, aa.duration_ms, aa.bitrate_kbps, aa.checksum, aa.is_active,
+          aa.generation_run_id, aa.created_at;
