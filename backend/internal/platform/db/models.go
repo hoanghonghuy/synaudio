@@ -8,6 +8,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccountDeletionRecoveryToken struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type AccountDeletionRequest struct {
 	ID          pgtype.UUID        `json:"id"`
 	UserID      pgtype.UUID        `json:"user_id"`
@@ -46,6 +54,37 @@ type AudioAsset struct {
 	IsActive                  bool               `json:"is_active"`
 	GenerationRunID           pgtype.UUID        `json:"generation_run_id"`
 	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+}
+
+type AuditDeliveryOutbox struct {
+	ID           pgtype.UUID        `json:"id"`
+	Event        []byte             `json:"event"`
+	Status       string             `json:"status"`
+	AttemptCount int32              `json:"attempt_count"`
+	MaxAttempts  int32              `json:"max_attempts"`
+	AvailableAt  pgtype.Timestamptz `json:"available_at"`
+	LockedAt     pgtype.Timestamptz `json:"locked_at"`
+	LastError    pgtype.Text        `json:"last_error"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AuditEvent struct {
+	ID              pgtype.UUID        `json:"id"`
+	ActorUserID     pgtype.UUID        `json:"actor_user_id"`
+	ActorType       string             `json:"actor_type"`
+	Action          string             `json:"action"`
+	ResourceType    pgtype.Text        `json:"resource_type"`
+	ResourceID      pgtype.Text        `json:"resource_id"`
+	StoryID         pgtype.UUID        `json:"story_id"`
+	ChapterID       pgtype.UUID        `json:"chapter_id"`
+	Result          string             `json:"result"`
+	CorrelationID   pgtype.Text        `json:"correlation_id"`
+	RequestID       pgtype.Text        `json:"request_id"`
+	GenerationRunID pgtype.UUID        `json:"generation_run_id"`
+	Provenance      []byte             `json:"provenance"`
+	Metadata        []byte             `json:"metadata"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type CanonBranch struct {
@@ -261,6 +300,21 @@ type CreativeDecisionOption struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
+type EmailDeliveryOutbox struct {
+	ID               pgtype.UUID        `json:"id"`
+	Purpose          string             `json:"purpose"`
+	RecipientEmail   string             `json:"recipient_email"`
+	EncryptedPayload []byte             `json:"encrypted_payload"`
+	Status           string             `json:"status"`
+	AttemptCount     int32              `json:"attempt_count"`
+	MaxAttempts      int32              `json:"max_attempts"`
+	AvailableAt      pgtype.Timestamptz `json:"available_at"`
+	LockedAt         pgtype.Timestamptz `json:"locked_at"`
+	LastError        pgtype.Text        `json:"last_error"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type EmailVerificationToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
@@ -315,6 +369,13 @@ type GenerationJobAttempt struct {
 type GenerationJobDependency struct {
 	JobID          pgtype.UUID `json:"job_id"`
 	DependsOnJobID pgtype.UUID `json:"depends_on_job_id"`
+}
+
+type GenerationJobWriterInput struct {
+	JobID          pgtype.UUID        `json:"job_id"`
+	ChapterID      pgtype.UUID        `json:"chapter_id"`
+	PlanRevisionID pgtype.UUID        `json:"plan_revision_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type GenerationRun struct {
