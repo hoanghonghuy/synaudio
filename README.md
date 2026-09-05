@@ -24,11 +24,13 @@ docker-compose.yml
 cp .env.example .env
 ```
 
-2. Start local infrastructure:
+2. Start local infrastructure and apply database migrations:
 
 ```bash
-docker compose up -d postgres minio minio-init
+docker compose up -d postgres minio minio-init migrate
 ```
+
+The API/worker expect the schema to be migrated before startup. The compose `backend-api` and `backend-worker` services already depend on the `migrate` service completing successfully.
 
 3. Run backend tests:
 
@@ -65,8 +67,8 @@ Use `.env.example` as the canonical runtime environment template.
 
 ## Health endpoints
 
-- `GET /health` — process liveness, no dependency calls
-- `GET /ready` — database readiness
+- `GET /health` — process liveness, no dependency calls.
+- `GET /ready` — readiness across configured critical dependencies. Current API composition includes database and object-storage checks, plus FFmpeg when the production FFmpeg processor is enabled; any failing dependency returns a non-ready response with per-dependency status.
 
 ## Spec precedence
 
