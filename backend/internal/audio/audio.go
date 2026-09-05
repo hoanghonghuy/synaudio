@@ -59,6 +59,14 @@ type Store interface {
 	SetActiveAudioAsset(ctx context.Context, chapterID, assetID string) (AudioAsset, error)
 }
 
+// atomicVersionStore is an optional production persistence capability that
+// allocates a chapter-scoped version and inserts the corresponding immutable row
+// in one transaction. Test/in-memory stores can keep the simpler Store contract.
+type atomicVersionStore interface {
+	CreateNarrationRevisionAtomically(ctx context.Context, r NarrationRevision) (NarrationRevision, error)
+	CreateAudioAssetAtomically(ctx context.Context, a AudioAsset) (AudioAsset, error)
+}
+
 // ObjectStorage persists and loads private audio objects by key.
 type ObjectStorage interface {
 	Put(ctx context.Context, key string, data []byte) error
@@ -113,6 +121,30 @@ func NewService(store Store, opts ...Option) *Service {
 	return svc
 }
 
+func (s *Service) persistNarrationRevision(ctx context.Context, r NarrationRevision) (NarrationRevision, error) {
+	if atomicStore, ok := s.store.(atomicVersionStore); ok {
+		return atomicStore.CreateNarrationRevisionAtomically(ctx, r)
+	}
+	revisionNo, err := s.store.NextNarrationRevision(ctx, r.ChapterID)
+	if err != nil {
+		return NarrationRevision{}, err
+	}
+	r.RevisionNo = revisionNo
+	return s.store.CreateNarrationRevision(ctx, r)
+}
+
+func (s *Service) persistAudioAsset(ctx context.Context, a AudioAsset) (AudioAsset, error) {
+	if atomicStore, ok := s.store.(atomicVersionStore); ok {
+		return atomicStore.CreateAudioAssetAtomically(ctx, a)
+	}
+	versionNo, err := s.store.NextAudioVersion(ctx, a.ChapterID)
+	if err != nil {
+		return AudioAsset{}, err
+	}
+	a.VersionNo = versionNo
+	return s.store.CreateAudioAsset(ctx, a)
+}
+
 // CreateNarrationRevision creates a new narration revision for a chapter.
 func (s *Service) CreateNarrationRevision(ctx context.Context, chapterID, sourceContentRevisionID, voiceID, script, createdBy string) (NarrationRevision, error) {
 	script = strings.TrimSpace(script)
@@ -120,15 +152,9 @@ func (s *Service) CreateNarrationRevision(ctx context.Context, chapterID, source
 		return NarrationRevision{}, errors.New("script must not be empty")
 	}
 
-	revisionNo, err := s.store.NextNarrationRevision(ctx, chapterID)
-	if err != nil {
-		return NarrationRevision{}, err
-	}
-
 	r := NarrationRevision{
 		ID:                      uuid.NewString(),
 		ChapterID:               chapterID,
-		RevisionNo:              revisionNo,
 		SourceContentRevisionID: sourceContentRevisionID,
 		VoiceID:                 voiceID,
 		Script:                  script,
@@ -136,20 +162,14 @@ func (s *Service) CreateNarrationRevision(ctx context.Context, chapterID, source
 		CreatedBy:               createdBy,
 	}
 
-	return s.store.CreateNarrationRevision(ctx, r)
+	return s.persistNarrationRevision(ctx, r)
 }
 
 // CreateAudioAsset creates a new audio asset version for a chapter.
 func (s *Service) CreateAudioAsset(ctx context.Context, chapterID, sourceNarrationRevisionID, storageKey, mimeType string, sizeBytes int64, durationMs, bitrateKbps int) (AudioAsset, error) {
-	versionNo, err := s.store.NextAudioVersion(ctx, chapterID)
-	if err != nil {
-		return AudioAsset{}, err
-	}
-
 	a := AudioAsset{
 		ID:                        uuid.NewString(),
 		ChapterID:                 chapterID,
-		VersionNo:                 versionNo,
 		SourceNarrationRevisionID: sourceNarrationRevisionID,
 		Status:                    "READY",
 		StorageKey:                storageKey,
@@ -160,7 +180,7 @@ func (s *Service) CreateAudioAsset(ctx context.Context, chapterID, sourceNarrati
 		IsActive:                  false,
 	}
 
-	return s.store.CreateAudioAsset(ctx, a)
+	return s.persistAudioAsset(ctx, a)
 }
 
 // ActivateAudioAsset delegates membership, READY eligibility, and replacement to
