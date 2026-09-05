@@ -19,18 +19,18 @@ WITH frozen_input AS (
     JOIN chapter_plan_revisions p
       ON p.id = c.current_plan_revision_id
      AND p.chapter_id = c.id
-    WHERE c.id = $9
+    WHERE c.id = $2
       AND c.current_plan_revision_id IS NOT NULL
 ), created_job AS (
     INSERT INTO generation_jobs (
         id, run_id, job_type, status, priority, input_fingerprint,
         attempt_count, max_attempts
     )
-    SELECT $1, $2, $3, $4, $5, $6, $7, $8
+    SELECT $1, $3, $4, $5,
+           $6, $7, $8,
+           $9
     FROM frozen_input
-    RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
-              attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
-              completed_at, last_error_class, last_error_code, output_ref, created_at
+    RETURNING id
 ), bound_input AS (
     INSERT INTO generation_job_writer_inputs (job_id, chapter_id, plan_revision_id)
     SELECT j.id, f.chapter_id, f.plan_revision_id
@@ -38,16 +38,15 @@ WITH frozen_input AS (
     CROSS JOIN frozen_input f
     RETURNING job_id
 )
-SELECT j.id, j.run_id, j.job_type, j.status, j.priority, j.available_at,
-       j.input_fingerprint, j.attempt_count, j.max_attempts, j.locked_by,
-       j.lock_expires_at, j.started_at, j.completed_at, j.last_error_class,
-       j.last_error_code, j.output_ref, j.created_at
-FROM created_job j
-JOIN bound_input b ON b.job_id = j.id
+SELECT g.id, g.run_id, g.job_type, g.status, g.priority, g.available_at, g.input_fingerprint, g.attempt_count, g.max_attempts, g.locked_by, g.lock_expires_at, g.started_at, g.completed_at, g.last_error_class, g.last_error_code, g.output_ref, g.created_at
+FROM generation_jobs g
+JOIN bound_input b ON b.job_id = g.id
+WHERE g.id = $1
 `
 
 type CreateWriterGenerationJobParams struct {
 	ID               pgtype.UUID `json:"id"`
+	ChapterID        pgtype.UUID `json:"chapter_id"`
 	RunID            pgtype.UUID `json:"run_id"`
 	JobType          string      `json:"job_type"`
 	Status           string      `json:"status"`
@@ -55,35 +54,15 @@ type CreateWriterGenerationJobParams struct {
 	InputFingerprint pgtype.Text `json:"input_fingerprint"`
 	AttemptCount     int32       `json:"attempt_count"`
 	MaxAttempts      int32       `json:"max_attempts"`
-	ID_2             pgtype.UUID `json:"id_2"`
-}
-
-type CreateWriterGenerationJobRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	RunID            pgtype.UUID        `json:"run_id"`
-	JobType          string             `json:"job_type"`
-	Status           string             `json:"status"`
-	Priority         int32              `json:"priority"`
-	AvailableAt      pgtype.Timestamptz `json:"available_at"`
-	InputFingerprint pgtype.Text        `json:"input_fingerprint"`
-	AttemptCount     int32              `json:"attempt_count"`
-	MaxAttempts      int32              `json:"max_attempts"`
-	LockedBy         pgtype.Text        `json:"locked_by"`
-	LockExpiresAt    pgtype.Timestamptz `json:"lock_expires_at"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	LastErrorClass   pgtype.Text        `json:"last_error_class"`
-	LastErrorCode    pgtype.Text        `json:"last_error_code"`
-	OutputRef        []byte             `json:"output_ref"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 // ============================================================
 // WRITER job immutable input + durable output
 // ============================================================
-func (q *Queries) CreateWriterGenerationJob(ctx context.Context, arg CreateWriterGenerationJobParams) (CreateWriterGenerationJobRow, error) {
+func (q *Queries) CreateWriterGenerationJob(ctx context.Context, arg CreateWriterGenerationJobParams) (GenerationJob, error) {
 	row := q.db.QueryRow(ctx, createWriterGenerationJob,
 		arg.ID,
+		arg.ChapterID,
 		arg.RunID,
 		arg.JobType,
 		arg.Status,
@@ -91,9 +70,8 @@ func (q *Queries) CreateWriterGenerationJob(ctx context.Context, arg CreateWrite
 		arg.InputFingerprint,
 		arg.AttemptCount,
 		arg.MaxAttempts,
-		arg.ID_2,
 	)
-	var i CreateWriterGenerationJobRow
+	var i GenerationJob
 	err := row.Scan(
 		&i.ID,
 		&i.RunID,
