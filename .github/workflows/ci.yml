@@ -18,8 +18,20 @@ jobs:
         with:
           go-version: "1.26.x"
       - name: Verify sqlc generated code
+        id: sqlc_check
         working-directory: .
+        continue-on-error: true
         run: make sqlc-check
+      - name: Upload sqlc drift diagnostics
+        if: steps.sqlc_check.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlc-drift-${{ github.sha }}
+          path: backend/internal/platform/db
+      - name: Fail on sqlc verification error
+        if: steps.sqlc_check.outcome == 'failure'
+        working-directory: .
+        run: exit 1
       - name: Verify sqlc drift gate regression
         working-directory: .
         run: make sqlc-check-regression
