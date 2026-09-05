@@ -3,6 +3,21 @@ import { refreshSession } from '../../api/client'
 
 const BASE = '/api/v1'
 
+export type GenerationRun = {
+  ID: string
+  RunType: string
+  StoryID: string
+  ChapterID: string
+  Status: string
+  WaitingReason: string
+  WorkflowVersion: string
+  Priority: number
+  BaseCanonVersionID: string
+  ContextSnapshotID: string
+  RequestedBy: string
+  IdempotencyKey: string
+}
+
 async function parseError(response: Response): Promise<Error> {
   try {
     const body = (await response.json()) as { error?: { message?: string } }
@@ -12,19 +27,41 @@ async function parseError(response: Response): Promise<Error> {
   }
 }
 
+async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const session = await refreshSession()
+  return fetch(`${BASE}${path}`, {
+    ...init,
+    credentials: 'same-origin',
+    headers: {
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+}
+
+export async function startChapterGeneration(storyID: string, chapterID: string): Promise<GenerationRun> {
+  const response = await authorizedFetch(`/admin/stories/${storyID}/batch-generate`, {
+    method: 'POST',
+    body: JSON.stringify({ chapter_ids: [chapterID] }),
+  })
+  if (!response.ok) throw await parseError(response)
+  return (await response.json()) as GenerationRun
+}
+
+export async function getGenerationRun(runID: string): Promise<GenerationRun> {
+  const response = await authorizedFetch(`/admin/runs/${runID}`)
+  if (!response.ok) throw await parseError(response)
+  return (await response.json()) as GenerationRun
+}
+
 export async function rewriteContent(
   chapterID: string,
   basedOnRevisionID: string,
   feedback: string,
 ): Promise<ContentRevision> {
-  const session = await refreshSession()
-  const response = await fetch(`${BASE}/admin/chapters/${chapterID}/rewrite`, {
+  const response = await authorizedFetch(`/admin/chapters/${chapterID}/rewrite`, {
     method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
     body: JSON.stringify({
       based_on_revision_id: basedOnRevisionID,
       feedback,
