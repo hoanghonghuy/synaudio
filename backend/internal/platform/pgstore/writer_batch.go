@@ -10,7 +10,7 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 )
 
-type transactionBeginner interface {
+type generationTransactionBeginner interface {
 	Begin(context.Context) (pgx.Tx, error)
 }
 
@@ -18,7 +18,7 @@ type transactionBeginner interface {
 // single database transaction. A missing plan or any later persistence failure
 // rolls the whole request back, so workers can never observe a partial batch.
 func (s *GenerationStore) EstablishWriterBatch(ctx context.Context, run generation.GenerationRun, jobs []generation.WriterBatchJob) (generation.GenerationRun, error) {
-	beginner, ok := s.q.DBTX().(transactionBeginner)
+	beginner, ok := s.q.DBTX().(generationTransactionBeginner)
 	if !ok {
 		return generation.GenerationRun{}, errors.New("generation store transaction support unavailable")
 	}
