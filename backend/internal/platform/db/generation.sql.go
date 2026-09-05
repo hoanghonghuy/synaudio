@@ -60,6 +60,7 @@ WHERE id = (
     FROM generation_jobs
     WHERE status = 'PENDING'
       AND available_at <= NOW()
+      AND attempt_count < max_attempts
     ORDER BY priority DESC, created_at ASC
     FOR UPDATE SKIP LOCKED
     LIMIT 1
@@ -683,7 +684,22 @@ func (q *Queries) NextContentRevision(ctx context.Context, chapterID pgtype.UUID
 
 const reclaimStaleJobs = `-- name: ReclaimStaleJobs :many
 UPDATE generation_jobs
-SET status = 'PENDING',
+SET status = CASE
+        WHEN attempt_count >= max_attempts THEN 'FAILED'
+        ELSE 'PENDING'
+    END,
+    completed_at = CASE
+        WHEN attempt_count >= max_attempts THEN NOW()
+        ELSE completed_at
+    END,
+    last_error_class = CASE
+        WHEN attempt_count >= max_attempts THEN 'RETRY_EXHAUSTED'
+        ELSE last_error_class
+    END,
+    last_error_code = CASE
+        WHEN attempt_count >= max_attempts THEN 'MAX_ATTEMPTS_EXHAUSTED'
+        ELSE last_error_code
+    END,
     locked_by = NULL,
     lock_expires_at = NULL
 WHERE status = 'RUNNING'
