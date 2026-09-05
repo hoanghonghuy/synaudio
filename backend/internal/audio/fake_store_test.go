@@ -102,19 +102,24 @@ func (s *fakeStore) GetActiveAudioAsset(_ context.Context, chapterID string) (Au
 }
 
 func (s *fakeStore) SetActiveAudioAsset(_ context.Context, chapterID, assetID string) (AudioAsset, error) {
-	var activated AudioAsset
+	targetIndex := -1
 	for i, a := range s.assets[chapterID] {
-		if a.ID == assetID {
-			a.IsActive = true
-			activated = a
-			s.assets[chapterID][i] = a
-		} else {
-			a.IsActive = false
-			s.assets[chapterID][i] = a
+		if a.ID == assetID && a.Status == "READY" {
+			targetIndex = i
+			break
 		}
 	}
-	if activated.ID == "" {
+	if targetIndex < 0 {
 		return AudioAsset{}, ErrAudioAssetNotFound
+	}
+
+	var activated AudioAsset
+	for i, a := range s.assets[chapterID] {
+		a.IsActive = i == targetIndex
+		s.assets[chapterID][i] = a
+		if a.IsActive {
+			activated = a
+		}
 	}
 	return activated, nil
 }

@@ -183,11 +183,9 @@ func (s *Service) CreateAudioAsset(ctx context.Context, chapterID, sourceNarrati
 	return s.persistAudioAsset(ctx, a)
 }
 
-// ActivateAudioAsset atomically promotes an asset to active for its chapter.
+// ActivateAudioAsset delegates membership, READY eligibility, and replacement to
+// one persistence boundary so a failed activation cannot mutate prior state.
 func (s *Service) ActivateAudioAsset(ctx context.Context, chapterID, assetID string) (AudioAsset, error) {
-	if _, err := s.store.GetAudioAsset(ctx, assetID); err != nil {
-		return AudioAsset{}, err
-	}
 	return s.store.SetActiveAudioAsset(ctx, chapterID, assetID)
 }
 
