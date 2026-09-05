@@ -1,4 +1,4 @@
-.PHONY: up down logs migrate-up migrate-down sqlc test backend-test frontend-install frontend-dev api worker tidy
+.PHONY: up down logs migrate-up migrate-down sqlc sqlc-check sqlc-check-regression test backend-test frontend-install frontend-dev api worker tidy
 
 up:
 	docker compose up -d postgres minio minio-init
@@ -17,6 +17,12 @@ migrate-down:
 
 sqlc:
 	docker run --rm -v "$(CURDIR)/backend:/src" -w /src/db sqlc/sqlc:1.29.0 generate
+
+sqlc-check: sqlc
+	git diff --exit-code -- backend/internal/platform/db
+
+sqlc-check-regression:
+	./scripts/test-sqlc-drift-gate.sh
 
 backend-test:
 	cd backend && go test ./...
