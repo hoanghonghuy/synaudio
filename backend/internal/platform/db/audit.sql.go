@@ -130,33 +130,33 @@ LIMIT $12
 `
 
 type ListAuditEventsParams struct {
-	Column1  pgtype.UUID        `json:"column_1"`
-	Column2  string             `json:"column_2"`
-	Column3  string             `json:"column_3"`
-	Column4  string             `json:"column_4"`
-	Column5  pgtype.UUID        `json:"column_5"`
-	Column6  pgtype.UUID        `json:"column_6"`
-	Column7  pgtype.UUID        `json:"column_7"`
-	Column8  string             `json:"column_8"`
-	Column9  string             `json:"column_9"`
-	Column10 pgtype.Timestamptz `json:"column_10"`
-	Column11 pgtype.Timestamptz `json:"column_11"`
-	Limit    int32              `json:"limit"`
+	ActorUserID     pgtype.UUID        `json:"actor_user_id"`
+	Action          pgtype.Text        `json:"action"`
+	ResourceType    pgtype.Text        `json:"resource_type"`
+	ResourceID      pgtype.Text        `json:"resource_id"`
+	StoryID         pgtype.UUID        `json:"story_id"`
+	ChapterID       pgtype.UUID        `json:"chapter_id"`
+	GenerationRunID pgtype.UUID        `json:"generation_run_id"`
+	CorrelationID   pgtype.Text        `json:"correlation_id"`
+	Result          pgtype.Text        `json:"result"`
+	CreatedFrom     pgtype.Timestamptz `json:"created_from"`
+	CreatedTo       pgtype.Timestamptz `json:"created_to"`
+	Limit           int32              `json:"limit"`
 }
 
 func (q *Queries) ListAuditEvents(ctx context.Context, arg ListAuditEventsParams) ([]AuditEvent, error) {
 	rows, err := q.db.Query(ctx, listAuditEvents,
-		arg.Column1,
-		arg.Column2,
-		arg.Column3,
-		arg.Column4,
-		arg.Column5,
-		arg.Column6,
-		arg.Column7,
-		arg.Column8,
-		arg.Column9,
-		arg.Column10,
-		arg.Column11,
+		arg.ActorUserID,
+		arg.Action,
+		arg.ResourceType,
+		arg.ResourceID,
+		arg.StoryID,
+		arg.ChapterID,
+		arg.GenerationRunID,
+		arg.CorrelationID,
+		arg.Result,
+		arg.CreatedFrom,
+		arg.CreatedTo,
 		arg.Limit,
 	)
 	if err != nil {
