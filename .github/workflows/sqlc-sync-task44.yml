@@ -21,13 +21,32 @@ jobs:
           go-version: "1.26.x"
       - name: Install sqlc
         run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
-      - name: Generate
+      - name: Generate task 44 query output
         id: generate
         continue-on-error: true
-        working-directory: backend/db
         run: |
           set -o pipefail
+          rm -rf /tmp/task44-sqlc
+          mkdir -p /tmp/task44-sqlc/queries /tmp/task44-sqlc/out
+          cp backend/db/queries/generation.sql /tmp/task44-sqlc/queries/generation.sql
+          ln -s "$GITHUB_WORKSPACE/backend/db/migrations" /tmp/task44-sqlc/migrations
+          cat > /tmp/task44-sqlc/sqlc.yaml <<'EOF'
+          version: "2"
+          sql:
+            - engine: "postgresql"
+              queries: "queries/generation.sql"
+              schema: "migrations"
+              gen:
+                go:
+                  package: "db"
+                  out: "out"
+                  sql_package: "pgx/v5"
+                  emit_json_tags: true
+                  emit_empty_slices: true
+          EOF
+          cd /tmp/task44-sqlc
           sqlc generate 2>&1 | tee /tmp/task44-sqlc.log
+          cp out/generation.sql.go "$GITHUB_WORKSPACE/backend/internal/platform/db/generation.sql.go"
       - name: Upload sqlc diagnostics
         if: steps.generate.outcome == 'failure'
         uses: actions/upload-artifact@v4
@@ -40,12 +59,12 @@ jobs:
       - name: Commit generated output
         if: steps.generate.outcome == 'success'
         run: |
-          if git diff --quiet -- backend/internal/platform/db; then
-            echo "sqlc output already synchronized"
+          if git diff --quiet -- backend/internal/platform/db/generation.sql.go; then
+            echo "task 44 generated output already synchronized"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/internal/platform/db
-          git commit -m "chore: regenerate generation sqlc output"
+          git add backend/internal/platform/db/generation.sql.go
+          git commit -m "chore: regenerate task 44 sqlc output"
           git push origin HEAD:fix/44-generation-max-attempt-budget
