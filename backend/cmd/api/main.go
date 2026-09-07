@@ -155,7 +155,7 @@ func main() {
 
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
-	generationHandler := generation.NewHandler(generationService, authService.ResolveUserID)
+	generationHandler := generation.NewLatestRunAwareHandler(generation.NewHandler(generationService, authService.ResolveUserID), generationService)
 
 	audioStore := pgstore.NewAudioStore(queries, database)
 	audioService := audio.NewService(audioStore,
