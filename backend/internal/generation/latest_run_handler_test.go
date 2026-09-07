@@ -14,7 +14,7 @@ func TestLatestChapterGenerationRunEndpointReturnsDurableRun(t *testing.T) {
 	store.runs["story-1"] = []GenerationRun{
 		{ID: "run-1", StoryID: "story-1", ChapterID: "chapter-1", RunType: "CHAPTER_GENERATION", Status: "RUNNING"},
 	}
-	handler := NewLatestRunAwareHandler(http.NotFoundHandler(), NewService(store))
+	handler := NewLatestRunAwareHandler(chi.NewRouter(), NewService(store))
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/chapters/chapter-1/generation-run/latest", nil)
 	rec := httptest.NewRecorder()
@@ -34,7 +34,7 @@ func TestLatestChapterGenerationRunEndpointReturnsDurableRun(t *testing.T) {
 
 func TestLatestChapterGenerationRunEndpointReturnsNotFoundWithoutSideEffect(t *testing.T) {
 	store := newFakeStore()
-	handler := NewLatestRunAwareHandler(http.NotFoundHandler(), NewService(store))
+	handler := NewLatestRunAwareHandler(chi.NewRouter(), NewService(store))
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/chapters/chapter-1/generation-run/latest", nil)
 	rec := httptest.NewRecorder()
@@ -53,7 +53,7 @@ func TestChapterContentProjectionIncludesRunBeforeRevisionExists(t *testing.T) {
 	store.runs["story-1"] = []GenerationRun{
 		{ID: "run-1", StoryID: "story-1", ChapterID: "chapter-1", RunType: "CHAPTER_GENERATION", Status: "PENDING"},
 	}
-	handler := NewLatestRunAwareHandler(http.NotFoundHandler(), NewService(store))
+	handler := NewLatestRunAwareHandler(chi.NewRouter(), NewService(store))
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/chapters/chapter-1/content", nil)
 	rec := httptest.NewRecorder()
@@ -79,7 +79,7 @@ func TestChapterContentProjectionIncludesRunBeforeRevisionExists(t *testing.T) {
 
 func TestChapterContentProjectionExplicitlyReturnsNoRun(t *testing.T) {
 	store := newFakeStore()
-	handler := NewLatestRunAwareHandler(http.NotFoundHandler(), NewService(store))
+	handler := NewLatestRunAwareHandler(chi.NewRouter(), NewService(store))
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/chapters/chapter-1/content", nil)
 	rec := httptest.NewRecorder()
