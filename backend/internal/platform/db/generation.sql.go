@@ -683,30 +683,48 @@ func (q *Queries) NextContentRevision(ctx context.Context, chapterID pgtype.UUID
 }
 
 const reclaimStaleJobs = `-- name: ReclaimStaleJobs :many
-UPDATE generation_jobs
+WITH stale_jobs AS (
+    SELECT id, attempt_count, max_attempts
+    FROM generation_jobs
+    WHERE status = 'RUNNING'
+      AND lock_expires_at < NOW()
+    FOR UPDATE SKIP LOCKED
+), reconciled_attempts AS (
+    UPDATE generation_job_attempts AS a
+    SET status = 'FAILED',
+        error_class = 'INTERRUPTED',
+        error_code = 'LEASE_EXPIRED',
+        completed_at = NOW()
+    FROM stale_jobs AS stale
+    WHERE a.job_id = stale.id
+      AND a.attempt_no = stale.attempt_count
+      AND a.status = 'RUNNING'
+    RETURNING a.job_id
+)
+UPDATE generation_jobs AS j
 SET status = CASE
-        WHEN attempt_count >= max_attempts THEN 'FAILED'
+        WHEN j.attempt_count >= j.max_attempts THEN 'FAILED'
         ELSE 'PENDING'
     END,
     completed_at = CASE
-        WHEN attempt_count >= max_attempts THEN NOW()
-        ELSE completed_at
+        WHEN j.attempt_count >= j.max_attempts THEN NOW()
+        ELSE j.completed_at
     END,
     last_error_class = CASE
-        WHEN attempt_count >= max_attempts THEN 'RETRY_EXHAUSTED'
-        ELSE last_error_class
+        WHEN j.attempt_count >= j.max_attempts THEN 'RETRY_EXHAUSTED'
+        ELSE j.last_error_class
     END,
     last_error_code = CASE
-        WHEN attempt_count >= max_attempts THEN 'MAX_ATTEMPTS_EXHAUSTED'
-        ELSE last_error_code
+        WHEN j.attempt_count >= j.max_attempts THEN 'MAX_ATTEMPTS_EXHAUSTED'
+        ELSE j.last_error_code
     END,
     locked_by = NULL,
     lock_expires_at = NULL
-WHERE status = 'RUNNING'
-  AND lock_expires_at < NOW()
-RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
-          attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
-          completed_at, last_error_class, last_error_code, output_ref, created_at
+FROM stale_jobs AS stale
+WHERE j.id = stale.id
+RETURNING j.id, j.run_id, j.job_type, j.status, j.priority, j.available_at, j.input_fingerprint,
+          j.attempt_count, j.max_attempts, j.locked_by, j.lock_expires_at, j.started_at,
+          j.completed_at, j.last_error_class, j.last_error_code, j.output_ref, j.created_at
 `
 
 func (q *Queries) ReclaimStaleJobs(ctx context.Context) ([]GenerationJob, error) {
