@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { canStartChapterGeneration, createLatestSelectionGuard } from '../src/features/admin/latestSelection.mjs'
+import {
+  canStartChapterGeneration,
+  createLatestSelectionGuard,
+  generationRunFromContentResponse,
+} from '../src/features/admin/latestSelection.mjs'
 
 test('only latest chapter selection may commit', () => {
   const guard = createLatestSelectionGuard()
@@ -11,12 +15,28 @@ test('only latest chapter selection may commit', () => {
   assert.equal(mayCommitB(), true)
 })
 
+test('durable chapter state restores generation run before any revision exists', () => {
+  const run = { ID: 'run-1', RunType: 'CHAPTER_GENERATION', ChapterID: 'chapter-a', Status: 'RUNNING' }
+  assert.equal(generationRunFromContentResponse({ revisions: [], generation_run: run }), run)
+  assert.equal(generationRunFromContentResponse({ revisions: [], generation_run: null }), null)
+})
+
 test('generation start is blocked while authoritative chapter state is loading', () => {
   assert.equal(canStartChapterGeneration({
     hasPlanRevision: true,
     selectionLoading: true,
     actionInProgress: false,
     hasGenerationRun: false,
+    hasGenerationRunProvenance: false,
+  }), false)
+})
+
+test('generation start is blocked when durable restored run already exists', () => {
+  assert.equal(canStartChapterGeneration({
+    hasPlanRevision: true,
+    selectionLoading: false,
+    actionInProgress: false,
+    hasGenerationRun: true,
     hasGenerationRunProvenance: false,
   }), false)
 })
