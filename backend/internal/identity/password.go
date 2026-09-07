@@ -19,18 +19,18 @@ const (
 	argon2KeyLen  = 32
 	argon2SaltLen = 16
 
-	maxPasswordBytes       = 1024
+	maxPasswordBytes        = 1024
 	maxEncodedArgon2IDBytes = 512
-	minArgon2Time           = 2
-	maxArgon2Time           = 6
-	minArgon2Memory         = 32 * 1024
-	maxArgon2Memory         = 128 * 1024
-	minArgon2Threads        = 1
-	maxArgon2Threads        = 8
-	minArgon2SaltLen        = 16
-	maxArgon2SaltLen        = 64
-	minArgon2KeyLen         = 16
-	maxArgon2KeyLen         = 64
+	minArgon2Time            = 2
+	maxArgon2Time            = 6
+	minArgon2Memory          = 32 * 1024
+	maxArgon2Memory          = 128 * 1024
+	minArgon2Threads         = 1
+	maxArgon2Threads         = 8
+	minArgon2SaltLen         = 16
+	maxArgon2SaltLen         = 64
+	minArgon2KeyLen          = 16
+	maxArgon2KeyLen          = 64
 )
 
 var (
@@ -63,7 +63,7 @@ func validatePasswordInput(password string) error {
 	if password == "" {
 		return ErrEmptyPassword
 	}
-	if len([]byte(password)) > maxPasswordBytes {
+	if len(password) > maxPasswordBytes {
 		return ErrPasswordTooLong
 	}
 	return nil
@@ -118,7 +118,7 @@ func VerifyPasswordPolicy(encoded, password string) (matched bool, needsRehash b
 		return false, false
 	}
 
-	return true, weakerThanCurrentPolicy(params, len(salt), len(key))
+	return true, strictlyWeakerThanCurrentPolicy(params, len(salt), len(key))
 }
 
 type argon2Params struct {
@@ -127,8 +127,14 @@ type argon2Params struct {
 	threads uint8
 }
 
-func weakerThanCurrentPolicy(p argon2Params, saltLen, keyLen int) bool {
-	return p.time < argon2Time || p.memory < argon2Memory || p.threads < argon2Threads || saltLen < argon2SaltLen || keyLen < argon2KeyLen
+// strictlyWeakerThanCurrentPolicy uses a partial-order comparison: every
+// security/resource dimension must be no stronger than the current write policy
+// and at least one must be weaker. Mixed or stronger historical profiles are not
+// automatically rewritten, which avoids silently downgrading one dimension.
+func strictlyWeakerThanCurrentPolicy(p argon2Params, saltLen, keyLen int) bool {
+	noStronger := p.time <= argon2Time && p.memory <= argon2Memory && p.threads <= argon2Threads && saltLen <= argon2SaltLen && keyLen <= argon2KeyLen
+	weaker := p.time < argon2Time || p.memory < argon2Memory || p.threads < argon2Threads || saltLen < argon2SaltLen || keyLen < argon2KeyLen
+	return noStronger && weaker
 }
 
 func decodeArgon2id(encoded string) (argon2Params, []byte, []byte, error) {
