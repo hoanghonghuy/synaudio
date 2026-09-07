@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/synaudio/synaudio/backend/internal/generation"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
@@ -43,7 +44,7 @@ func (s *GenerationStore) ApproveContentRevision(ctx context.Context, a generati
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	revisionID := toUUID(a.ContentRevisionID)
-	var lockedChapterID pgxUUID
+	var lockedChapterID pgtype.UUID
 	var status string
 	if err := tx.QueryRow(ctx, lockContentRevisionForApprovalSQL, revisionID).Scan(&lockedChapterID, &status); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -104,13 +105,7 @@ func (s *GenerationStore) ApproveContentRevision(ctx context.Context, a generati
 	return toContentApproval(created), nil
 }
 
-// pgxUUID aliases the generated UUID representation without leaking it into the
-// generation domain API.
-type pgxUUID = interface {
-	Scan(src any) error
-}
-
-func getExistingContentApproval(ctx context.Context, tx pgx.Tx, revisionID any) (db.ContentApproval, error) {
+func getExistingContentApproval(ctx context.Context, tx pgx.Tx, revisionID pgtype.UUID) (db.ContentApproval, error) {
 	row := tx.QueryRow(ctx, getExistingContentApprovalSQL, revisionID)
 	var approval db.ContentApproval
 	err := row.Scan(
