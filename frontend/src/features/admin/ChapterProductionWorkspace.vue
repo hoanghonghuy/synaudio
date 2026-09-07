@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { listAdminChapters, listChapterReviews, listContentRevisions } from '../../api/client'
+import {
+  getGenerationRun,
+  listAdminChapters,
+  listChapterReviews,
+  listContentRevisions,
+  startChapterGeneration,
+  type GenerationRun,
+} from '../../api/client'
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
-import { getGenerationRun, startChapterGeneration, type GenerationRun } from './chapterProductionApi'
 import { createLatestSelectionGuard } from './latestSelection.mjs'
 
 const route = useRoute()
@@ -25,6 +31,8 @@ const mayStartGeneration = computed(() => Boolean(activeChapter.value?.CurrentPl
 async function selectChapter(chapter: Chapter) {
   const mayCommit = chapterSelection.begin(chapter.ID)
   activeChapter.value = chapter
+  revisions.value = []
+  reviews.value = []
   generationRun.value = null
   error.value = ''
   try {
