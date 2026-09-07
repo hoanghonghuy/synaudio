@@ -176,6 +176,21 @@ export type StoryAssetResponse = {
   status: string
 }
 
+export type GenerationRun = {
+  ID: string
+  RunType: string
+  StoryID: string
+  ChapterID: string
+  Status: string
+  WaitingReason: string
+  WorkflowVersion: string
+  Priority: number
+  BaseCanonVersionID: string
+  ContextSnapshotID: string
+  RequestedBy: string
+  IdempotencyKey: string
+}
+
 let accessToken: string | null = null
 let refreshInFlight: Promise<string | null> | null = null
 
@@ -449,6 +464,17 @@ export function createPlanningChapter(storyID: string, title: string): Promise<C
 export function createChapterPlanRevision(chapterID: string, plan: Record<string, unknown>): Promise<ChapterPlanRevision> { return request<ChapterPlanRevision>(`/admin/chapters/${chapterID}/plans`, { method: 'POST', body: JSON.stringify({ plan }) }) }
 export function listContentRevisions(chapterID: string): Promise<ContentRevisionListResponse> { return request<ContentRevisionListResponse>(`/admin/chapters/${chapterID}/content`) }
 export function listChapterReviews(chapterID: string): Promise<ChapterReviewListResponse> { return request<ChapterReviewListResponse>(`/admin/chapters/${chapterID}/reviews`) }
+
+export function startChapterGeneration(storyID: string, chapterID: string): Promise<GenerationRun> {
+  return request<GenerationRun>(`/admin/stories/${storyID}/batch-generate`, {
+    method: 'POST',
+    body: JSON.stringify({ chapter_ids: [chapterID] }),
+  })
+}
+
+export function getGenerationRun(runID: string): Promise<GenerationRun> {
+  return request<GenerationRun>(`/admin/runs/${runID}`)
+}
 
 export function editContent(chapterID: string, basedOnRevisionID: string, text: string): Promise<ContentRevision> {
   return request<ContentRevision>(`/admin/chapters/${chapterID}/edit`, { method: 'POST', body: JSON.stringify({ based_on_revision_id: basedOnRevisionID, text }) })
