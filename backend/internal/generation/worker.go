@@ -108,6 +108,15 @@ func (w *Worker) ProcessOne(ctx context.Context) error {
 		return nil
 	}
 
+	// A cancellation owned by the ProcessOne context is a worker/runtime
+	// interruption, not an application/provider failure. Do not persist a fake
+	// PERMANENT/UNKNOWN outcome or immediately requeue by unguarded job ID. The
+	// durable lease remains authoritative and normal expiry/reclaim consumes the
+	// already-counted attempt according to the queue's attempt budget.
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(runErr, ctxErr) {
+		return ctxErr
+	}
+
 	class, code := ClassifyError(runErr)
 	if err := w.recordAudit(ctx, JobAuditEvent{
 		Job:        job,
