@@ -159,7 +159,7 @@ func main() {
 			return
 		case <-reclaimTicker.C:
 			metricRegistry.WorkerHeartbeat(time.Now())
-			reclaimed, err := generationService.ReclaimStaleJobs(ctx, "5 minutes")
+			reclaimed, err := generationService.ReclaimExpiredJobs(ctx)
 			metricRegistry.ObserveWorkerLoop("stale_reclaim", err)
 			if err != nil {
 				log.Error("reclaim stale jobs failed", "error", err)
