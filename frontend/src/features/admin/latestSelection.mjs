@@ -9,6 +9,10 @@ export function createLatestSelectionGuard() {
   }
 }
 
+export function generationRunFromContentResponse(response) {
+  return response?.generation_run ?? null
+}
+
 export function canStartChapterGeneration({
   hasPlanRevision,
   selectionLoading,

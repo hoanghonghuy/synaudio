@@ -8,8 +8,8 @@ import (
 
 type runFakeStore struct {
 	*fakeStore
-	runs  map[string][]GenerationRun
-	jobs  map[string][]GenerationJob
+	runs        map[string][]GenerationRun
+	jobs        map[string][]GenerationJob
 	nextAttempt map[string]int
 }
 
@@ -36,6 +36,24 @@ func (s *runFakeStore) GetGenerationRun(ctx context.Context, runID string) (Gene
 		}
 	}
 	return GenerationRun{}, ErrGenerationRunNotFound
+}
+
+func (s *runFakeStore) GetLatestChapterGenerationRun(ctx context.Context, chapterID string) (GenerationRun, error) {
+	var latest *GenerationRun
+	for _, rs := range s.runs {
+		for i := range rs {
+			r := rs[i]
+			if r.ChapterID != chapterID || r.RunType != "CHAPTER_GENERATION" {
+				continue
+			}
+			candidate := r
+			latest = &candidate
+		}
+	}
+	if latest == nil {
+		return GenerationRun{}, ErrGenerationRunNotFound
+	}
+	return *latest, nil
 }
 
 func (s *runFakeStore) CreateGenerationJob(ctx context.Context, j GenerationJob) (GenerationJob, error) {
@@ -119,6 +137,33 @@ func TestGetGenerationRunReturnsNotFound(t *testing.T) {
 	svc := NewService(store)
 
 	if _, err := svc.GetGenerationRun(context.Background(), "missing"); !errors.Is(err, ErrGenerationRunNotFound) {
+		t.Fatalf("expected ErrGenerationRunNotFound, got %v", err)
+	}
+}
+
+func TestGetLatestChapterGenerationRunReturnsLatestMatchingRun(t *testing.T) {
+	store := newRunFakeStore()
+	store.runs["s1"] = []GenerationRun{
+		{ID: "run-old", StoryID: "s1", ChapterID: "c1", RunType: "CHAPTER_GENERATION", Status: "FAILED"},
+		{ID: "run-unrelated", StoryID: "s1", ChapterID: "c1", RunType: "NARRATION", Status: "RUNNING"},
+		{ID: "run-latest", StoryID: "s1", ChapterID: "c1", RunType: "CHAPTER_GENERATION", Status: "RUNNING"},
+	}
+	svc := NewService(store)
+
+	run, err := svc.GetLatestChapterGenerationRun(context.Background(), "c1")
+	if err != nil {
+		t.Fatalf("get latest chapter generation run: %v", err)
+	}
+	if run.ID != "run-latest" {
+		t.Fatalf("expected run-latest, got %q", run.ID)
+	}
+}
+
+func TestGetLatestChapterGenerationRunReturnsNotFoundWithoutRun(t *testing.T) {
+	store := newRunFakeStore()
+	svc := NewService(store)
+
+	if _, err := svc.GetLatestChapterGenerationRun(context.Background(), "c1"); !errors.Is(err, ErrGenerationRunNotFound) {
 		t.Fatalf("expected ErrGenerationRunNotFound, got %v", err)
 	}
 }

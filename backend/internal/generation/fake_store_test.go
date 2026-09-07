@@ -91,6 +91,24 @@ func (s *fakeStore) GetGenerationRun(_ context.Context, runID string) (Generatio
 	return GenerationRun{}, ErrGenerationRunNotFound
 }
 
+func (s *fakeStore) GetLatestChapterGenerationRun(_ context.Context, chapterID string) (GenerationRun, error) {
+	var latest *GenerationRun
+	for _, rs := range s.runs {
+		for i := range rs {
+			r := rs[i]
+			if r.ChapterID != chapterID || r.RunType != "CHAPTER_GENERATION" {
+				continue
+			}
+			candidate := r
+			latest = &candidate
+		}
+	}
+	if latest == nil {
+		return GenerationRun{}, ErrGenerationRunNotFound
+	}
+	return *latest, nil
+}
+
 func (s *fakeStore) CreateGenerationJob(_ context.Context, j GenerationJob) (GenerationJob, error) {
 	s.jobs[j.RunID] = append(s.jobs[j.RunID], j)
 	return j, nil
@@ -99,8 +117,6 @@ func (s *fakeStore) CreateGenerationJob(_ context.Context, j GenerationJob) (Gen
 func (s *fakeStore) CreateWriterGenerationJob(_ context.Context, j GenerationJob, chapterID string) (GenerationJob, error) {
 	input, ok := s.currentWriterPlans[chapterID]
 	if !ok {
-		// Shared queue/run tests are not plan-domain tests; give them a deterministic
-		// frozen plan fixture while production pgstore requires a real current plan.
 		input = WriterJobInput{
 			ChapterID:          chapterID,
 			PlanRevisionID:     "plan-" + chapterID,
