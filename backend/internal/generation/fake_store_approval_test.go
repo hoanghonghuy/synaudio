@@ -1,6 +1,9 @@
 package generation
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 func (s *fakeStore) ApproveContentRevision(_ context.Context, a ContentApproval) (ContentApproval, error) {
 	for chapterID, revisions := range s.revisions {
@@ -9,10 +12,10 @@ func (s *fakeStore) ApproveContentRevision(_ context.Context, a ContentApproval)
 				continue
 			}
 			if chapterID != a.ChapterID || revision.ChapterID != a.ChapterID {
-				return ContentApproval{}, ErrContentRevisionChapterMismatch
+				return ContentApproval{}, errors.Join(ErrContentRevisionNotFound, ErrContentRevisionChapterMismatch)
 			}
 			if revision.Status != "CANDIDATE" && revision.Status != "APPROVED" {
-				return ContentApproval{}, ErrContentRevisionNotApprovable
+				return ContentApproval{}, errors.Join(ErrContentRevisionNotFound, ErrContentRevisionNotApprovable)
 			}
 			for _, existing := range s.approvals[a.ChapterID] {
 				if existing.ContentRevisionID == a.ContentRevisionID {
