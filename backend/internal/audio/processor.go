@@ -36,6 +36,13 @@ type AudioProcessor interface {
 	Process(ctx context.Context, in ProcessInput) (ProcessOutput, error)
 }
 
+// FileAudioProcessor is the production large-media processing boundary. Inputs
+// and output are caller-owned paths, allowing FFmpeg finalization without
+// converting chapter-sized media back into []byte.
+type FileAudioProcessor interface {
+	ProcessFiles(ctx context.Context, inputPaths []string, outputPath string) (durationMs int, err error)
+}
+
 // MockAudioProcessor concatenates segment bytes without invoking FFmpeg.
 type MockAudioProcessor struct{}
 
@@ -87,9 +94,8 @@ func (p *FFmpegProcessor) Validate() error {
 }
 
 // Process writes each segment to a temp file, then runs ffmpeg to concatenate,
-// normalize and encode them into a single MP3. The final media itself is then
-// probed; provider-declared segment timings are intentionally not used as the
-// production duration authority.
+// normalize and encode them into a single MP3. This compatibility path still
+// returns bytes; production narration finalization uses ProcessFiles.
 func (p *FFmpegProcessor) Process(ctx context.Context, in ProcessInput) (ProcessOutput, error) {
 	if len(in.Segments) == 0 {
 		return ProcessOutput{}, fmt.Errorf("no segments to process")
@@ -114,26 +120,54 @@ func (p *FFmpegProcessor) Process(ctx context.Context, in ProcessInput) (Process
 	}
 
 	output := filepath.Join(dir, "out.mp3")
-	args := buildConcatCommand(inputs, output, 96)
-
-	if out, err := p.run(ctx, p.bin, args...); err != nil {
-		return ProcessOutput{}, fmt.Errorf("ffmpeg failed: %w: %s", err, string(out))
+	durationMs, err := p.ProcessFiles(ctx, inputs, output)
+	if err != nil {
+		return ProcessOutput{}, err
 	}
-
 	data, err := os.ReadFile(output)
 	if err != nil {
 		return ProcessOutput{}, fmt.Errorf("read output: %w", err)
 	}
-	if len(data) == 0 {
-		return ProcessOutput{}, fmt.Errorf("ffmpeg produced empty output")
-	}
-
-	durationMs, err := p.probeDuration(ctx, output)
-	if err != nil {
-		return ProcessOutput{}, err
-	}
-
 	return ProcessOutput{Data: data, DurationMs: durationMs}, nil
+}
+
+// ProcessFiles runs FFmpeg directly over caller-staged media and leaves the
+// final MP3 at outputPath. It validates a non-empty regular output and probes
+// that actual final media for duration without reading the file into Go heap.
+func (p *FFmpegProcessor) ProcessFiles(ctx context.Context, inputPaths []string, outputPath string) (int, error) {
+	if len(inputPaths) == 0 {
+		return 0, fmt.Errorf("no segments to process")
+	}
+	if p == nil || p.run == nil {
+		return 0, fmt.Errorf("ffmpeg processor is not configured")
+	}
+	for i, path := range inputPaths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return 0, fmt.Errorf("stat segment %d: %w", i, err)
+		}
+		if !info.Mode().IsRegular() || info.Size() <= 0 {
+			return 0, fmt.Errorf("segment %d is not a non-empty regular file", i)
+		}
+	}
+
+	args := buildConcatCommand(inputPaths, outputPath, 96)
+	if out, err := p.run(ctx, p.bin, args...); err != nil {
+		return 0, fmt.Errorf("ffmpeg failed: %w: %s", err, string(out))
+	}
+	info, err := os.Stat(outputPath)
+	if err != nil {
+		return 0, fmt.Errorf("stat output: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() <= 0 {
+		return 0, fmt.Errorf("ffmpeg produced empty or invalid output")
+	}
+
+	durationMs, err := p.probeDuration(ctx, outputPath)
+	if err != nil {
+		return 0, err
+	}
+	return durationMs, nil
 }
 
 // Spoken-word audiobook target: integrated -18 LUFS, loudness range 7 LU and
