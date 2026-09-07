@@ -48,7 +48,10 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	appEnv := strings.ToLower(strings.TrimSpace(getenv("APP_ENV", EnvDevelopment)))
+	appEnv, err := normalizeAppEnv(getenv("APP_ENV", EnvDevelopment))
+	if err != nil {
+		return Config{}, err
+	}
 	accessTokenSecret := strings.TrimSpace(os.Getenv("ACCESS_TOKEN_SECRET"))
 	if accessTokenSecret == "" && appEnv == EnvDevelopment {
 		// Development remains zero-setup while production uses the explicit
