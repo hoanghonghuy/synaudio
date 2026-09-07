@@ -82,6 +82,16 @@ func (s *Service) GetGenerationRun(ctx context.Context, runID string) (Generatio
 	return s.store.GetGenerationRun(ctx, runID)
 }
 
+// GetLatestChapterGenerationRun returns the newest durable CHAPTER_GENERATION
+// run for exactly one chapter. It never creates a run as a side effect.
+func (s *Service) GetLatestChapterGenerationRun(ctx context.Context, chapterID string) (GenerationRun, error) {
+	chapterID = strings.TrimSpace(chapterID)
+	if chapterID == "" {
+		return GenerationRun{}, ErrGenerationRunNotFound
+	}
+	return s.store.GetLatestChapterGenerationRun(ctx, chapterID)
+}
+
 // CreateGenerationJob creates a new PENDING job within a run. WRITER jobs are
 // special: their exact current Chapter Plan revision is atomically frozen by the
 // WriterStore before the job is visible to workers.
