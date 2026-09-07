@@ -10,7 +10,11 @@ import {
   type GenerationRun,
 } from '../../api/client'
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
-import { canStartChapterGeneration, createLatestSelectionGuard } from './latestSelection.mjs'
+import {
+  canStartChapterGeneration,
+  createLatestSelectionGuard,
+  generationRunFromContentResponse,
+} from './latestSelection.mjs'
 
 const route = useRoute()
 const storyID = computed(() => route.params.storyID as string)
@@ -49,26 +53,18 @@ async function selectChapter(chapter: Chapter) {
       listChapterReviews(chapter.ID),
     ])
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
+
+    const authoritativeContentState = revisionResponse as typeof revisionResponse & {
+      generation_run?: GenerationRun | null
+    }
     revisions.value = revisionResponse.revisions
     reviews.value = reviewResponse.reviews
-    const latest = revisionResponse.revisions[revisionResponse.revisions.length - 1] ?? null
-    if (latest?.GenerationRunID) {
-      try {
-        const run = await getGenerationRun(latest.GenerationRunID)
-        if (mayCommit() && activeChapter.value?.ID === chapter.ID) generationRun.value = run
-      } catch (e) {
-        if (mayCommit() && activeChapter.value?.ID === chapter.ID) {
-          generationRun.value = null
-          error.value = e instanceof Error
-            ? `Không thể khôi phục Generation Run: ${e.message}`
-            : 'Không thể khôi phục Generation Run. Không tạo run mới cho tới khi trạng thái authoritative tải lại thành công.'
-        }
-      }
-    }
+    generationRun.value = generationRunFromContentResponse(authoritativeContentState)
   } catch (e) {
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = []
     reviews.value = []
+    generationRun.value = null
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
   } finally {
     if (mayCommit() && activeChapter.value?.ID === chapter.ID) selectionLoading.value = false
@@ -152,7 +148,7 @@ onMounted(load)
         <p v-if="selectionLoading" role="status">Đang tải trạng thái authoritative của chương…</p>
         <dl>
           <div><dt>Plan</dt><dd>{{ activeChapter.CurrentPlanRevisionID || 'BLOCKED — chưa có plan revision hiện hành' }}</dd></div>
-          <div><dt>Generation</dt><dd>{{ generationRun ? `${generationRun.Status} · ${generationRun.ID}` : latestRevision?.GenerationRunID ? `WAITING — không thể khôi phục run ${latestRevision.GenerationRunID}; tạo run mới bị chặn` : latestRevision ? `Output revision #${latestRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'Chưa có durable run/output được khôi phục' }}</dd></div>
+          <div><dt>Generation</dt><dd>{{ generationRun ? `${generationRun.Status} · ${generationRun.ID}` : latestRevision?.GenerationRunID ? `WAITING — durable run ${latestRevision.GenerationRunID} chưa được projection trả về; tạo run mới bị chặn` : latestRevision ? `Output revision #${latestRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'Chưa có durable run/output' }}</dd></div>
           <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'WAITING — chưa có approved revision' }}</dd></div>
           <div><dt>Narration / Audio / Publish</dt><dd>BLOCKED trong slice này cho tới khi backend projection/action authoritative được nối; không fake readiness từ frontend.</dd></div>
         </dl>
