@@ -35,6 +35,11 @@ func main() {
 		log.Error("email config load failed", "error", err)
 		os.Exit(1)
 	}
+	workerID, err := config.LoadWorkerID(cfg.AppEnv)
+	if err != nil {
+		log.Error("worker identity config failed", "error", err)
+		os.Exit(1)
+	}
 
 	aiProviders, err := providers.BuildAI(cfg)
 	if err != nil {
@@ -65,11 +70,6 @@ func main() {
 			log.Error("email provider init failed", "error", err)
 			os.Exit(1)
 		}
-	}
-
-	workerID := os.Getenv("WORKER_ID")
-	if workerID == "" {
-		workerID = "worker-1"
 	}
 
 	metricRegistry := platformmetrics.NewRegistry()
