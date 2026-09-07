@@ -20,29 +20,108 @@ import { useAuthStore } from '../stores/auth'
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'home', component: HomePage },
-    { path: '/library', name: 'library', component: ListenerLibraryPage, meta: { requiresAuth: true } },
-    { path: '/admin', name: 'admin', component: AdminShell, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/audit', name: 'admin-audit', component: AuditPage, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/auth', name: 'auth', component: AuthPage },
-    { path: '/auth/forgot-password', name: 'forgot-password', component: ForgotPasswordPage },
-    { path: '/auth/reset-password', name: 'reset-password', component: ResetPasswordPage },
-    { path: '/auth/verify-email', name: 'verify-email', component: VerifyEmailPage },
-    { path: '/account-deletion-recovery', name: 'account-deletion-recovery', component: AccountDeletionRecoveryPage },
-    { path: '/account/security', name: 'account-security', component: SecurityPage, meta: { requiresAuth: true } },
-    { path: '/stories/:storyID/read', name: 'reader', component: StoryReader },
-    { path: '/stories/:storyID', name: 'story-detail', component: StoryDetail },
-    { path: '/admin/stories/:storyID/planning', name: 'story-planning', component: StoryPlanningStudio, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/stories/:storyID/production', name: 'chapter-production', component: ChapterProductionWorkspace, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/stories/:storyID/control', name: 'control-center', component: StoryControlCenter, meta: { requiresAuth: true, requiresAdmin: true } },
-    { path: '/admin/stories/:storyID/review', name: 'content-review', component: ContentReviewPage, meta: { requiresAuth: true, requiresAdmin: true } },
+    {
+      path: '/',
+      name: 'home',
+      component: HomePage,
+    },
+    {
+      path: '/library',
+      name: 'library',
+      component: ListenerLibraryPage,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: AdminShell,
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/admin/audit',
+      name: 'admin-audit',
+      component: AuditPage,
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/auth',
+      name: 'auth',
+      component: AuthPage,
+    },
+    {
+      path: '/auth/forgot-password',
+      name: 'forgot-password',
+      component: ForgotPasswordPage,
+    },
+    {
+      path: '/auth/reset-password',
+      name: 'reset-password',
+      component: ResetPasswordPage,
+    },
+    {
+      path: '/auth/verify-email',
+      name: 'verify-email',
+      component: VerifyEmailPage,
+    },
+    {
+      path: '/account-deletion-recovery',
+      name: 'account-deletion-recovery',
+      component: AccountDeletionRecoveryPage,
+    },
+    {
+      path: '/account/security',
+      name: 'account-security',
+      component: SecurityPage,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/stories/:storyID/read',
+      name: 'reader',
+      component: StoryReader,
+    },
+    {
+      path: '/stories/:storyID',
+      name: 'story-detail',
+      component: StoryDetail,
+    },
+    {
+      path: '/admin/stories/:storyID/planning',
+      name: 'story-planning',
+      component: StoryPlanningStudio,
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/admin/stories/:storyID/production',
+      name: 'chapter-production',
+      component: ChapterProductionWorkspace,
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/admin/stories/:storyID/control',
+      name: 'control-center',
+      component: StoryControlCenter,
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/admin/stories/:storyID/review',
+      name: 'content-review',
+      component: ContentReviewPage,
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
   ],
 })
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  if (!auth.initialized) await auth.loadCurrentUser()
-  if (to.meta.requiresAuth && !auth.isAuthenticated) return { path: '/auth', query: { redirect: to.fullPath } }
-  if (to.meta.requiresAdmin && !auth.isAdmin) return { path: '/', query: { error: 'forbidden' } }
+  if (!auth.initialized) {
+    await auth.loadCurrentUser()
+  }
+
+  if (to.meta.requiresAuth && !auth.isAuthenticated) {
+    return { path: '/auth', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.requiresAdmin && !auth.isAdmin) {
+    return { path: '/', query: { error: 'forbidden' } }
+  }
   return true
 })
