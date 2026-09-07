@@ -7,7 +7,8 @@ import (
 
 type reclaimFakeStore struct {
 	*queueFakeStore
-	reclaimed []string
+	reclaimed      []string
+	lastOlderThan  string
 }
 
 func newReclaimFakeStore() *reclaimFakeStore {
@@ -18,6 +19,7 @@ func newReclaimFakeStore() *reclaimFakeStore {
 }
 
 func (s *reclaimFakeStore) ReclaimStaleJobs(ctx context.Context, olderThan string) ([]GenerationJob, error) {
+	s.lastOlderThan = olderThan
 	out := []GenerationJob{}
 	for runID, jobs := range s.jobs {
 		for i, j := range jobs {
@@ -46,7 +48,7 @@ func (s *reclaimFakeStore) CancelJob(ctx context.Context, jobID string) (Generat
 	return GenerationJob{}, ErrGenerationJobNotFound
 }
 
-func TestReclaimStaleJobsResetsRunningToPending(t *testing.T) {
+func TestReclaimExpiredJobsResetsRunningToPendingWithoutCallerThreshold(t *testing.T) {
 	store := newReclaimFakeStore()
 	svc := NewService(store)
 
@@ -56,9 +58,12 @@ func TestReclaimStaleJobsResetsRunningToPending(t *testing.T) {
 	// Simulate a claimed (RUNNING) job.
 	_, _ = svc.ClaimNextJob(context.Background(), "worker-1")
 
-	reclaimed, err := svc.ReclaimStaleJobs(context.Background(), "5 minutes")
+	reclaimed, err := svc.ReclaimExpiredJobs(context.Background())
 	if err != nil {
 		t.Fatalf("reclaim: %v", err)
+	}
+	if store.lastOlderThan != "" {
+		t.Fatalf("expected no caller-selected threshold, got %q", store.lastOlderThan)
 	}
 	if len(reclaimed) != 1 {
 		t.Fatalf("expected 1 reclaimed, got %d", len(reclaimed))
