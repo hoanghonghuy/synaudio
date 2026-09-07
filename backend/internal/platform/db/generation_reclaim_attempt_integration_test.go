@@ -68,8 +68,12 @@ func TestReclaimStaleJobsDoesNotMutateLiveLeaseOrTerminalAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reclaim stale jobs: %v", err)
 	}
-	if len(jobs) != 1 || jobs[0].ID.String() != terminalJobID {
+	if len(jobs) != 1 || jobs[0].Status != "PENDING" {
 		t.Fatalf("expected only expired job to be reclaimed, got %+v", jobs)
+	}
+	liveStatus, liveAttempts := readAttemptBudgetJob(t, pool, liveJobID)
+	if liveStatus != "RUNNING" || liveAttempts != 1 {
+		t.Fatalf("live job was mutated by reclaim: status=%s attempts=%d", liveStatus, liveAttempts)
 	}
 
 	assertReclaimAttempt(t, pool, liveJobID, 1, "RUNNING", "", "", false)
