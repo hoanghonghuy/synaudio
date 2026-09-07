@@ -14,17 +14,17 @@ var (
 
 // ContentRevision is a versioned Chapter prose revision.
 type ContentRevision struct {
-	ID                string
-	ChapterID         string
-	RevisionNo        int
-	ContentText       string
-	SourceType        string
-	BasedOnRevisionID string
-	PlanRevisionID    string
+	ID                 string
+	ChapterID          string
+	RevisionNo         int
+	ContentText        string
+	SourceType         string
+	BasedOnRevisionID  string
+	PlanRevisionID     string
 	BaseCanonVersionID string
-	GenerationRunID   string
-	Status            string
-	CreatedBy         string
+	GenerationRunID    string
+	Status             string
+	CreatedBy          string
 }
 
 // ContentApproval is an append-only record of Admin content approval.
@@ -48,6 +48,7 @@ type Store interface {
 
 	CreateGenerationRun(ctx context.Context, r GenerationRun) (GenerationRun, error)
 	GetGenerationRun(ctx context.Context, runID string) (GenerationRun, error)
+	GetLatestChapterGenerationRun(ctx context.Context, chapterID string) (GenerationRun, error)
 	CreateGenerationJob(ctx context.Context, j GenerationJob) (GenerationJob, error)
 	NextAttemptNo(ctx context.Context, jobID string) (int, error)
 	CreateJobAttempt(ctx context.Context, a JobAttempt) (JobAttempt, error)
