@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -94,6 +95,65 @@ func (m *MinIO) Get(ctx context.Context, key string) ([]byte, error) {
 		return nil, fmt.Errorf("read object %q: %w", key, err)
 	}
 	return data, nil
+}
+
+// DownloadToFile streams an object directly into a caller-owned file path.
+// The destination is created with owner-only permissions and removed if the
+// transfer or close fails so a partial media file cannot be consumed later.
+func (m *MinIO) DownloadToFile(ctx context.Context, key, path string) error {
+	obj, err := m.client.GetObject(ctx, m.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("get object %q: %w", key, err)
+	}
+	defer obj.Close()
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("create object staging file %q: %w", path, err)
+	}
+	remove := true
+	defer func() {
+		_ = f.Close()
+		if remove {
+			_ = os.Remove(path)
+		}
+	}()
+
+	if _, err := io.Copy(f, obj); err != nil {
+		return fmt.Errorf("stream object %q to file: %w", key, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close object staging file %q: %w", path, err)
+	}
+	remove = false
+	return nil
+}
+
+// UploadFile streams a local file directly to object storage and returns the
+// authoritative local byte size used for the upload without reading it again
+// into the Go heap.
+func (m *MinIO) UploadFile(ctx context.Context, key, path string) (int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, fmt.Errorf("open upload file %q: %w", path, err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return 0, fmt.Errorf("stat upload file %q: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return 0, fmt.Errorf("upload path %q is not a regular file", path)
+	}
+	if info.Size() <= 0 {
+		return 0, fmt.Errorf("upload file %q is empty", path)
+	}
+
+	if _, err := m.client.PutObject(ctx, m.bucket, key, f, info.Size(), minio.PutObjectOptions{}); err != nil {
+		return 0, fmt.Errorf("put object %q from file: %w", key, err)
+	}
+	return info.Size(), nil
 }
 
 // Delete removes exactly one object key. Audio synthesis uses this only as

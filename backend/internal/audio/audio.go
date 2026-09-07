@@ -67,10 +67,20 @@ type atomicVersionStore interface {
 	CreateAudioAssetAtomically(ctx context.Context, a AudioAsset) (AudioAsset, error)
 }
 
-// ObjectStorage persists and loads private audio objects by key.
+// ObjectStorage persists and loads private audio objects by key. The byte-based
+// methods remain useful for bounded TTS segment payloads and compatibility.
 type ObjectStorage interface {
 	Put(ctx context.Context, key string, data []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)
+}
+
+// FileObjectStorage is the production large-media boundary. Narration
+// finalization uses files so chapter-sized objects do not have to be materialized
+// as a single []byte in the Go heap. Implementations must stream/copy the object
+// directly and honor context cancellation where the backing SDK permits it.
+type FileObjectStorage interface {
+	DownloadToFile(ctx context.Context, key, path string) error
+	UploadFile(ctx context.Context, key, path string) (int64, error)
 }
 
 // Presigner generates presigned download URLs for object storage.
