@@ -233,8 +233,18 @@ func (s *AuthService) LoginWithMetadata(ctx context.Context, email, password str
 		return Session{}, ErrInvalidCredentials
 	}
 
-	if !VerifyPassword(u.PasswordHash, password) {
+	matched, needsRehash := VerifyPasswordPolicy(u.PasswordHash, password)
+	if !matched {
 		return Session{}, ErrInvalidCredentials
+	}
+	if needsRehash {
+		upgradedHash, err := HashPassword(password)
+		if err != nil {
+			return Session{}, err
+		}
+		if err := s.store.UpdatePassword(ctx, u.ID, upgradedHash); err != nil {
+			return Session{}, err
+		}
 	}
 
 	raw, err := NewRefreshToken()
