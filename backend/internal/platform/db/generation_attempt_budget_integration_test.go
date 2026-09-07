@@ -47,6 +47,7 @@ func TestClaimNextJobRejectsExhaustedPendingJob(t *testing.T) {
 
 func TestReclaimStaleJobsBelowBudgetReturnsPending(t *testing.T) {
 	pool := newAttemptBudgetTestPool(t)
+	createAttemptReclaimTable(t, pool)
 	ctx := context.Background()
 	jobID := "33333333-3333-3333-3333-333333333333"
 	insertAttemptBudgetJob(t, pool, jobID, "RUNNING", 2, 3, true)
@@ -67,6 +68,7 @@ func TestReclaimStaleJobsBelowBudgetReturnsPending(t *testing.T) {
 
 func TestReclaimStaleJobsAtBudgetFailsTerminally(t *testing.T) {
 	pool := newAttemptBudgetTestPool(t)
+	createAttemptReclaimTable(t, pool)
 	ctx := context.Background()
 	jobID := "44444444-4444-4444-4444-444444444444"
 	insertAttemptBudgetJob(t, pool, jobID, "RUNNING", 3, 3, true)
