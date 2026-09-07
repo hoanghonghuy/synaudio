@@ -100,6 +100,27 @@ func TestLoadRejectsMockProvidersInProduction(t *testing.T) {
 	}
 }
 
+func TestLoadProductionDoesNotRequireLegacyAccessTokenSecret(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("DATABASE_URL", "postgres://user:pass@ep-prod-123.neon.tech/synaudio?sslmode=require")
+	t.Setenv("STORAGE_PROVIDER", "r2")
+	t.Setenv("STORAGE_ENDPOINT", "https://accountid.r2.cloudflarestorage.com")
+	t.Setenv("STORAGE_BUCKET", "synaudio-prod")
+	t.Setenv("STORAGE_ACCESS_KEY", "key")
+	t.Setenv("STORAGE_SECRET_KEY", "secret")
+	t.Setenv("AI_MODE", "gemini")
+	t.Setenv("TTS_MODE", "gemini")
+	t.Setenv("ACCESS_TOKEN_SECRET", "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("production base config must not depend on legacy ACCESS_TOKEN_SECRET: %v", err)
+	}
+	if cfg.AccessTokenSecret != "" {
+		t.Fatalf("expected empty production compatibility secret, got %q", cfg.AccessTokenSecret)
+	}
+}
+
 func TestLoadRejectsShortAccessTokenSecret(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("DATABASE_URL", "postgres://synaudio:synaudio@localhost:5432/synaudio?sslmode=disable")
