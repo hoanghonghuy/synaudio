@@ -20,13 +20,20 @@ const revisions = ref<ContentRevision[]>([])
 const reviews = ref<ChapterReview[]>([])
 const generationRun = ref<GenerationRun | null>(null)
 const loading = ref(false)
+const selectionLoading = ref(false)
 const action = ref('')
 const error = ref('')
 const chapterSelection = createLatestSelectionGuard()
 
 const latestRevision = computed(() => revisions.value[revisions.value.length - 1] ?? null)
 const approvedRevision = computed(() => [...revisions.value].reverse().find((revision) => revision.Status === 'APPROVED') ?? null)
-const mayStartGeneration = computed(() => Boolean(activeChapter.value?.CurrentPlanRevisionID && !action.value))
+const mayStartGeneration = computed(() => Boolean(
+  activeChapter.value?.CurrentPlanRevisionID
+  && !selectionLoading.value
+  && !action.value
+  && !generationRun.value
+  && !latestRevision.value?.GenerationRunID,
+))
 
 async function selectChapter(chapter: Chapter) {
   const mayCommit = chapterSelection.begin(chapter.ID)
@@ -34,6 +41,7 @@ async function selectChapter(chapter: Chapter) {
   revisions.value = []
   reviews.value = []
   generationRun.value = null
+  selectionLoading.value = true
   error.value = ''
   try {
     const [revisionResponse, reviewResponse] = await Promise.all([
@@ -48,8 +56,13 @@ async function selectChapter(chapter: Chapter) {
       try {
         const run = await getGenerationRun(latest.GenerationRunID)
         if (mayCommit() && activeChapter.value?.ID === chapter.ID) generationRun.value = run
-      } catch {
-        if (mayCommit() && activeChapter.value?.ID === chapter.ID) generationRun.value = null
+      } catch (e) {
+        if (mayCommit() && activeChapter.value?.ID === chapter.ID) {
+          generationRun.value = null
+          error.value = e instanceof Error
+            ? `Không thể khôi phục Generation Run: ${e.message}`
+            : 'Không thể khôi phục Generation Run. Không tạo run mới cho tới khi trạng thái authoritative tải lại thành công.'
+        }
       }
     }
   } catch (e) {
@@ -57,12 +70,14 @@ async function selectChapter(chapter: Chapter) {
     revisions.value = []
     reviews.value = []
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
+  } finally {
+    if (mayCommit() && activeChapter.value?.ID === chapter.ID) selectionLoading.value = false
   }
 }
 
 async function startGeneration() {
   const chapter = activeChapter.value
-  if (!chapter || !chapter.CurrentPlanRevisionID || action.value) return
+  if (!chapter || !mayStartGeneration.value) return
   action.value = 'start-generation'
   error.value = ''
   try {
@@ -78,7 +93,7 @@ async function startGeneration() {
 async function refreshGeneration() {
   const chapter = activeChapter.value
   const run = generationRun.value
-  if (!chapter || !run || action.value) return
+  if (!chapter || !run || action.value || selectionLoading.value) return
   action.value = 'refresh-generation'
   error.value = ''
   try {
@@ -132,12 +147,13 @@ onMounted(load)
         </button>
       </aside>
 
-      <main v-if="activeChapter" class="pipeline-panel">
+      <main v-if="activeChapter" class="pipeline-panel" :aria-busy="selectionLoading">
         <h2>{{ activeChapter.Title }}</h2>
+        <p v-if="selectionLoading" role="status">Đang tải trạng thái authoritative của chương…</p>
         <dl>
           <div><dt>Plan</dt><dd>{{ activeChapter.CurrentPlanRevisionID || 'BLOCKED — chưa có plan revision hiện hành' }}</dd></div>
-          <div><dt>Generation</dt><dd>{{ generationRun ? `${generationRun.Status} · ${generationRun.ID}` : latestRevision ? `Output revision #${latestRevision.RevisionNo}` : 'Chưa có durable run/output được khôi phục' }}</dd></div>
-          <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo}` : 'WAITING — chưa có approved revision' }}</dd></div>
+          <div><dt>Generation</dt><dd>{{ generationRun ? `${generationRun.Status} · ${generationRun.ID}` : latestRevision?.GenerationRunID ? `WAITING — không thể khôi phục run ${latestRevision.GenerationRunID}; tạo run mới bị chặn` : latestRevision ? `Output revision #${latestRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'Chưa có durable run/output được khôi phục' }}</dd></div>
+          <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'WAITING — chưa có approved revision' }}</dd></div>
           <div><dt>Narration / Audio / Publish</dt><dd>BLOCKED trong slice này cho tới khi backend projection/action authoritative được nối; không fake readiness từ frontend.</dd></div>
         </dl>
 
@@ -145,7 +161,7 @@ onMounted(load)
           <button v-if="!generationRun" type="button" :disabled="!mayStartGeneration" @click="startGeneration">
             {{ action === 'start-generation' ? 'Đang bắt đầu…' : 'Start Generation' }}
           </button>
-          <button v-else type="button" :disabled="Boolean(action)" @click="refreshGeneration">
+          <button v-else type="button" :disabled="Boolean(action) || selectionLoading" @click="refreshGeneration">
             {{ action === 'refresh-generation' ? 'Đang refresh…' : 'Refresh Run' }}
           </button>
           <RouterLink :to="`/admin/stories/${storyID}/review`">Mở Content Review</RouterLink>
