@@ -63,6 +63,21 @@ func TestVerifyPasswordPolicyDoesNotDowngradeStrongerAcceptedHash(t *testing.T) 
 	}
 }
 
+func TestVerifyPasswordPolicyDoesNotRewriteMixedHistoricalProfile(t *testing.T) {
+	password := "mixed historical password"
+	salt := []byte("0123456789abcdef")
+	key := argon2.IDKey([]byte(password), salt, 2, 96*1024, 4, 32)
+	encoded := fmt.Sprintf("$argon2id$v=%d$m=98304,t=2,p=4$%s$%s", argon2.Version, base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key))
+
+	matched, needsRehash := identity.VerifyPasswordPolicy(encoded, password)
+	if !matched {
+		t.Fatal("expected mixed accepted profile to verify")
+	}
+	if needsRehash {
+		t.Fatal("mixed historical profile must not be rewritten by downgrading its stronger dimension")
+	}
+}
+
 func TestVerifyPasswordRejectsOversizedPlaintextWithoutArgon2(t *testing.T) {
 	hash, err := identity.HashPassword("valid password")
 	if err != nil {
