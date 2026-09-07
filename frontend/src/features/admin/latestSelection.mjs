@@ -8,3 +8,19 @@ export function createLatestSelectionGuard() {
     },
   }
 }
+
+export function canStartChapterGeneration({
+  hasPlanRevision,
+  selectionLoading,
+  actionInProgress,
+  hasGenerationRun,
+  hasGenerationRunProvenance,
+}) {
+  return Boolean(
+    hasPlanRevision
+    && !selectionLoading
+    && !actionInProgress
+    && !hasGenerationRun
+    && !hasGenerationRunProvenance,
+  )
+}
