@@ -34,6 +34,9 @@ type Config struct {
 	APIPublicURL       string
 	CORSAllowedOrigins []string
 
+	// AccessTokenSecret is a development-only compatibility input used to seed
+	// the zero-setup local keyring. Production authentication is configured by
+	// LoadAccessTokenKeyring and does not require this legacy variable.
 	AccessTokenSecret     string
 	AccessTokenTTL        time.Duration
 	RefreshSessionTTL     time.Duration
@@ -48,9 +51,8 @@ func Load() (Config, error) {
 	appEnv := strings.ToLower(strings.TrimSpace(getenv("APP_ENV", EnvDevelopment)))
 	accessTokenSecret := strings.TrimSpace(os.Getenv("ACCESS_TOKEN_SECRET"))
 	if accessTokenSecret == "" && appEnv == EnvDevelopment {
-		// Development remains zero-setup while production is required to supply an
-		// explicit secret. The value is intentionally environment-local, not a
-		// production default.
+		// Development remains zero-setup while production uses the explicit
+		// kid-based keyring loaded separately by the API composition root.
 		accessTokenSecret = "development-only-access-token-secret-change-me"
 	}
 
@@ -113,8 +115,11 @@ func Load() (Config, error) {
 }
 
 func (c Config) validate() error {
-	if len(c.AccessTokenSecret) < 32 {
-		return fmt.Errorf("ACCESS_TOKEN_SECRET must be at least 32 bytes")
+	if c.AccessTokenSecret != "" && len(c.AccessTokenSecret) < 32 {
+		return fmt.Errorf("ACCESS_TOKEN_SECRET must be at least 32 bytes when set")
+	}
+	if c.AppEnv == EnvDevelopment && c.AccessTokenSecret == "" {
+		return fmt.Errorf("development ACCESS_TOKEN_SECRET must be configured")
 	}
 	if c.AccessTokenTTL <= 0 {
 		return fmt.Errorf("ACCESS_TOKEN_TTL must be positive")
