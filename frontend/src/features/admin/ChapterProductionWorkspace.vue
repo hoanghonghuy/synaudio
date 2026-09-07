@@ -10,7 +10,7 @@ import {
   type GenerationRun,
 } from '../../api/client'
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
-import { createLatestSelectionGuard } from './latestSelection.mjs'
+import { canStartChapterGeneration, createLatestSelectionGuard } from './latestSelection.mjs'
 
 const route = useRoute()
 const storyID = computed(() => route.params.storyID as string)
@@ -27,13 +27,13 @@ const chapterSelection = createLatestSelectionGuard()
 
 const latestRevision = computed(() => revisions.value[revisions.value.length - 1] ?? null)
 const approvedRevision = computed(() => [...revisions.value].reverse().find((revision) => revision.Status === 'APPROVED') ?? null)
-const mayStartGeneration = computed(() => Boolean(
-  activeChapter.value?.CurrentPlanRevisionID
-  && !selectionLoading.value
-  && !action.value
-  && !generationRun.value
-  && !latestRevision.value?.GenerationRunID,
-))
+const mayStartGeneration = computed(() => canStartChapterGeneration({
+  hasPlanRevision: Boolean(activeChapter.value?.CurrentPlanRevisionID),
+  selectionLoading: selectionLoading.value,
+  actionInProgress: Boolean(action.value),
+  hasGenerationRun: Boolean(generationRun.value),
+  hasGenerationRunProvenance: Boolean(latestRevision.value?.GenerationRunID),
+}))
 
 async function selectChapter(chapter: Chapter) {
   const mayCommit = chapterSelection.begin(chapter.ID)
