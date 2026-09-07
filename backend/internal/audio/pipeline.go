@@ -81,6 +81,11 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		return AudioAsset{}, err
 	}
 
+	checksum, err := ComputeAudioFileChecksum(ctx, outputPath)
+	if err != nil {
+		return AudioAsset{}, fmt.Errorf("checksum final audio: %w", err)
+	}
+
 	// The object is written before READY metadata exists, so its identity must not
 	// depend on a version number that has not yet been committed. A UUID-qualified
 	// attempt key guarantees concurrent synthesis attempts never overwrite each
@@ -102,6 +107,7 @@ func (s *Service) SynthesizeNarration(ctx context.Context, narrationRevisionID s
 		SizeBytes:                 sizeBytes,
 		DurationMs:                durationMs,
 		BitrateKbps:               96,
+		Checksum:                  checksum,
 		IsActive:                  false,
 	}
 
