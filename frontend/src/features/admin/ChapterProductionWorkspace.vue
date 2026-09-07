@@ -58,7 +58,8 @@ async function startGeneration() {
   action.value = 'start-generation'
   error.value = ''
   try {
-    generationRun.value = await startChapterGeneration(storyID.value, chapter.ID)
+    const run = await startChapterGeneration(storyID.value, chapter.ID)
+    if (activeChapter.value?.ID === chapter.ID) generationRun.value = run
   } catch (e) {
     if (activeChapter.value?.ID === chapter.ID) error.value = e instanceof Error ? e.message : 'Không thể bắt đầu Chapter Generation.'
   } finally {
