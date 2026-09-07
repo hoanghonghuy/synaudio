@@ -47,6 +47,36 @@ func TestNewRotatingAuthServiceUsesConfiguredActiveSigner(t *testing.T) {
 	}
 }
 
+func TestNewRotatingAuthServiceAcceptsLegacyConstructorTokensDuringBootstrap(t *testing.T) {
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	secret := strings.Repeat("l", 40)
+	legacy, err := NewAccessTokenManager(secret, 15*time.Minute, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyToken, _, err := legacy.Issue("user-legacy", "session-legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	service, err := NewRotatingAuthService(nil, AuthSettings{
+		AccessTokenTTL: 15 * time.Minute,
+		Now:            func() time.Time { return now },
+	}, "legacy", map[string]string{
+		"legacy": secret,
+	}, 15*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := service.accessTokens.Parse(legacyToken)
+	if err != nil {
+		t.Fatalf("bootstrap keyring must accept tokens issued by the legacy constructor: %v", err)
+	}
+	if claims.Subject != "user-legacy" || claims.SessionID != "session-legacy" {
+		t.Fatalf("unexpected legacy claims: %#v", claims)
+	}
+}
+
 func TestNewRotatingAuthServiceRejectsInvalidKeyring(t *testing.T) {
 	_, err := NewRotatingAuthService(nil, AuthSettings{AccessTokenTTL: 15 * time.Minute}, "missing", map[string]string{
 		"known": strings.Repeat("k", 40),
