@@ -41,6 +41,11 @@ func main() {
 		log.Error("email config load failed", "error", err)
 		os.Exit(1)
 	}
+	accessTokenKeyring, err := config.LoadAccessTokenKeyring(cfg.AppEnv, cfg.AccessTokenSecret, cfg.AccessTokenTTL)
+	if err != nil {
+		log.Error("access-token keyring config failed", "error", err)
+		os.Exit(1)
+	}
 
 	aiProviders, err := providers.BuildAI(cfg)
 	if err != nil {
@@ -100,12 +105,15 @@ func main() {
 	})
 
 	identityStore := pgstore.NewIdentityStore(queries)
-	authService := identity.NewAuthService(identityStore, identity.WithAuthSettings(identity.AuthSettings{
-		AccessTokenSecret:     cfg.AccessTokenSecret,
+	authService, err := identity.NewRotatingAuthService(identityStore, identity.AuthSettings{
 		AccessTokenTTL:        cfg.AccessTokenTTL,
 		RefreshSessionTTL:     cfg.RefreshSessionTTL,
 		RefreshSessionIdleTTL: cfg.RefreshSessionIdleTTL,
-	}))
+	}, accessTokenKeyring.ActiveKeyID, accessTokenKeyring.Keys, accessTokenKeyring.MaxTTL)
+	if err != nil {
+		log.Error("access-token manager init failed", "error", err)
+		os.Exit(1)
+	}
 	var authHandler http.Handler = identity.NewAuthHandler(authService)
 	if emailCfg.Mode != config.EmailModeDisabled {
 		emailStore := pgstore.NewEmailOutboxStore(database)
