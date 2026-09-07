@@ -9,7 +9,9 @@ import (
 )
 
 var (
-	ErrContentRevisionNotFound = errors.New("content revision not found")
+	ErrContentRevisionNotFound       = errors.New("content revision not found")
+	ErrContentRevisionChapterMismatch = errors.New("content revision does not belong to chapter")
+	ErrContentRevisionNotApprovable = errors.New("content revision is not approvable")
 )
 
 // ContentRevision is a versioned Chapter prose revision.
@@ -45,6 +47,7 @@ type Store interface {
 	ListContentRevisions(ctx context.Context, chapterID string) ([]ContentRevision, error)
 	UpdateContentRevisionStatus(ctx context.Context, revisionID, status string) (ContentRevision, error)
 	CreateContentApproval(ctx context.Context, a ContentApproval) (ContentApproval, error)
+	ApproveContentRevision(ctx context.Context, a ContentApproval) (ContentApproval, error)
 
 	CreateGenerationRun(ctx context.Context, r GenerationRun) (GenerationRun, error)
 	GetGenerationRun(ctx context.Context, runID string) (GenerationRun, error)
@@ -131,12 +134,10 @@ func (s *Service) CreateContentRevision(ctx context.Context, chapterID, contentT
 	return s.store.CreateContentRevision(ctx, r)
 }
 
-// ApproveContent records an Admin approval for an exact content revision.
+// ApproveContent atomically records an Admin approval and transitions the exact
+// owned revision to APPROVED. Store-level serialization makes retries
+// idempotent and prevents a durable half-approval from being reported as success.
 func (s *Service) ApproveContent(ctx context.Context, chapterID, revisionID, approvedBy string) (ContentApproval, error) {
-	if _, err := s.store.GetContentRevision(ctx, revisionID); err != nil {
-		return ContentApproval{}, err
-	}
-
 	a := ContentApproval{
 		ID:                uuid.NewString(),
 		ChapterID:         chapterID,
@@ -144,7 +145,7 @@ func (s *Service) ApproveContent(ctx context.Context, chapterID, revisionID, app
 		ApprovedBy:        approvedBy,
 	}
 
-	return s.store.CreateContentApproval(ctx, a)
+	return s.store.ApproveContentRevision(ctx, a)
 }
 
 // ListContentRevisions returns all revisions for a chapter, ordered by number.
