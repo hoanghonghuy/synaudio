@@ -53,10 +53,10 @@ func (s *GenerationStore) ApproveContentRevision(ctx context.Context, a generati
 		return generation.ContentApproval{}, err
 	}
 	if fromUUID(lockedChapterID) != a.ChapterID {
-		return generation.ContentApproval{}, generation.ErrContentRevisionChapterMismatch
+		return generation.ContentApproval{}, errors.Join(generation.ErrContentRevisionNotFound, generation.ErrContentRevisionChapterMismatch)
 	}
 	if status != "CANDIDATE" && status != "APPROVED" {
-		return generation.ContentApproval{}, generation.ErrContentRevisionNotApprovable
+		return generation.ContentApproval{}, errors.Join(generation.ErrContentRevisionNotFound, generation.ErrContentRevisionNotApprovable)
 	}
 
 	existing, err := getExistingContentApproval(ctx, tx, revisionID)
