@@ -10,9 +10,16 @@ import (
 )
 
 var (
-	ErrNarrationNotFound = errors.New("narration revision not found")
-	ErrAudioAssetNotFound = errors.New("audio asset not found")
+	ErrNarrationNotFound                = errors.New("narration revision not found")
+	ErrAudioAssetNotFound               = errors.New("audio asset not found")
+	ErrApprovedContentAuthorityRequired = errors.New("approved content authority not configured")
 )
+
+// ApprovedContentAuthority validates that narration composition uses one exact
+// backend-authoritative APPROVED content revision owned by the chapter.
+type ApprovedContentAuthority interface {
+	RequireApprovedContentRevision(ctx context.Context, chapterID, revisionID string) error
+}
 
 // NarrationRevision is a versioned narration script for a chapter.
 type NarrationRevision struct {
@@ -90,11 +97,12 @@ type Presigner interface {
 
 // Service orchestrates narration and audio asset production.
 type Service struct {
-	store         Store
-	tts           TTSProvider
-	objectStorage ObjectStorage
-	presigner     Presigner
-	processor     AudioProcessor
+	store           Store
+	approvedContent ApprovedContentAuthority
+	tts             TTSProvider
+	objectStorage   ObjectStorage
+	presigner       Presigner
+	processor       AudioProcessor
 }
 
 type Option func(*Service)
@@ -120,6 +128,12 @@ func WithPresigner(p Presigner) Option {
 func WithAudioProcessor(p AudioProcessor) Option {
 	return func(svc *Service) {
 		svc.processor = p
+	}
+}
+
+func WithApprovedContentAuthority(a ApprovedContentAuthority) Option {
+	return func(svc *Service) {
+		svc.approvedContent = a
 	}
 }
 
@@ -160,6 +174,12 @@ func (s *Service) CreateNarrationRevision(ctx context.Context, chapterID, source
 	script = strings.TrimSpace(script)
 	if script == "" {
 		return NarrationRevision{}, errors.New("script must not be empty")
+	}
+	if s.approvedContent == nil {
+		return NarrationRevision{}, ErrApprovedContentAuthorityRequired
+	}
+	if err := s.approvedContent.RequireApprovedContentRevision(ctx, chapterID, sourceContentRevisionID); err != nil {
+		return NarrationRevision{}, err
 	}
 
 	r := NarrationRevision{

@@ -26,7 +26,7 @@ func mustActiveAsset(t *testing.T, svc *Service, chapterID string) AudioAsset {
 
 func TestActivateAudioAssetCrossChapterIsNoOp(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	current := mustCreateAudioAsset(t, svc, "chapter-a")
 	if _, err := svc.ActivateAudioAsset(context.Background(), "chapter-a", current.ID); err != nil {
@@ -44,7 +44,7 @@ func TestActivateAudioAssetCrossChapterIsNoOp(t *testing.T) {
 
 func TestActivateAudioAssetUnknownIsNoOp(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	current := mustCreateAudioAsset(t, svc, "chapter-a")
 	if _, err := svc.ActivateAudioAsset(context.Background(), "chapter-a", current.ID); err != nil {
@@ -61,7 +61,7 @@ func TestActivateAudioAssetUnknownIsNoOp(t *testing.T) {
 
 func TestActivateAudioAssetRejectsNonReadyWithoutChangingCurrent(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	current := mustCreateAudioAsset(t, svc, "chapter-a")
 	if _, err := svc.ActivateAudioAsset(context.Background(), "chapter-a", current.ID); err != nil {
@@ -85,7 +85,7 @@ func TestActivateAudioAssetRejectsNonReadyWithoutChangingCurrent(t *testing.T) {
 
 func TestActivateAudioAssetReplacesCurrentReadyAsset(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	first := mustCreateAudioAsset(t, svc, "chapter-a")
 	second := mustCreateAudioAsset(t, svc, "chapter-a")

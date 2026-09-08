@@ -53,7 +53,7 @@ func TestSynthesizeNarrationPersistsChecksumForExactFinalBytes(t *testing.T) {
 	objects := newFakeObjectStorage()
 	store := newFakeStore()
 	processor := &recordingProcessor{output: []byte("FINAL-AUDIO")}
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(processor),
@@ -88,7 +88,7 @@ func TestChecksumFailureCannotCreateReadyAsset(t *testing.T) {
 	objects := newFakeObjectStorage()
 	store := newFakeStore()
 	processor := &vanishingProcessor{recordingProcessor: &recordingProcessor{output: []byte("FINAL-AUDIO")}}
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(processor),

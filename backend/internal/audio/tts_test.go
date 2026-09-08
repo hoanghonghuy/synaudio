@@ -8,7 +8,7 @@ import (
 
 func TestCreateTTSSegmentsSplitsScript(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, WithTTS(NewMockTTS()))
+	svc := newTestService(store, WithTTS(NewMockTTS()))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "First sentence. Second sentence. Third sentence.", "u1")
 
@@ -28,7 +28,7 @@ func TestCreateTTSSegmentsSplitsScript(t *testing.T) {
 
 func TestSynthesizeSegmentProducesAudio(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, WithTTS(NewMockTTS()), WithObjectStorage(newFakeObjectStorage()))
+	svc := newTestService(store, WithTTS(NewMockTTS()), WithObjectStorage(newFakeObjectStorage()))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello world.", "u1")
 	segments, _ := svc.CreateTTSSegments(context.Background(), nar.ID)
@@ -50,7 +50,7 @@ func TestSynthesizeSegmentProducesAudio(t *testing.T) {
 
 func TestSynthesizeSegmentWithoutTTSFails(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, WithObjectStorage(newFakeObjectStorage()))
+	svc := newTestService(store, WithObjectStorage(newFakeObjectStorage()))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello world.", "u1")
 	segments, _ := svc.CreateTTSSegments(context.Background(), nar.ID)
@@ -70,7 +70,7 @@ func (f fakePresigner) PresignedGetObject(_ context.Context, key string, _ time.
 
 func TestGetAudioURLReturnsPresignedURL(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, WithPresigner(fakePresigner{url: "https://cdn.example.com"}))
+	svc := newTestService(store, WithPresigner(fakePresigner{url: "https://cdn.example.com"}))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello.", "u1")
 	asset, _ := svc.CreateAudioAsset(context.Background(), "c1", nar.ID, "audio/c1/v1.mp3", "audio/mpeg", 100, 1000, 128)
@@ -87,7 +87,7 @@ func TestGetAudioURLReturnsPresignedURL(t *testing.T) {
 
 func TestGetAudioURLWithoutActiveAssetFails(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, WithPresigner(fakePresigner{url: "https://cdn.example.com"}))
+	svc := newTestService(store, WithPresigner(fakePresigner{url: "https://cdn.example.com"}))
 
 	if _, err := svc.GetAudioURL(context.Background(), "c1"); err == nil {
 		t.Fatal("expected error when no active asset")

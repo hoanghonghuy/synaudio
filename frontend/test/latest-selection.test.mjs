@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  canCreateNarration,
   canStartChapterGeneration,
   createLatestSelectionGuard,
   generationRunFromContentResponse,
@@ -59,4 +60,40 @@ test('generation start is allowed only for an idle planned chapter with no exist
     hasGenerationRun: false,
     hasGenerationRunProvenance: false,
   }), true)
+})
+
+test('narration creation requires authoritative approved revision and voice', () => {
+  const approvedRevision = {
+    ID: 'rev-1',
+    ContentText: 'Approved prose',
+    Status: 'APPROVED',
+  }
+
+  assert.equal(canCreateNarration({
+    approvedRevision,
+    selectionLoading: false,
+    actionInProgress: false,
+    voiceID: 'voice-1',
+  }), true)
+
+  assert.equal(canCreateNarration({
+    approvedRevision: { ...approvedRevision, ContentText: '   ' },
+    selectionLoading: false,
+    actionInProgress: false,
+    voiceID: 'voice-1',
+  }), false)
+
+  assert.equal(canCreateNarration({
+    approvedRevision: null,
+    selectionLoading: false,
+    actionInProgress: false,
+    voiceID: 'voice-1',
+  }), false)
+
+  assert.equal(canCreateNarration({
+    approvedRevision,
+    selectionLoading: true,
+    actionInProgress: false,
+    voiceID: 'voice-1',
+  }), false)
 })

@@ -2,15 +2,18 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
+  createNarrationRevision,
   getGenerationRun,
+  getStoryWorkflowSettings,
   listAdminChapters,
   listChapterReviews,
   listContentRevisions,
   startChapterGeneration,
   type GenerationRun,
 } from '../../api/client'
-import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
+import type { Chapter, ChapterReview, ContentRevision, NarrationRevision } from '../../api/types'
 import {
+  canCreateNarration,
   canStartChapterGeneration,
   createLatestSelectionGuard,
   generationRunFromContentResponse,
@@ -23,6 +26,8 @@ const activeChapter = ref<Chapter | null>(null)
 const revisions = ref<ContentRevision[]>([])
 const reviews = ref<ChapterReview[]>([])
 const generationRun = ref<GenerationRun | null>(null)
+const narrationRevision = ref<NarrationRevision | null>(null)
+const preferredVoiceID = ref('')
 const loading = ref(false)
 const selectionLoading = ref(false)
 const action = ref('')
@@ -38,6 +43,12 @@ const mayStartGeneration = computed(() => canStartChapterGeneration({
   hasGenerationRun: Boolean(generationRun.value),
   hasGenerationRunProvenance: Boolean(latestRevision.value?.GenerationRunID),
 }))
+const mayCreateNarration = computed(() => canCreateNarration({
+  approvedRevision: approvedRevision.value,
+  selectionLoading: selectionLoading.value,
+  actionInProgress: Boolean(action.value),
+  voiceID: preferredVoiceID.value,
+}))
 
 async function selectChapter(chapter: Chapter) {
   const mayCommit = chapterSelection.begin(chapter.ID)
@@ -45,6 +56,7 @@ async function selectChapter(chapter: Chapter) {
   revisions.value = []
   reviews.value = []
   generationRun.value = null
+  narrationRevision.value = null
   selectionLoading.value = true
   error.value = ''
   try {
@@ -65,6 +77,7 @@ async function selectChapter(chapter: Chapter) {
     revisions.value = []
     reviews.value = []
     generationRun.value = null
+    narrationRevision.value = null
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
   } finally {
     if (mayCommit() && activeChapter.value?.ID === chapter.ID) selectionLoading.value = false
@@ -102,12 +115,43 @@ async function refreshGeneration() {
   }
 }
 
+async function startNarration() {
+  const chapter = activeChapter.value
+  const approved = approvedRevision.value
+  if (!chapter || !approved || !mayCreateNarration.value) return
+
+  const requestChapterID = chapter.ID
+  const requestRevisionID = approved.ID
+  const requestScript = approved.ContentText
+  action.value = 'create-narration'
+  error.value = ''
+  try {
+    const created = await createNarrationRevision(requestChapterID, {
+      source_content_revision_id: requestRevisionID,
+      voice_id: preferredVoiceID.value,
+      script: requestScript,
+    })
+    if (activeChapter.value?.ID !== requestChapterID || approvedRevision.value?.ID !== requestRevisionID) return
+    narrationRevision.value = created
+  } catch (e) {
+    if (activeChapter.value?.ID === requestChapterID && approvedRevision.value?.ID === requestRevisionID) {
+      error.value = e instanceof Error ? e.message : 'Không thể tạo narration revision.'
+    }
+  } finally {
+    if (activeChapter.value?.ID === requestChapterID) action.value = ''
+  }
+}
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await listAdminChapters(storyID.value)
-    chapters.value = response.chapters
+    const [chapterResponse, workflowSettings] = await Promise.all([
+      listAdminChapters(storyID.value),
+      getStoryWorkflowSettings(storyID.value),
+    ])
+    chapters.value = chapterResponse.chapters
+    preferredVoiceID.value = workflowSettings.preferred_voice_id
     if (chapters.value.length > 0) await selectChapter(chapters.value[0])
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Không thể tải Chapter Production workspace.'
@@ -149,8 +193,9 @@ onMounted(load)
         <dl>
           <div><dt>Plan</dt><dd>{{ activeChapter.CurrentPlanRevisionID || 'BLOCKED — chưa có plan revision hiện hành' }}</dd></div>
           <div><dt>Generation</dt><dd>{{ generationRun ? `${generationRun.Status} · ${generationRun.ID}` : latestRevision?.GenerationRunID ? `WAITING — durable run ${latestRevision.GenerationRunID} chưa được projection trả về; tạo run mới bị chặn` : latestRevision ? `Output revision #${latestRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'Chưa có durable run/output' }}</dd></div>
-          <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'WAITING — chưa có approved revision' }}</dd></div>
-          <div><dt>Narration / Audio / Publish</dt><dd>BLOCKED trong slice này cho tới khi backend projection/action authoritative được nối; không fake readiness từ frontend.</dd></div>
+          <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo} · ${approvedRevision.ID}` : selectionLoading ? 'Đang tải…' : 'WAITING — chưa có approved revision' }}</dd></div>
+          <div><dt>Narration</dt><dd>{{ narrationRevision ? `Revision #${narrationRevision.RevisionNo} · source ${narrationRevision.SourceContentRevisionID}` : approvedRevision ? 'READY — có thể tạo narration từ approved revision hiện hành' : selectionLoading ? 'Đang tải…' : 'BLOCKED — cần approved content revision' }}</dd></div>
+          <div><dt>Audio / Publish</dt><dd>BLOCKED trong slice này cho tới khi backend projection/action authoritative cho TTS/audio/publish được nối.</dd></div>
         </dl>
 
         <div class="actions">
@@ -160,10 +205,14 @@ onMounted(load)
           <button v-else type="button" :disabled="Boolean(action) || selectionLoading" @click="refreshGeneration">
             {{ action === 'refresh-generation' ? 'Đang refresh…' : 'Refresh Run' }}
           </button>
+          <button type="button" :disabled="!mayCreateNarration || Boolean(narrationRevision)" @click="startNarration">
+            {{ action === 'create-narration' ? 'Đang tạo narration…' : 'Create Narration' }}
+          </button>
           <RouterLink :to="`/admin/stories/${storyID}/review`">Mở Content Review</RouterLink>
         </div>
 
         <p v-if="latestRevision">Latest revision {{ latestRevision.ID }} · source {{ latestRevision.SourceType }} · run {{ latestRevision.GenerationRunID || '—' }}</p>
+        <p v-if="narrationRevision">Narration {{ narrationRevision.ID }} · voice {{ narrationRevision.VoiceID }} · status {{ narrationRevision.Status }}</p>
         <p>Review records loaded: {{ reviews.length }}</p>
       </main>
     </div>
@@ -181,7 +230,7 @@ dl { display: grid; gap: 10px; }
 dl div { display: grid; grid-template-columns: 160px 1fr; gap: 12px; }
 dt { font-weight: 700; }
 dd { margin: 0; overflow-wrap: anywhere; }
-.actions { display: flex; gap: 12px; align-items: center; margin-top: 20px; }
+.actions { display: flex; gap: 12px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
 .error { color: #b42318; }
 .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
 @media (max-width: 800px) { .workspace-grid { grid-template-columns: 1fr; } .production-header { flex-direction: column; } }
