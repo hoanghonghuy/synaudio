@@ -41,6 +41,10 @@ if [ "${#go_files[@]}" -gt 0 ]; then
   fi
 fi
 
+echo "==> Dependency supply-chain gates"
+bash ./scripts/govulncheck-gate.sh
+bash ./scripts/test-govulncheck-gate.sh
+
 echo "==> Backend checks"
 cd backend
 go test ./...
@@ -51,7 +55,11 @@ go build -o bin/worker ./cmd/worker
 cd "$ROOT"
 echo "==> Frontend checks"
 cd frontend
-npm ci --prefer-offline --no-audit --no-fund
+npm ci --prefer-offline --no-fund
+cd "$ROOT"
+bash ./scripts/npm-audit-gate.sh
+bash ./scripts/test-npm-audit-gate.sh
+cd frontend
 npm test
 npm run typecheck
 npm run build
