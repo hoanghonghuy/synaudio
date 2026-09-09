@@ -42,6 +42,17 @@ func (s *fakeStore) ConsumeMFARecoveryCode(_ context.Context, _ string, hash str
 	return true, nil
 }
 
+func (s *fakeStore) AssureSessionWithRecoveryCode(ctx context.Context, userID, sessionID, hash string, at time.Time) error {
+	if s.recoveryHashes == nil || !s.recoveryHashes[hash] {
+		return identity.ErrInvalidToken
+	}
+	if err := s.MarkSessionMFAAndRecentAuth(ctx, userID, sessionID, at); err != nil {
+		return err
+	}
+	delete(s.recoveryHashes, hash)
+	return nil
+}
+
 func (s *fakeStore) MarkSessionMFAAndRecentAuth(_ context.Context, userID, sessionID string, at time.Time) error {
 	sess, ok := s.sessions[sessionID]
 	if !ok || sess.UserID != userID {

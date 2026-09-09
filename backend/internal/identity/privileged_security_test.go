@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 type privilegedSecurityFakeStore struct {
 	*fakeStore
 	confirmAtomicErr error
+	recoveryMu       sync.Mutex
 }
 
 func newPrivilegedSecurityFakeStore() *privilegedSecurityFakeStore {
@@ -33,6 +35,12 @@ func (s *privilegedSecurityFakeStore) ConfirmMFAWithRecoveryCodes(ctx context.Co
 		return err
 	}
 	return s.ReplaceMFARecoveryCodes(ctx, userID, hashes)
+}
+
+func (s *privilegedSecurityFakeStore) AssureSessionWithRecoveryCode(ctx context.Context, userID, sessionID, hash string, at time.Time) error {
+	s.recoveryMu.Lock()
+	defer s.recoveryMu.Unlock()
+	return s.fakeStore.AssureSessionWithRecoveryCode(ctx, userID, sessionID, hash, at)
 }
 
 func TestAdminRoleAloneDoesNotGrantPrivilegedCapability(t *testing.T) {
@@ -272,5 +280,99 @@ func TestReAuthWithRecoveryCodeGrantsPrivilegedCapability(t *testing.T) {
 	allowed, err := svc.ResolveAdmin(context.Background(), req)
 	if err != nil || !allowed {
 		t.Fatalf("recovery re-auth must grant privileged capability: allowed=%v err=%v", allowed, err)
+	}
+}
+
+func TestRecoveryReAuthDoesNotConsumeCodeWhenSessionNotAssurable(t *testing.T) {
+	store := newPrivilegedSecurityFakeStore()
+	svc := identity.NewAuthService(store)
+	u, _ := svc.Register(context.Background(), "admin@example.com", "correct password")
+	_ = store.MarkEmailVerified(context.Background(), u.ID)
+	_ = store.GrantRole(context.Background(), u.ID, identity.RoleAdmin)
+	secret, _ := svc.SetupTOTP(context.Background(), u.ID)
+	counter := identity.TOTPTimeStep(0)
+	code, _ := identity.TOTPCode(secret, counter)
+	recoveryCodes, _ := svc.ConfirmTOTP(context.Background(), u.ID, code, counter)
+	recoveryHash := identity.HashToken(recoveryCodes[0])
+
+	sess, _ := svc.Login(context.Background(), u.Email, "correct password")
+	delete(store.sessions, sess.ID)
+	principal := identity.Principal{UserID: u.ID, SessionID: sess.ID}
+
+	err := svc.VerifyPrivilegedMFAChallenge(context.Background(), principal, "", recoveryCodes[0])
+	if err == nil || !errors.Is(err, identity.ErrUnauthenticated) {
+		t.Fatalf("revoked/missing session must fail re-auth: err=%v", err)
+	}
+	if !store.recoveryHashes[recoveryHash] {
+		t.Fatal("recovery code must remain available when session assurance fails")
+	}
+
+	sess, _ = svc.Login(context.Background(), u.Email, "correct password")
+	principal = identity.Principal{UserID: u.ID, SessionID: sess.ID}
+	if err := svc.VerifyPrivilegedMFAChallenge(context.Background(), principal, "", recoveryCodes[0]); err != nil {
+		t.Fatalf("retry with valid session must succeed: %v", err)
+	}
+	if store.recoveryHashes[recoveryHash] {
+		t.Fatal("recovery code must be consumed after successful assurance")
+	}
+}
+
+func TestRecoveryReAuthConcurrentAllowsAtMostOneAssurance(t *testing.T) {
+	store := newPrivilegedSecurityFakeStore()
+	svc := identity.NewAuthService(store)
+	u, _ := svc.Register(context.Background(), "admin@example.com", "correct password")
+	_ = store.MarkEmailVerified(context.Background(), u.ID)
+	_ = store.GrantRole(context.Background(), u.ID, identity.RoleAdmin)
+	secret, _ := svc.SetupTOTP(context.Background(), u.ID)
+	counter := identity.TOTPTimeStep(0)
+	code, _ := identity.TOTPCode(secret, counter)
+	recoveryCodes, _ := svc.ConfirmTOTP(context.Background(), u.ID, code, counter)
+	recoveryHash := identity.HashToken(recoveryCodes[0])
+
+	first, _ := svc.Login(context.Background(), u.Email, "correct password")
+	second, _ := svc.Login(context.Background(), u.Email, "correct password")
+
+	var wg sync.WaitGroup
+	results := make(chan error, 2)
+	principals := []identity.Principal{
+		{UserID: u.ID, SessionID: first.ID},
+		{UserID: u.ID, SessionID: second.ID},
+	}
+	for _, principal := range principals {
+		wg.Add(1)
+		go func(p identity.Principal) {
+			defer wg.Done()
+			results <- svc.VerifyPrivilegedMFAChallenge(context.Background(), p, "", recoveryCodes[0])
+		}(principal)
+	}
+	wg.Wait()
+	close(results)
+
+	successes := 0
+	failures := 0
+	for err := range results {
+		if err == nil {
+			successes++
+			continue
+		}
+		failures++
+		if !errors.Is(err, identity.ErrInvalidToken) {
+			t.Fatalf("concurrent loser must fail with invalid token, got %v", err)
+		}
+	}
+	if successes != 1 || failures != 1 {
+		t.Fatalf("expected exactly one successful assurance, got successes=%d failures=%d", successes, failures)
+	}
+	if store.recoveryHashes[recoveryHash] {
+		t.Fatal("successful concurrent re-auth must consume the recovery code")
+	}
+	assured := 0
+	for _, sessionID := range []string{first.ID, second.ID} {
+		if ok, _ := store.HasPrivilegedSessionAssurance(context.Background(), u.ID, sessionID, time.Now().UTC()); ok {
+			assured++
+		}
+	}
+	if assured != 1 {
+		t.Fatalf("expected exactly one assured session, got %d", assured)
 	}
 }

@@ -18,6 +18,7 @@ type mfaSecurityStore interface {
 	ConfirmMFAWithRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error
 	ConsumeMFARecoveryCode(ctx context.Context, userID, codeHash string) (bool, error)
 	MarkSessionMFAAndRecentAuth(ctx context.Context, userID, sessionID string, at time.Time) error
+	AssureSessionWithRecoveryCode(ctx context.Context, userID, sessionID, codeHash string, at time.Time) error
 	HasPrivilegedSessionAssurance(ctx context.Context, userID, sessionID string, now time.Time) (bool, error)
 	HasRecentAuth(ctx context.Context, userID, sessionID string, cutoff time.Time) (bool, error)
 }
@@ -127,17 +128,10 @@ func (s *AuthService) VerifyPrivilegedMFAChallenge(ctx context.Context, principa
 		if !ValidateTOTP(method.Secret, totpCode, TOTPTimeStep(0)) {
 			return ErrInvalidToken
 		}
-	} else {
-		consumed, err := securityStore.ConsumeMFARecoveryCode(ctx, principal.UserID, HashToken(recoveryCode))
-		if err != nil {
-			return err
-		}
-		if !consumed {
-			return ErrInvalidToken
-		}
+		return securityStore.MarkSessionMFAAndRecentAuth(ctx, principal.UserID, principal.SessionID, s.settings.Now().UTC())
 	}
 
-	return securityStore.MarkSessionMFAAndRecentAuth(ctx, principal.UserID, principal.SessionID, s.settings.Now().UTC())
+	return securityStore.AssureSessionWithRecoveryCode(ctx, principal.UserID, principal.SessionID, HashToken(recoveryCode), s.settings.Now().UTC())
 }
 
 func (s *AuthService) MarkSessionMFAAndRecentAuth(ctx context.Context, principal Principal) error {

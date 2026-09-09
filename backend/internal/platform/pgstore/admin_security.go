@@ -115,6 +115,64 @@ SELECT EXISTS (SELECT 1 FROM consumed)
 	return consumed, err
 }
 
+// AssureSessionWithRecoveryCode atomically marks MFA/recent-auth assurance on the
+// exact session and burns the recovery credential. Session assurance is attempted
+// first so a revoked/expired session never consumes the one-time code.
+func (s *IdentityStore) AssureSessionWithRecoveryCode(ctx context.Context, userID, sessionID, codeHash string, at time.Time) error {
+	beginner, ok := s.q.DBTX().(transactionBeginner)
+	if !ok {
+		return errors.New("identity store transaction support unavailable")
+	}
+	tx, err := beginner.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	tag, err := tx.Exec(ctx, `
+UPDATE user_sessions
+   SET mfa_verified_at = $3,
+       recent_auth_at = $3
+ WHERE id = $1
+   AND user_id = $2
+   AND revoked_at IS NULL
+   AND expires_at > $3
+`, toUUID(sessionID), toUUID(userID), at)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return identity.ErrUnauthenticated
+	}
+
+	var consumed bool
+	if err := tx.QueryRow(ctx, `
+WITH consumed AS (
+    UPDATE user_mfa_recovery_codes
+       SET used_at = NOW()
+     WHERE id = (
+         SELECT id
+           FROM user_mfa_recovery_codes
+          WHERE user_id = $1
+            AND code_hash = $2
+            AND used_at IS NULL
+          ORDER BY id
+          LIMIT 1
+          FOR UPDATE
+     )
+    RETURNING id
+)
+SELECT EXISTS (SELECT 1 FROM consumed)
+`, toUUID(userID), codeHash).Scan(&consumed); err != nil {
+		return err
+	}
+	if !consumed {
+		return identity.ErrInvalidToken
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (s *IdentityStore) MarkSessionMFAAndRecentAuth(ctx context.Context, userID, sessionID string, at time.Time) error {
 	tag, err := s.q.DBTX().Exec(ctx, `
 UPDATE user_sessions
