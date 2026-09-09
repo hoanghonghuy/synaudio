@@ -121,7 +121,7 @@ func TestActivateAudioAssetEndpointRejectsStaleReadyFromOlderNarration(t *testin
 
 func TestSynthesizeNarrationEndpointRejectsChapterMismatch(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(
+	svc := newTestService(
 		store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(newFakeObjectStorage()),
@@ -148,7 +148,7 @@ func TestSynthesizeNarrationEndpointRejectsChapterMismatch(t *testing.T) {
 
 func TestSynthesizeNarrationEndpointHappyPathReturnsReadyAsset(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(
+	svc := newTestService(
 		store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(newFakeObjectStorage()),

@@ -14,6 +14,13 @@ export function canStartChapterGeneration(input: {
   hasGenerationRunProvenance: boolean
 }): boolean
 
+export function canCreateNarration(input: {
+  approvedRevision: { ID?: string; ContentText?: string } | null
+  selectionLoading: boolean
+  actionInProgress: boolean
+  voiceID: string
+}): boolean
+
 export function canSynthesizeNarration(input: {
   hasApprovedContent: boolean
   hasNarration: boolean

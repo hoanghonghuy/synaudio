@@ -96,7 +96,7 @@ func TestActivateAudioAssetForChapterRejectsStaleReadyFromOlderNarration(t *test
 
 func TestSynthesizeNarrationForChapterRejectsOwnershipMismatch(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(
+	svc := newTestService(
 		store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(newFakeObjectStorage()),

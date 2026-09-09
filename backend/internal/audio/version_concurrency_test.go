@@ -45,7 +45,7 @@ func (s *concurrentReservationStore) CreateAudioAssetAtomically(ctx context.Cont
 
 func TestConcurrentNarrationRevisionAllocationProducesDistinctVersions(t *testing.T) {
 	store := &concurrentReservationStore{fakeStore: newFakeStore()}
-	svc := NewService(store)
+	svc := newTestService(store)
 	const attempts = 32
 
 	versions := make(chan int, attempts)
@@ -84,7 +84,7 @@ func TestConcurrentNarrationRevisionAllocationProducesDistinctVersions(t *testin
 
 func TestConcurrentAudioVersionAllocationProducesDistinctVersions(t *testing.T) {
 	store := &concurrentReservationStore{fakeStore: newFakeStore()}
-	svc := NewService(store)
+	svc := newTestService(store)
 	const attempts = 32
 
 	versions := make(chan int, attempts)
@@ -133,7 +133,7 @@ func TestSynthesizeNarrationCleansOwnObjectWhenReadyMetadataFails(t *testing.T) 
 	objects := newFakeObjectStorage()
 	store := &metadataFailStore{fakeStore: newFakeStore()}
 	processor := &recordingProcessor{output: []byte("FINAL-AUDIO")}
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(processor),

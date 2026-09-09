@@ -131,6 +131,17 @@ export interface AudioAsset {
   IsActive: boolean
 }
 
+export interface NarrationRevision {
+  ID: string
+  ChapterID: string
+  RevisionNo: number
+  SourceContentRevisionID: string
+  VoiceID: string
+  Script: string
+  Status: string
+  CreatedBy: string
+}
+
 export interface AudioURLResponse {
   url: string
 }

@@ -3,10 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
   activateAudioAsset,
+  createNarrationRevision,
   getActiveAudioAsset,
   getGenerationRun,
   getLatestNarrationRevision,
   getLatestReadyAudioAsset,
+  getStoryWorkflowSettings,
   listAdminChapters,
   listChapterReviews,
   listContentRevisions,
@@ -17,6 +19,7 @@ import {
 import type { AudioAsset, Chapter, ChapterReview, ContentRevision, NarrationRevision } from '../../api/types'
 import {
   canActivateAudio,
+  canCreateNarration,
   canStartChapterGeneration,
   canSynthesizeNarration,
   createLatestSelectionGuard,
@@ -33,6 +36,7 @@ const generationRun = ref<GenerationRun | null>(null)
 const latestNarration = ref<NarrationRevision | null>(null)
 const activeAudio = ref<AudioAsset | null>(null)
 const latestReadyAudio = ref<AudioAsset | null>(null)
+const preferredVoiceID = ref('')
 const loading = ref(false)
 const selectionLoading = ref(false)
 const action = ref('')
@@ -64,6 +68,12 @@ const mayStartGeneration = computed(() => canStartChapterGeneration({
   hasGenerationRun: Boolean(generationRun.value),
   hasGenerationRunProvenance: Boolean(latestRevision.value?.GenerationRunID),
 }))
+const mayCreateNarration = computed(() => canCreateNarration({
+  approvedRevision: approvedRevision.value,
+  selectionLoading: selectionLoading.value,
+  actionInProgress: Boolean(action.value),
+  voiceID: preferredVoiceID.value,
+}) && !latestNarration.value)
 
 const maySynthesize = computed(() => canSynthesizeNarration({
   hasApprovedContent: Boolean(approvedRevision.value),
@@ -85,7 +95,7 @@ const mayActivate = computed(() => canActivateAudio({
 const narrationStatus = computed(() => {
   if (selectionLoading.value) return 'Đang tải…'
   if (!approvedRevision.value) return 'WAITING — cần approved content trước khi có narration authoritative'
-  if (!latestNarration.value) return 'WAITING — chưa có narration revision durable'
+  if (!latestNarration.value) return 'READY — có thể tạo narration từ approved revision hiện hành'
   if (!narrationBelongsToChapter.value) return 'BLOCKED — narration projection không thuộc chương đang chọn'
   return `Revision #${latestNarration.value.RevisionNo} · ${latestNarration.value.ID} · source ${latestNarration.value.SourceContentRevisionID}`
 })
@@ -188,6 +198,33 @@ async function refreshGeneration() {
   }
 }
 
+async function startNarration() {
+  const chapter = activeChapter.value
+  const approved = approvedRevision.value
+  if (!chapter || !approved || !mayCreateNarration.value) return
+
+  const requestChapterID = chapter.ID
+  const requestRevisionID = approved.ID
+  const requestScript = approved.ContentText
+  action.value = 'create-narration'
+  error.value = ''
+  try {
+    const created = await createNarrationRevision(requestChapterID, {
+      source_content_revision_id: requestRevisionID,
+      voice_id: preferredVoiceID.value,
+      script: requestScript,
+    })
+    if (activeChapter.value?.ID !== requestChapterID || approvedRevision.value?.ID !== requestRevisionID) return
+    latestNarration.value = created
+  } catch (e) {
+    if (activeChapter.value?.ID === requestChapterID && approvedRevision.value?.ID === requestRevisionID) {
+      error.value = e instanceof Error ? e.message : 'Không thể tạo narration revision.'
+    }
+  } finally {
+    if (activeChapter.value?.ID === requestChapterID) action.value = ''
+  }
+}
+
 async function runSynthesize() {
   const chapter = activeChapter.value
   const narration = latestNarration.value
@@ -235,8 +272,12 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await listAdminChapters(storyID.value)
-    chapters.value = response.chapters
+    const [chapterResponse, workflowSettings] = await Promise.all([
+      listAdminChapters(storyID.value),
+      getStoryWorkflowSettings(storyID.value),
+    ])
+    chapters.value = chapterResponse.chapters
+    preferredVoiceID.value = workflowSettings.preferred_voice_id
     if (chapters.value.length > 0) await selectChapter(chapters.value[0])
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Không thể tải Chapter Production workspace.'
@@ -278,7 +319,7 @@ onMounted(load)
         <dl>
           <div><dt>Plan</dt><dd>{{ activeChapter.CurrentPlanRevisionID || 'BLOCKED — chưa có plan revision hiện hành' }}</dd></div>
           <div><dt>Generation</dt><dd>{{ generationRun ? `${generationRun.Status} · ${generationRun.ID}` : latestRevision?.GenerationRunID ? `WAITING — durable run ${latestRevision.GenerationRunID} chưa được projection trả về; tạo run mới bị chặn` : latestRevision ? `Output revision #${latestRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'Chưa có durable run/output' }}</dd></div>
-          <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'WAITING — chưa có approved revision' }}</dd></div>
+          <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo} · ${approvedRevision.ID}` : selectionLoading ? 'Đang tải…' : 'WAITING — chưa có approved revision' }}</dd></div>
           <div><dt>Narration</dt><dd>{{ narrationStatus }}</dd></div>
           <div><dt>Audio</dt><dd>{{ audioStatus }}</dd></div>
           <div><dt>Publish</dt><dd>{{ publishStatus }}</dd></div>
@@ -291,6 +332,9 @@ onMounted(load)
           <button v-else type="button" :disabled="Boolean(action) || selectionLoading" @click="refreshGeneration">
             {{ action === 'refresh-generation' ? 'Đang refresh…' : 'Refresh Run' }}
           </button>
+          <button type="button" :disabled="!mayCreateNarration" @click="startNarration">
+            {{ action === 'create-narration' ? 'Đang tạo narration…' : 'Create Narration' }}
+          </button>
           <button type="button" :disabled="!maySynthesize" @click="runSynthesize">
             {{ action === 'synthesize' ? 'Đang synthesize…' : 'Synthesize TTS' }}
           </button>
@@ -301,6 +345,7 @@ onMounted(load)
         </div>
 
         <p v-if="latestRevision">Latest revision {{ latestRevision.ID }} · source {{ latestRevision.SourceType }} · run {{ latestRevision.GenerationRunID || '—' }}</p>
+        <p v-if="latestNarration">Narration {{ latestNarration.ID }} · voice {{ latestNarration.VoiceID }} · status {{ latestNarration.Status }}</p>
         <p v-if="latestReadyAudio">Latest READY asset {{ latestReadyAudio.ID }} · narration {{ latestReadyAudio.SourceNarrationRevisionID }} · {{ latestReadyAudio.SizeBytes }} bytes</p>
         <p>Review records loaded: {{ reviews.length }}</p>
       </main>

@@ -9,9 +9,10 @@ import (
 )
 
 var (
-	ErrContentRevisionNotFound       = errors.New("content revision not found")
+	ErrContentRevisionNotFound        = errors.New("content revision not found")
 	ErrContentRevisionChapterMismatch = errors.New("content revision does not belong to chapter")
-	ErrContentRevisionNotApprovable = errors.New("content revision is not approvable")
+	ErrContentRevisionNotApprovable   = errors.New("content revision is not approvable")
+	ErrContentRevisionNotApproved     = errors.New("content revision is not approved")
 )
 
 // ContentRevision is a versioned Chapter prose revision.
@@ -151,4 +152,21 @@ func (s *Service) ApproveContent(ctx context.Context, chapterID, revisionID, app
 // ListContentRevisions returns all revisions for a chapter, ordered by number.
 func (s *Service) ListContentRevisions(ctx context.Context, chapterID string) ([]ContentRevision, error) {
 	return s.store.ListContentRevisions(ctx, chapterID)
+}
+
+// RequireApprovedContentRevision is the narrow read boundary for narration
+// composition. It fails closed unless the revision exists, belongs to the
+// chapter, and is APPROVED at the authoritative persistence boundary.
+func (s *Service) RequireApprovedContentRevision(ctx context.Context, chapterID, revisionID string) error {
+	revision, err := s.store.GetContentRevision(ctx, revisionID)
+	if err != nil {
+		return err
+	}
+	if revision.ChapterID != chapterID {
+		return ErrContentRevisionChapterMismatch
+	}
+	if revision.Status != "APPROVED" {
+		return ErrContentRevisionNotApproved
+	}
+	return nil
 }

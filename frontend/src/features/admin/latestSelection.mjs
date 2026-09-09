@@ -29,6 +29,21 @@ export function canStartChapterGeneration({
   )
 }
 
+export function canCreateNarration({
+  approvedRevision,
+  selectionLoading,
+  actionInProgress,
+  voiceID,
+}) {
+  return Boolean(
+    approvedRevision?.ID
+    && approvedRevision.ContentText?.trim()
+    && voiceID
+    && !selectionLoading
+    && !actionInProgress,
+  )
+}
+
 export function canSynthesizeNarration({
   hasApprovedContent,
   hasNarration,

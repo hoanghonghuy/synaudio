@@ -15,12 +15,12 @@ import type {
   ContentRevision,
   ContentRevisionListResponse,
   CreateStoryInput,
-  NarrationRevision,
   CreativeDecisionListResponse,
   FavoriteListResponse,
   GenreListResponse,
   ListenerLibrary,
   ListeningProgress,
+  NarrationRevision,
   Story,
   StoryListResponse,
   ThreadInactivityResponse,
@@ -476,6 +476,16 @@ export function startChapterGeneration(storyID: string, chapterID: string): Prom
 
 export function getGenerationRun(runID: string): Promise<GenerationRun> {
   return request<GenerationRun>(`/admin/runs/${runID}`)
+}
+
+export function createNarrationRevision(
+  chapterID: string,
+  input: { source_content_revision_id: string; voice_id: string; script: string },
+): Promise<NarrationRevision> {
+  return request<NarrationRevision>(`/admin/chapters/${chapterID}/narration`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export function editContent(chapterID: string, basedOnRevisionID: string, text: string): Promise<ContentRevision> {

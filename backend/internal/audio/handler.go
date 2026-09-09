@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/synaudio/synaudio/backend/internal/generation"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 )
 
@@ -52,7 +53,18 @@ func (h *Handler) createNarration(w http.ResponseWriter, r *http.Request) {
 	}
 	nar, err := h.svc.CreateNarrationRevision(r.Context(), chapterID, req.SourceContentRevisionID, req.VoiceID, req.Script, createdBy)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_NARRATION", "invalid narration")
+		switch {
+		case errors.Is(err, generation.ErrContentRevisionNotFound):
+			writeError(w, http.StatusNotFound, "CONTENT_REVISION_NOT_FOUND", "content revision not found")
+		case errors.Is(err, generation.ErrContentRevisionChapterMismatch):
+			writeError(w, http.StatusBadRequest, "CONTENT_REVISION_CHAPTER_MISMATCH", "content revision does not belong to chapter")
+		case errors.Is(err, generation.ErrContentRevisionNotApproved):
+			writeError(w, http.StatusBadRequest, "CONTENT_REVISION_NOT_APPROVED", "content revision is not approved")
+		case errors.Is(err, ErrApprovedContentAuthorityRequired):
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		default:
+			writeError(w, http.StatusBadRequest, "INVALID_NARRATION", "invalid narration")
+		}
 		return
 	}
 
