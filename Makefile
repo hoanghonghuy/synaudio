@@ -1,4 +1,4 @@
-.PHONY: up down logs migrate-up migrate-down sqlc sqlc-check sqlc-check-regression restore-isolation-regression test backend-test frontend-install frontend-dev api worker tidy
+.PHONY: up down logs migrate-up migrate-down sqlc sqlc-check sqlc-check-regression restore-isolation-regression govulncheck-check govulncheck-check-regression npm-audit-check npm-audit-check-regression test backend-test frontend-install frontend-dev api worker tidy
 
 up:
 	docker compose up -d postgres minio minio-init
@@ -26,6 +26,18 @@ sqlc-check-regression:
 
 restore-isolation-regression:
 	bash ./scripts/test-restore-isolation-gate.sh
+
+govulncheck-check:
+	bash ./scripts/govulncheck-gate.sh
+
+govulncheck-check-regression:
+	bash ./scripts/test-govulncheck-gate.sh
+
+npm-audit-check:
+	bash ./scripts/npm-audit-gate.sh
+
+npm-audit-check-regression:
+	bash ./scripts/test-npm-audit-gate.sh
 
 backend-test:
 	cd backend && go test ./...
