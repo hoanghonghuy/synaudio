@@ -121,7 +121,7 @@ func (s *Service) ExecuteWriterJob(ctx context.Context, job GenerationJob) (Cont
 
 	generated, err := s.textAI.GenerateText(ctx, TextAIInput{Prompt: prompt})
 	if err != nil {
-		return ContentRevision{}, writerTransient("WRITER_PROVIDER_FAILED", err)
+		return ContentRevision{}, wrapWriterProviderError(err)
 	}
 	contentText := strings.TrimSpace(generated.Text)
 	if contentText == "" {
@@ -258,4 +258,28 @@ func writerPermanent(code string, err error) error {
 
 func writerTransient(code string, err error) error {
 	return &ClassifiedError{Class: "TRANSIENT", Code: code, Err: err}
+}
+
+func wrapWriterProviderError(err error) error {
+	var classified *ClassifiedError
+	if errors.As(err, &classified) {
+		code := classified.Code
+		switch code {
+		case "PROVIDER_AUTH":
+			code = "WRITER_PROVIDER_AUTH"
+		case "PROVIDER_CONFIG", "PROVIDER_MALFORMED", "PROVIDER_HTTP_ERROR":
+			code = "WRITER_PROVIDER_CONFIG"
+		case "PROVIDER_RETRY_EXHAUSTED", "PROVIDER_RATE_LIMITED", "PROVIDER_TIMEOUT",
+			"PROVIDER_UNAVAILABLE", "PROVIDER_NETWORK":
+			code = "WRITER_PROVIDER_FAILED"
+		default:
+			if classified.Class == "TRANSIENT" {
+				code = "WRITER_PROVIDER_FAILED"
+			} else {
+				code = "WRITER_PROVIDER_CONFIG"
+			}
+		}
+		return &ClassifiedError{Class: classified.Class, Code: code, Err: err}
+	}
+	return writerTransient("WRITER_PROVIDER_FAILED", err)
 }

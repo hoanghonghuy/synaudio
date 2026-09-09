@@ -241,6 +241,7 @@ func main() {
 	}
 
 	metricRegistry := metrics.NewRegistry()
+	providers.WireMetrics(metricRegistry)
 	adminSecurityHandler := identity.NewAdminSecurityHandler(authService)
 
 	router := httpapi.NewRouter(httpapi.Dependencies{
