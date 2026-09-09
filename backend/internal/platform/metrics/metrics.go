@@ -273,7 +273,7 @@ func boundedAuthRoute(v string) string {
 	switch v {
 	case "POST /login", "POST /register", "POST /refresh", "POST /email/verify", "POST /email/resend",
 		"POST /password/forgot", "POST /password/reset", "POST /mfa/totp/confirm", "POST /mfa/totp/disable",
-		"POST /mfa/challenge", "POST /mfa/verify":
+		"POST /mfa/challenge", "POST /mfa/verify", "POST /re-auth":
 		return v
 	default:
 		return "other"
@@ -282,7 +282,7 @@ func boundedAuthRoute(v string) string {
 
 func boundedAuthDimension(v string) string {
 	switch v {
-	case "client", "account":
+	case "client", "account", "session":
 		return v
 	default:
 		return "other"

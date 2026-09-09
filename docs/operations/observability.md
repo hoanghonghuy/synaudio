@@ -21,7 +21,7 @@ API request metrics use the chi route pattern after routing, not the raw request
 
 - `synaudio_api_requests_total{method,route,status_class}`: API traffic and status-class trend.
 - `synaudio_api_request_duration_seconds_sum{method,route,status_class}`: cumulative request latency. Divide by the matching request count for mean latency.
-- `synaudio_auth_throttled_total{route,dimension}`: auth abuse throttles by bounded route (`POST /login`, `POST /password/forgot`, etc.) and dimension (`client`, `account`).
+- `synaudio_auth_throttled_total{route,dimension}`: auth abuse throttles by bounded route (`POST /login`, `POST /password/forgot`, `POST /re-auth`, etc.) and dimension (`client`, `account`, `session`).
 - `synaudio_worker_heartbeat_unixtime`: last observed worker loop heartbeat.
 - `synaudio_worker_loop_runs_total{loop,outcome}`: success/failure of generation polling, stale reclaim, audit delivery, transactional email delivery and account-deletion reconciliation.
 - `synaudio_worker_loop_items_total{loop,result}`: bounded item outcomes including reclaimed, processed, claimed, delivered, retrying, dead-letter and purged.

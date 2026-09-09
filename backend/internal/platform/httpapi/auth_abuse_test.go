@@ -2,7 +2,9 @@ package httpapi_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +18,15 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
 	"github.com/synaudio/synaudio/backend/internal/platform/metrics"
 )
+
+func bearerTokenWithSession(sessionID string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT","kid":"test"}`))
+	claims := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(
+		`{"iss":"synaudio","sub":"user-1","sid":"%s","iat":1,"exp":9999999999}`,
+		sessionID,
+	)))
+	return header + "." + claims + ".sig"
+}
 
 func TestAuthAbuseAllowsTrafficUnderLimit(t *testing.T) {
 	limiter := httpapi.NewMemoryAbuseLimiter()
@@ -316,6 +327,87 @@ func TestAuthAbuseRestoresRequestBodyForDownstreamHandler(t *testing.T) {
 
 func TestAuthAbuseLimiterInterface(t *testing.T) {
 	var _ httpapi.AbuseLimiter = httpapi.NewMemoryAbuseLimiter()
+}
+
+func TestAuthAbuseBlocksRepeatedInvalidReAuthAttempts(t *testing.T) {
+	policies := httpapi.DefaultAuthAbusePolicies()
+	for i := range policies["POST /re-auth"].Limits {
+		switch policies["POST /re-auth"].Limits[i].Dimension {
+		case httpapi.AbuseDimensionClient:
+			policies["POST /re-auth"].Limits[i].Limit = 2
+		case httpapi.AbuseDimensionSession:
+			policies["POST /re-auth"].Limits[i].Limit = 2
+		}
+	}
+
+	limiter := httpapi.NewMemoryAbuseLimiter()
+	mw := httpapi.NewAuthAbuseMiddleware(policies, limiter, nil, nil)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+
+	body := `{"code":"000000"}`
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/re-auth", strings.NewReader(body))
+		req.RemoteAddr = "192.0.2.60:1234"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+bearerTokenWithSession("sess-reauth-client"))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("request %d: expected downstream 400, got %d", i, rec.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/re-auth", strings.NewReader(body))
+	req.RemoteAddr = "192.0.2.60:1234"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+bearerTokenWithSession("sess-reauth-client"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 from client dimension, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAuthAbuseReAuthSessionDimensionBlocksDistributedAttempts(t *testing.T) {
+	policies := httpapi.DefaultAuthAbusePolicies()
+	for i := range policies["POST /re-auth"].Limits {
+		if policies["POST /re-auth"].Limits[i].Dimension == httpapi.AbuseDimensionSession {
+			policies["POST /re-auth"].Limits[i].Limit = 2
+		}
+	}
+
+	limiter := httpapi.NewMemoryAbuseLimiter()
+	mw := httpapi.NewAuthAbuseMiddleware(policies, limiter, nil, nil)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+
+	body := `{"code":"000000"}`
+	ips := []string{"192.0.2.61:1234", "192.0.2.62:1234"}
+	token := bearerTokenWithSession("sess-reauth-distributed")
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/re-auth", strings.NewReader(body))
+		req.RemoteAddr = ips[i]
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("request %d: expected downstream 400, got %d", i, rec.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/re-auth", strings.NewReader(body))
+	req.RemoteAddr = "192.0.2.99:1234"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 from session dimension, got %d", rec.Code)
+	}
 }
 
 func TestAuthAbuseObserveMetricsOnThrottle(t *testing.T) {

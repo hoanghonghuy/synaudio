@@ -3,8 +3,10 @@ package httpapi
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -20,6 +22,7 @@ import (
 const (
 	AbuseDimensionClient  = "client"
 	AbuseDimensionAccount = "account"
+	AbuseDimensionSession = "session"
 )
 
 // AbuseLimit defines one bounded counter dimension for an auth route.
@@ -119,6 +122,12 @@ func DefaultAuthAbusePolicies() AuthAbusePolicies {
 				{Dimension: AbuseDimensionAccount, Limit: 10, Window: 15 * time.Minute},
 			},
 		},
+		"POST /re-auth": {
+			Limits: []AbuseLimit{
+				{Dimension: AbuseDimensionClient, Limit: 10, Window: 15 * time.Minute},
+				{Dimension: AbuseDimensionSession, Limit: 10, Window: 15 * time.Minute},
+			},
+		},
 	}
 }
 
@@ -156,6 +165,7 @@ func NewAuthAbuseMiddleware(
 			if email != "" {
 				accountKey = abuseKey("account", email)
 			}
+			sessionKey := abuseSessionKeyFromBearer(r)
 
 			for _, limit := range policy.Limits {
 				key := clientKey
@@ -167,6 +177,11 @@ func NewAuthAbuseMiddleware(
 						continue
 					}
 					key = accountKey
+				case AbuseDimensionSession:
+					if sessionKey == "" {
+						continue
+					}
+					key = sessionKey
 				default:
 					continue
 				}
@@ -204,6 +219,51 @@ func readAndRestoreBody(r *http.Request) ([]byte, error) {
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	return body, nil
+}
+
+type bearerAccessClaims struct {
+	Subject   string `json:"sub"`
+	SessionID string `json:"sid"`
+}
+
+func abuseSessionKeyFromBearer(r *http.Request) string {
+	token, err := bearerTokenFromRequest(r)
+	if err != nil {
+		return ""
+	}
+	claims, err := decodeUnverifiedBearerClaims(token)
+	if err != nil || claims.SessionID == "" {
+		return ""
+	}
+	return abuseKey("session", claims.SessionID)
+}
+
+func bearerTokenFromRequest(r *http.Request) (string, error) {
+	header := strings.TrimSpace(r.Header.Get("Authorization"))
+	if header == "" {
+		return "", errors.New("missing authorization")
+	}
+	parts := strings.Fields(header)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+		return "", errors.New("invalid authorization")
+	}
+	return parts[1], nil
+}
+
+func decodeUnverifiedBearerClaims(token string) (bearerAccessClaims, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || parts[1] == "" {
+		return bearerAccessClaims{}, errors.New("invalid token")
+	}
+	claimsBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return bearerAccessClaims{}, err
+	}
+	var claims bearerAccessClaims
+	if err := json.Unmarshal(claimsBytes, &claims); err != nil {
+		return bearerAccessClaims{}, err
+	}
+	return claims, nil
 }
 
 func normalizedEmailFromBody(body []byte) string {

@@ -4,7 +4,7 @@ Production API instances enforce bounded request behavior on sensitive authentic
 
 ## Runtime boundary
 
-- Middleware is mounted on `/api/v1/auth` for login, registration, refresh, email verification/resend, password forgot/reset, and MFA challenge/verification surfaces.
+- Middleware is mounted on `/api/v1/auth` for login, registration, refresh, email verification/resend, password forgot/reset, MFA challenge/verification surfaces, and privileged `POST /re-auth` MFA verification.
 - `/health`, `/ready`, and ordinary authenticated API traffic outside `/api/v1/auth` are not covered by this middleware.
 - Development defaults to an in-memory limiter (`AUTH_ABUSE_BACKEND=memory`). Production requires shared PostgreSQL counters (`AUTH_ABUSE_BACKEND=postgres`) so limits are not multiplied per replica.
 
@@ -21,7 +21,7 @@ The bundled frontend nginx proxy sets `X-Real-IP`, `X-Forwarded-For`, and `X-For
 
 - Non-enumeration routes return `429` with `{"error":{"code":"RATE_LIMITED","message":"too many requests"}}` and a `Retry-After` header in seconds.
 - Password forgot and email resend remain enumeration resistant: throttled requests still return `202 {"status":"accepted"}`.
-- Metrics: `synaudio_auth_throttled_total{route,dimension}` with bounded `route` and `dimension` labels (`client`, `account`).
+- Metrics: `synaudio_auth_throttled_total{route,dimension}` with bounded `route` and `dimension` labels (`client`, `account`, `session`).
 - Structured logs emit `auth request throttled` with masked client IP prefix and request ID only.
 
 ## Deployment dependency for #49
