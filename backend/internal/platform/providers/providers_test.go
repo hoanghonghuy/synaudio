@@ -125,6 +125,67 @@ func TestGeminiTTSUsesConfiguredProviderVoiceNotLogicalVoiceID(t *testing.T) {
 	}
 }
 
+func TestResponseTextRejectsEmptyCandidates(t *testing.T) {
+	_, err := responseText(geminiResponse{})
+	assertMalformedProviderError(t, err)
+}
+
+func TestResponseTextRejectsMissingCandidatesArray(t *testing.T) {
+	_, err := responseText(geminiResponse{Candidates: nil})
+	assertMalformedProviderError(t, err)
+}
+
+func TestGeminiTextGenerateTextRejects2xxEmptyCandidates(t *testing.T) {
+	for _, body := range []string{`{}`, `{"candidates":[]}`} {
+		client := &geminiClient{
+			apiKey: "test-key",
+			model:  "gemini-test",
+			http: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			})},
+		}
+		ai := &geminiAI{client: client}
+		_, err := ai.GenerateText(context.Background(), generation.TextAIInput{Prompt: "hello"})
+		assertMalformedProviderError(t, err)
+	}
+}
+
+func TestGeminiTTSSynthesizeRejects2xxEmptyCandidates(t *testing.T) {
+	for _, body := range []string{`{}`, `{"candidates":[]}`} {
+		client := &geminiClient{
+			apiKey: "test-key",
+			model:  "gemini-tts-test",
+			http: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			})},
+		}
+		tts := &geminiTTS{client: client, voice: "Kore"}
+		_, err := tts.Synthesize(context.Background(), audio.TTSInput{Text: "hello"})
+		assertMalformedProviderError(t, err)
+	}
+}
+
+func assertMalformedProviderError(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected malformed provider error, got nil")
+	}
+	class, code := generation.ClassifyError(err)
+	if class != "PERMANENT" || code != "PROVIDER_MALFORMED" {
+		t.Fatalf("expected PERMANENT/PROVIDER_MALFORMED, got %s/%s (%v)", class, code, err)
+	}
+}
+
 func TestWrapPCMProducesWAVHeader(t *testing.T) {
 	wav := wrapPCM16Mono24kWAV([]byte{0, 0, 1, 0})
 	if len(wav) < 44 {

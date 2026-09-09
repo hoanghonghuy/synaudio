@@ -81,6 +81,7 @@ func main() {
 	}
 
 	metricRegistry := platformmetrics.NewRegistry()
+	providers.WireMetrics(metricRegistry)
 	metricRegistry.WorkerHeartbeat(time.Now())
 	platformmetrics.StartDatabasePoolSampler(ctx, pool, metricRegistry, config.DatabasePoolRoleWorker, 15*time.Second)
 	startWorkerMetrics(ctx, metricRegistry, log)

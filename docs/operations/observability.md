@@ -27,6 +27,8 @@ API request metrics use the chi route pattern after routing, not the raw request
 - `synaudio_worker_loop_items_total{loop,result}`: bounded item outcomes including reclaimed, processed, claimed, delivered, retrying, dead-letter and purged.
 - `synaudio_generation_jobs_total{job_type,outcome,error_class}`: bounded generation outcome/error-class signal.
 - `synaudio_generation_attempt_duration_seconds_sum{job_type,outcome,error_class}`: cumulative measured execution duration for generation attempts.
+- `synaudio_provider_calls_total{provider,operation,outcome,failure_class,retry_decision}`: bounded outbound provider attempt outcomes.
+- `synaudio_provider_call_duration_seconds_sum{provider,operation,outcome,failure_class,retry_decision}`: cumulative outbound provider attempt latency.
 - `synaudio_backlog_depth{queue}`: current authoritative pending/retry backlog depth for `generation`, `audit_outbox`, and `email_delivery`.
 - `synaudio_backlog_oldest_age_seconds{queue}`: age of the oldest current pending/retry item for each bounded queue; zero when the backlog is empty.
 - `synaudio_backlog_dead_letter{queue}`: current dead-letter count where the persistence model supports dead-letter state. Generation currently reports zero because terminal generation failure is represented as `FAILED`, not a dead-letter queue.
@@ -49,7 +51,7 @@ Database pool gauges are sampled from `pgxpool` statistics every 15 seconds on A
 3. **Audit/email dead letter**: alert whenever `synaudio_backlog_dead_letter{queue="audit_outbox"}` or `{queue="email_delivery"}` is non-zero. Investigate the durable outbox before treating delivery as healthy.
 4. **Retry pressure**: correlate backlog gauges with sustained growth of `audit_delivery/retrying`, stale-generation `reclaimed`, or loop `failure` counters. Inspect dependency readiness and provider logs.
 5. **API 5xx trend**: compare `status_class="5xx"` request rate against total request rate per bounded route. Investigate route-specific logs and readiness dependencies.
-6. **Generation/provider failures and latency**: alert on sustained increases in `synaudio_generation_jobs_total{outcome="failure"}` and on abnormal mean generation attempt duration derived from duration sum / matching outcome count. Never add raw provider error text as a metric label; use structured logs for detailed diagnosis.
+6. **Generation/provider failures and latency**: alert on sustained increases in `synaudio_generation_jobs_total{outcome="failure"}` and on abnormal mean generation attempt duration derived from duration sum / matching outcome count. Correlate with `synaudio_provider_calls_total` using bounded `failure_class` and `retry_decision` labels. Never add raw provider error text as a metric label; use structured logs for detailed diagnosis.
 7. **Database pool saturation**: alert when `synaudio_database_pool_acquired_conns` approaches `synaudio_database_pool_max_conns` for a sustained interval, or when `synaudio_database_pool_canceled_acquires_total` / `synaudio_database_pool_empty_acquires_total` grow while latency or worker loop failures increase. Correlate with the connection-budget guidance in `database-pool-capacity.md` before raising per-process `DATABASE_POOL_MAX_CONNS`.
 8. **Readiness failure**: continue to use `/ready` for dependency gating. Metrics are diagnostic telemetry and do not replace readiness.
 
