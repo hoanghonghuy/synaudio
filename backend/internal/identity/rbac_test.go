@@ -87,6 +87,7 @@ func TestRevokeAdminFailsWhenLastAdmin(t *testing.T) {
 	actor, _ := svc.Register(context.Background(), "admin@example.com", "correct password")
 	store.userRoles[actor.ID] = []string{identity.RoleAdmin}
 	store.rolePermissions[identity.RoleAdmin] = []string{identity.PermAdminRoleRevoke}
+	store.mfaMethods[actor.ID] = &identity.MFAMethod{Secret: "secret", Confirmed: true}
 
 	err := svc.RevokeAdmin(context.Background(), actor.ID, actor.ID)
 	if !errors.Is(err, identity.ErrLastAdmin) {

@@ -1,3 +1,6 @@
+# LOCAL DEVELOPMENT ONLY — do not treat this file as a production deployment authority.
+# Production rollout uses the canonical contract in docs/operations/production-deployment.md
+# and the provider-agnostic examples under deploy/.
 services:
   postgres:
     image: postgres:16-alpine
@@ -138,7 +141,7 @@ services:
       dockerfile: Dockerfile
     container_name: synaudio-frontend
     ports:
-      - "80:80"
+      - "8080:8080"
     depends_on:
       - backend-api
     restart: unless-stopped

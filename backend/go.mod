@@ -13,6 +13,9 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/golang-migrate/migrate/v4 v4.18.3 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -26,6 +29,7 @@ require (
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/tinylib/msgp v1.6.1 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
