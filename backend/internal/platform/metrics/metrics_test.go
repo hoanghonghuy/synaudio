@@ -19,6 +19,8 @@ func TestRegistryPrometheusOutputUsesBoundedLabels(t *testing.T) {
 	r.SetBacklog("generation", 3, 42*time.Second, 0)
 	r.SetBacklog("user-controlled-queue", 4, time.Minute, 2)
 	r.WorkerHeartbeat(time.Unix(123, 0))
+	r.ObserveAuthThrottled("POST /login", "client")
+	r.ObserveAuthThrottled("user-controlled-route", "raw-email")
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	res := httptest.NewRecorder()
@@ -36,6 +38,8 @@ func TestRegistryPrometheusOutputUsesBoundedLabels(t *testing.T) {
 		`synaudio_backlog_oldest_age_seconds{queue="generation"} 42`,
 		`synaudio_backlog_dead_letter{queue="generation"} 0`,
 		`synaudio_backlog_depth{queue="other"} 4`,
+		`synaudio_auth_throttled_total{route="POST /login",dimension="client"} 1`,
+		`synaudio_auth_throttled_total{route="other",dimension="other"} 1`,
 	}
 	for _, want := range checks {
 		if !strings.Contains(body, want) {

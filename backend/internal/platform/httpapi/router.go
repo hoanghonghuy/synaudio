@@ -21,6 +21,8 @@ type Dependencies struct {
 	ReadyCheck               func() error
 	DependencyChecks         map[string]func() error
 	Logger                   *slog.Logger
+	TrustedProxy             TrustedProxyConfig
+	AuthAbuse                *AuthAbuse
 	AdminCheck               func(context.Context, *http.Request) (bool, error)
 	AdminPermissionCheck     func(context.Context, *http.Request, string) (bool, error)
 	AdminRecentAuthCheck     func(context.Context, *http.Request) error
@@ -44,7 +46,7 @@ type Dependencies struct {
 func NewRouter(deps Dependencies) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(WithTrustedClientIP(deps.TrustedProxy))
 	r.Use(middleware.Recoverer)
 	r.Use(LimitRequestBody(DefaultMaxRequestBodyBytes))
 	if deps.Logger != nil {
@@ -95,7 +97,11 @@ func NewRouter(deps Dependencies) http.Handler {
 	if deps.AuthHandler != nil {
 		authRouter := chi.NewRouter()
 		mountAuthRoutes(authRouter, deps.AuthHandler, deps.AuthRecentAuthCheck)
-		authHandler := audit.WrapAuthTransactional(authRouter, deps.AuditRecord, deps.AdminActor, deps.AuditBoundary)
+		authHandler := http.Handler(authRouter)
+		if deps.AuthAbuse != nil {
+			authHandler = deps.AuthAbuse.Middleware()(authHandler)
+		}
+		authHandler = audit.WrapAuthTransactional(authHandler, deps.AuditRecord, deps.AdminActor, deps.AuditBoundary)
 		r.Mount("/api/v1/auth", authHandler)
 	}
 
