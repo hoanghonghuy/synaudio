@@ -3,6 +3,7 @@ const CHAPTER_SELECTION_BLOCKING_ACTIONS = new Set([
   'create-narration',
   'synthesize',
   'activate',
+  'publish',
 ])
 
 export function isChapterSelectionBlockingAction(action) {
@@ -88,6 +89,20 @@ export function canActivateAudio({
     && readyAssetBelongsToChapter
     && readyAssetIsInactive
     && readyAssetMatchesLatestNarration
+    && !selectionLoading
+    && !actionInProgress,
+  )
+}
+
+export function canPublishChapter({
+  chapterStatus,
+  publishReadiness,
+  selectionLoading,
+  actionInProgress,
+}) {
+  return Boolean(
+    chapterStatus === 'READY'
+    && publishReadiness?.ready === true
     && !selectionLoading
     && !actionInProgress,
   )

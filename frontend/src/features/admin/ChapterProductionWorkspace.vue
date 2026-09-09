@@ -8,18 +8,22 @@ import {
   getGenerationRun,
   getLatestNarrationRevision,
   getLatestReadyAudioAsset,
+  getPublishReadiness,
   getStoryWorkflowSettings,
   listAdminChapters,
   listChapterReviews,
   listContentRevisions,
+  publishChapter,
   startChapterGeneration,
   synthesizeNarration,
   type GenerationRun,
+  type PublishReadiness,
 } from '../../api/client'
 import type { AudioAsset, Chapter, ChapterReview, ContentRevision, NarrationRevision } from '../../api/types'
 import {
   canActivateAudio,
   canCreateNarration,
+  canPublishChapter,
   canSelectChapter,
   canStartChapterGeneration,
   canSynthesizeNarration,
@@ -37,6 +41,7 @@ const generationRun = ref<GenerationRun | null>(null)
 const latestNarration = ref<NarrationRevision | null>(null)
 const activeAudio = ref<AudioAsset | null>(null)
 const latestReadyAudio = ref<AudioAsset | null>(null)
+const publishReadiness = ref<PublishReadiness | null>(null)
 const preferredVoiceID = ref('')
 const loading = ref(false)
 const selectionLoading = ref(false)
@@ -95,6 +100,13 @@ const mayActivate = computed(() => canActivateAudio({
   actionInProgress: Boolean(action.value),
 }))
 
+const mayPublish = computed(() => canPublishChapter({
+  chapterStatus: activeChapter.value?.Status,
+  publishReadiness: publishReadiness.value,
+  selectionLoading: selectionLoading.value,
+  actionInProgress: Boolean(action.value),
+}))
+
 const narrationStatus = computed(() => {
   if (selectionLoading.value) return 'Đang tải…'
   if (!approvedRevision.value) return 'WAITING — cần approved content trước khi có narration authoritative'
@@ -117,7 +129,27 @@ const audioStatus = computed(() => {
   return 'WAITING — chưa có READY audio durable'
 })
 
-const publishStatus = computed(() => 'BLOCKED — publish wiring chưa có trong slice này; cần active audio + publish authority')
+const publishMissingLabels: Record<string, string> = {
+  approved_content: 'Approved content',
+  approved_content_authority: 'Approved content authority',
+  narration: 'Narration revision',
+  active_audio: 'Active durable audio',
+  active_audio_authority: 'Active audio authority',
+  active_audio_stale: 'Active audio khớp narration mới nhất',
+  story_status: 'Story status cho phép publish',
+  story_publish_authority: 'Story publish authority',
+  publish_authority: 'Publish authority',
+}
+
+const publishStatus = computed(() => {
+  if (selectionLoading.value) return 'Đang tải…'
+  if (activeChapter.value?.Status === 'PUBLISHED') return `PUBLISHED · ${activeChapter.value.ID}`
+  if (activeChapter.value?.Status !== 'READY') return `BLOCKED — chapter phải ở READY trước khi publish (hiện tại: ${activeChapter.value?.Status || '—'})`
+  if (!publishReadiness.value) return 'WAITING — chưa có publish readiness authoritative'
+  if (publishReadiness.value.ready) return 'READY — backend xác nhận đủ điều kiện publish'
+  const missing = publishReadiness.value.missing.map((item) => publishMissingLabels[item] ?? item.replaceAll('_', ' '))
+  return `BLOCKED — thiếu: ${missing.join(', ')}`
+})
 
 async function loadAudioProjections(chapterID: string) {
   const [narration, active] = await Promise.all([
@@ -138,13 +170,15 @@ async function selectChapter(chapter: Chapter) {
   latestNarration.value = null
   activeAudio.value = null
   latestReadyAudio.value = null
+  publishReadiness.value = null
   selectionLoading.value = true
   error.value = ''
   try {
-    const [revisionResponse, reviewResponse, audioState] = await Promise.all([
+    const [revisionResponse, reviewResponse, audioState, readiness] = await Promise.all([
       listContentRevisions(chapter.ID),
       listChapterReviews(chapter.ID),
       loadAudioProjections(chapter.ID),
+      getPublishReadiness(chapter.ID),
     ])
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
 
@@ -157,6 +191,7 @@ async function selectChapter(chapter: Chapter) {
     latestNarration.value = audioState.narration
     activeAudio.value = audioState.active
     latestReadyAudio.value = audioState.ready
+    publishReadiness.value = readiness
   } catch (e) {
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = []
@@ -165,6 +200,7 @@ async function selectChapter(chapter: Chapter) {
     latestNarration.value = null
     activeAudio.value = null
     latestReadyAudio.value = null
+    publishReadiness.value = null
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
   } finally {
     if (mayCommit() && activeChapter.value?.ID === chapter.ID) selectionLoading.value = false
@@ -263,12 +299,34 @@ async function runActivate() {
     const narration = latestNarration.value
     const refreshed = narration ? await getLatestReadyAudioAsset(chapter.ID, narration.ID) : null
     if (activeChapter.value?.ID === chapter.ID) latestReadyAudio.value = refreshed
+    if (activeChapter.value?.ID === chapter.ID) publishReadiness.value = await getPublishReadiness(chapter.ID)
   } catch (e) {
     if (activeChapter.value?.ID === chapter.ID) {
       error.value = e instanceof Error ? e.message : 'Không thể activate READY audio asset.'
     }
   } finally {
-    action.value = ''
+    if (activeChapter.value?.ID === chapter.ID) action.value = ''
+  }
+}
+
+async function runPublish() {
+  const chapter = activeChapter.value
+  if (!chapter || !mayPublish.value) return
+  const requestChapterID = chapter.ID
+  action.value = 'publish'
+  error.value = ''
+  try {
+    const published = await publishChapter(requestChapterID)
+    if (activeChapter.value?.ID !== requestChapterID) return
+    activeChapter.value = published
+    chapters.value = chapters.value.map((item) => (item.ID === published.ID ? published : item))
+    publishReadiness.value = await getPublishReadiness(requestChapterID)
+  } catch (e) {
+    if (activeChapter.value?.ID === requestChapterID) {
+      error.value = e instanceof Error ? e.message : 'Không thể publish chapter.'
+    }
+  } finally {
+    if (activeChapter.value?.ID === requestChapterID) action.value = ''
   }
 }
 
@@ -344,6 +402,9 @@ onMounted(load)
           </button>
           <button type="button" :disabled="!mayActivate" @click="runActivate">
             {{ action === 'activate' ? 'Đang activate…' : 'Activate Audio' }}
+          </button>
+          <button type="button" :disabled="!mayPublish" @click="runPublish">
+            {{ action === 'publish' ? 'Đang publish…' : 'Publish Chapter' }}
           </button>
           <RouterLink :to="`/admin/stories/${storyID}/review`">Mở Content Review</RouterLink>
         </div>

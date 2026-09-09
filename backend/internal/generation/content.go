@@ -154,6 +154,20 @@ func (s *Service) ListContentRevisions(ctx context.Context, chapterID string) ([
 	return s.store.ListContentRevisions(ctx, chapterID)
 }
 
+// HasApprovedContent reports whether the chapter has at least one APPROVED revision.
+func (s *Service) HasApprovedContent(ctx context.Context, chapterID string) (bool, error) {
+	revisions, err := s.store.ListContentRevisions(ctx, chapterID)
+	if err != nil {
+		return false, err
+	}
+	for _, revision := range revisions {
+		if revision.Status == "APPROVED" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // RequireApprovedContentRevision is the narrow read boundary for narration
 // composition. It fails closed unless the revision exists, belongs to the
 // chapter, and is APPROVED at the authoritative persistence boundary.

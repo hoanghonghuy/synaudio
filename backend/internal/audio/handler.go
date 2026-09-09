@@ -229,13 +229,18 @@ func (h *Handler) getLatestReadyAudioAssetForNarration(w http.ResponseWriter, r 
 func (h *Handler) getAudioURL(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
 
-	url, err := h.svc.GetAudioURL(r.Context(), chapterID)
+	url, err := h.svc.GetListenerAudioURL(r.Context(), chapterID)
 	if err != nil {
-		if errors.Is(err, ErrAudioAssetNotFound) {
+		switch {
+		case errors.Is(err, ErrAudioAssetNotFound):
 			writeError(w, http.StatusNotFound, "AUDIO_ASSET_NOT_FOUND", "audio asset not found")
-			return
+		case errors.Is(err, ErrListenerAudioNotEligible):
+			writeError(w, http.StatusNotFound, "AUDIO_NOT_AVAILABLE", "audio not available")
+		case errors.Is(err, ErrListenerAudioGateRequired):
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		default:
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
 	}
 

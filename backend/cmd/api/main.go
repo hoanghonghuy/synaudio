@@ -138,20 +138,7 @@ func main() {
 		log.Error("storage init failed", "error", err)
 		os.Exit(1)
 	}
-	planningStore := pgstore.NewPlanningStore(queries)
-	planningService := planning.NewService(planningStore,
-		planning.WithArchitect(aiProviders.Architect),
-		planning.WithMemoryExtractor(aiProviders.MemoryExtractor),
-	)
-	planningHandler := planning.NewHandler(planningService)
-	planningWorkspaceHandler := planning.NewWorkspaceHandler(planningService)
-
-	storyService := story.NewService(storyStore,
-		story.WithObjectStorage(objStorage),
-		story.WithActivationChecker(planningService),
-	)
-	storyHandler := story.NewHandler(storyService)
-	storyReadinessHandler := story.NewReadinessHandler(storyService)
+	planningStore := pgstore.NewPlanningStore(queries, database)
 
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))
@@ -165,6 +152,30 @@ func main() {
 		audio.WithAudioProcessor(audioProcessor),
 		audio.WithApprovedContentAuthority(generationService),
 	)
+
+	storyService := story.NewService(storyStore, story.WithObjectStorage(objStorage))
+
+	planningService := planning.NewService(planningStore,
+		planning.WithArchitect(aiProviders.Architect),
+		planning.WithMemoryExtractor(aiProviders.MemoryExtractor),
+		planning.WithPublishChecker(planning.NewCompositePublishChecker(
+			planningStore,
+			generationService,
+			audioService,
+			storyService,
+		)),
+	)
+	planningHandler := planning.NewHandler(planningService)
+	planningWorkspaceHandler := planning.NewWorkspaceHandler(planningService)
+
+	storyService = story.NewService(storyStore,
+		story.WithObjectStorage(objStorage),
+		story.WithActivationChecker(planningService),
+	)
+	storyHandler := story.NewHandler(storyService)
+	storyReadinessHandler := story.NewReadinessHandler(storyService)
+
+	audioService.SetListenerAudioGate(planning.NewListenerEligibility(planningStore, storyService))
 	audioHandler := audio.NewHandler(audioService)
 
 	listenerStore := pgstore.NewListenerStore(queries)
