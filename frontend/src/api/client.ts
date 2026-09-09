@@ -1,5 +1,7 @@
 import type {
   ApiError,
+  AdminUserListResponse,
+  AdminUserSummary,
   AuditEvent,
   AuditListResponse,
   AuthUser,
@@ -45,6 +47,12 @@ export type AuthSession = {
   expires_at: string
   user_agent_summary?: string
   safe_ip_metadata?: string
+}
+
+export type AdminUserFilters = {
+  q?: string
+  status?: string
+  limit?: number
 }
 
 export type AuditFilters = {
@@ -230,6 +238,7 @@ function mayRefresh(path: string): boolean {
     path === '/auth/me' ||
     path === '/auth/logout' ||
     path === '/auth/logout-all' ||
+    path === '/auth/re-auth' ||
     path === '/auth/sessions' ||
     path.startsWith('/auth/sessions/') ||
     path.startsWith('/auth/mfa/') ||
@@ -616,3 +625,38 @@ export function listAuditEvents(filters: AuditFilters = {}): Promise<AuditListRe
 }
 
 export function getAuditEvent(eventID: string): Promise<AuditEvent> { return request<AuditEvent>(`/admin/audit/${eventID}`) }
+
+export function listAdminUsers(filters: AdminUserFilters = {}): Promise<AdminUserListResponse> {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') qs.set(key, String(value))
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  return request<AdminUserListResponse>(`/admin/users${suffix}`)
+}
+
+export function getAdminUser(userID: string): Promise<AdminUserSummary> {
+  return request<AdminUserSummary>(`/admin/users/${userID}`)
+}
+
+export function grantAdminRole(userID: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/admin/users/${userID}/roles/admin`, { method: 'POST' })
+}
+
+export function revokeAdminRole(userID: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/admin/users/${userID}/roles/admin`, { method: 'DELETE' })
+}
+
+export function setAdminUserStatus(userID: string, status: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/admin/users/${userID}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  })
+}
+
+export function reAuth(input: { code?: string; recovery_code?: string }): Promise<{ status: string }> {
+  const body: Record<string, string> = {}
+  if (input.code) body.code = input.code
+  if (input.recovery_code) body.recovery_code = input.recovery_code
+  return request<{ status: string }>('/auth/re-auth', { method: 'POST', body: JSON.stringify(body) })
+}
