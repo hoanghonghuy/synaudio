@@ -20,6 +20,14 @@ SELECT id, chapter_id, revision_no, source_content_revision_id, voice_id, script
 FROM narration_revisions
 WHERE id = $1;
 
+-- name: GetLatestNarrationRevision :one
+SELECT id, chapter_id, revision_no, source_content_revision_id, voice_id, script,
+       status, generation_run_id, created_by, created_at
+FROM narration_revisions
+WHERE chapter_id = $1
+ORDER BY revision_no DESC
+LIMIT 1;
+
 -- ============================================================
 -- TTS Segments
 -- ============================================================
@@ -79,6 +87,17 @@ SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage
        generation_run_id, created_at
 FROM audio_assets
 WHERE chapter_id = $1 AND is_active = true;
+
+-- name: GetLatestReadyAudioAsset :one
+SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage_key,
+       mime_type, size_bytes, duration_ms, bitrate_kbps, checksum, is_active,
+       generation_run_id, created_at
+FROM audio_assets
+WHERE chapter_id = $1
+  AND status = 'READY'
+  AND is_active = false
+ORDER BY version_no DESC
+LIMIT 1;
 
 -- name: SetActiveAudioAsset :many
 WITH eligible_target AS (

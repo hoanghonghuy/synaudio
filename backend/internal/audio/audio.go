@@ -10,8 +10,10 @@ import (
 )
 
 var (
-	ErrNarrationNotFound = errors.New("narration revision not found")
-	ErrAudioAssetNotFound = errors.New("audio asset not found")
+	ErrNarrationNotFound         = errors.New("narration revision not found")
+	ErrNarrationChapterMismatch  = errors.New("narration revision does not belong to chapter")
+	ErrAudioAssetNotFound        = errors.New("audio asset not found")
+	ErrReadyAudioAssetNotFound   = errors.New("ready audio asset not found")
 )
 
 // NarrationRevision is a versioned narration script for a chapter.
@@ -47,6 +49,7 @@ type Store interface {
 	NextNarrationRevision(ctx context.Context, chapterID string) (int, error)
 	CreateNarrationRevision(ctx context.Context, r NarrationRevision) (NarrationRevision, error)
 	GetNarrationRevision(ctx context.Context, revisionID string) (NarrationRevision, error)
+	GetLatestNarrationRevision(ctx context.Context, chapterID string) (NarrationRevision, error)
 
 	CreateTTSSegment(ctx context.Context, seg TTSSegment) (TTSSegment, error)
 	GetTTSSegment(ctx context.Context, segmentID string) (TTSSegment, error)
@@ -56,6 +59,7 @@ type Store interface {
 	CreateAudioAsset(ctx context.Context, a AudioAsset) (AudioAsset, error)
 	GetAudioAsset(ctx context.Context, assetID string) (AudioAsset, error)
 	GetActiveAudioAsset(ctx context.Context, chapterID string) (AudioAsset, error)
+	GetLatestReadyAudioAsset(ctx context.Context, chapterID string) (AudioAsset, error)
 	SetActiveAudioAsset(ctx context.Context, chapterID, assetID string) (AudioAsset, error)
 }
 
@@ -202,6 +206,29 @@ func (s *Service) ActivateAudioAsset(ctx context.Context, chapterID, assetID str
 // GetActiveAudioAsset returns the currently active audio asset for a chapter.
 func (s *Service) GetActiveAudioAsset(ctx context.Context, chapterID string) (AudioAsset, error) {
 	return s.store.GetActiveAudioAsset(ctx, chapterID)
+}
+
+// GetLatestNarrationRevision returns the newest narration revision for a chapter.
+func (s *Service) GetLatestNarrationRevision(ctx context.Context, chapterID string) (NarrationRevision, error) {
+	return s.store.GetLatestNarrationRevision(ctx, chapterID)
+}
+
+// GetLatestReadyAudioAsset returns the newest non-active READY audio asset for a chapter.
+func (s *Service) GetLatestReadyAudioAsset(ctx context.Context, chapterID string) (AudioAsset, error) {
+	return s.store.GetLatestReadyAudioAsset(ctx, chapterID)
+}
+
+// SynthesizeNarrationForChapter runs the durable synthesis pipeline only when the
+// narration revision belongs to the chapter named in the admin route.
+func (s *Service) SynthesizeNarrationForChapter(ctx context.Context, chapterID, narrationRevisionID string) (AudioAsset, error) {
+	nar, err := s.store.GetNarrationRevision(ctx, narrationRevisionID)
+	if err != nil {
+		return AudioAsset{}, err
+	}
+	if nar.ChapterID != chapterID {
+		return AudioAsset{}, ErrNarrationChapterMismatch
+	}
+	return s.SynthesizeNarration(ctx, narrationRevisionID)
 }
 
 // PresignExpiry is how long a presigned audio URL stays valid (spec default: 2 hours).

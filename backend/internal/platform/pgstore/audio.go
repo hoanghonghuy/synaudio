@@ -105,6 +105,17 @@ func (s *AudioStore) GetNarrationRevision(ctx context.Context, revisionID string
 	return toNarrationRevision(row), nil
 }
 
+func (s *AudioStore) GetLatestNarrationRevision(ctx context.Context, chapterID string) (audio.NarrationRevision, error) {
+	row, err := s.q.GetLatestNarrationRevision(ctx, toUUID(chapterID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return audio.NarrationRevision{}, audio.ErrNarrationNotFound
+		}
+		return audio.NarrationRevision{}, err
+	}
+	return toNarrationRevision(row), nil
+}
+
 // ============================================================
 // TTS Segments
 // ============================================================
@@ -240,6 +251,17 @@ func (s *AudioStore) GetActiveAudioAsset(ctx context.Context, chapterID string) 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return audio.AudioAsset{}, audio.ErrAudioAssetNotFound
+		}
+		return audio.AudioAsset{}, err
+	}
+	return toAudioAsset(row), nil
+}
+
+func (s *AudioStore) GetLatestReadyAudioAsset(ctx context.Context, chapterID string) (audio.AudioAsset, error) {
+	row, err := s.q.GetLatestReadyAudioAsset(ctx, toUUID(chapterID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return audio.AudioAsset{}, audio.ErrReadyAudioAssetNotFound
 		}
 		return audio.AudioAsset{}, err
 	}

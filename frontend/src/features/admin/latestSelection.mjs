@@ -28,3 +28,35 @@ export function canStartChapterGeneration({
     && !hasGenerationRunProvenance,
   )
 }
+
+export function canSynthesizeNarration({
+  hasApprovedContent,
+  hasNarration,
+  narrationBelongsToChapter,
+  selectionLoading,
+  actionInProgress,
+}) {
+  return Boolean(
+    hasApprovedContent
+    && hasNarration
+    && narrationBelongsToChapter
+    && !selectionLoading
+    && !actionInProgress,
+  )
+}
+
+export function canActivateAudio({
+  hasReadyAsset,
+  readyAssetBelongsToChapter,
+  readyAssetIsInactive,
+  selectionLoading,
+  actionInProgress,
+}) {
+  return Boolean(
+    hasReadyAsset
+    && readyAssetBelongsToChapter
+    && readyAssetIsInactive
+    && !selectionLoading
+    && !actionInProgress,
+  )
+}

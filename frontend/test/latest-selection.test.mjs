@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  canActivateAudio,
   canStartChapterGeneration,
+  canSynthesizeNarration,
   createLatestSelectionGuard,
   generationRunFromContentResponse,
 } from '../src/features/admin/latestSelection.mjs'
@@ -58,5 +60,89 @@ test('generation start is allowed only for an idle planned chapter with no exist
     actionInProgress: false,
     hasGenerationRun: false,
     hasGenerationRunProvenance: false,
+  }), true)
+})
+
+test('synthesize is blocked while authoritative chapter state is loading', () => {
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: true,
+    hasNarration: true,
+    narrationBelongsToChapter: true,
+    selectionLoading: true,
+    actionInProgress: false,
+  }), false)
+})
+
+test('synthesize is blocked without approved content or narration', () => {
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: false,
+    hasNarration: true,
+    narrationBelongsToChapter: true,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: true,
+    hasNarration: false,
+    narrationBelongsToChapter: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('synthesize is blocked when narration does not belong to selected chapter', () => {
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: true,
+    hasNarration: true,
+    narrationBelongsToChapter: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('synthesize is allowed only with approved narration bound to the selected chapter', () => {
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: true,
+    hasNarration: true,
+    narrationBelongsToChapter: true,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), true)
+})
+
+test('activate is blocked while authoritative chapter state is loading', () => {
+  assert.equal(canActivateAudio({
+    hasReadyAsset: true,
+    readyAssetBelongsToChapter: true,
+    readyAssetIsInactive: true,
+    selectionLoading: true,
+    actionInProgress: false,
+  }), false)
+})
+
+test('activate is blocked without an inactive ready asset for the selected chapter', () => {
+  assert.equal(canActivateAudio({
+    hasReadyAsset: false,
+    readyAssetBelongsToChapter: false,
+    readyAssetIsInactive: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+  assert.equal(canActivateAudio({
+    hasReadyAsset: true,
+    readyAssetBelongsToChapter: true,
+    readyAssetIsInactive: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('activate is allowed only for an inactive ready asset owned by the selected chapter', () => {
+  assert.equal(canActivateAudio({
+    hasReadyAsset: true,
+    readyAssetBelongsToChapter: true,
+    readyAssetIsInactive: true,
+    selectionLoading: false,
+    actionInProgress: false,
   }), true)
 })

@@ -43,6 +43,20 @@ func (s *fakeStore) GetNarrationRevision(_ context.Context, revisionID string) (
 	return NarrationRevision{}, ErrNarrationNotFound
 }
 
+func (s *fakeStore) GetLatestNarrationRevision(_ context.Context, chapterID string) (NarrationRevision, error) {
+	rs := s.narrations[chapterID]
+	if len(rs) == 0 {
+		return NarrationRevision{}, ErrNarrationNotFound
+	}
+	latest := rs[0]
+	for _, r := range rs[1:] {
+		if r.RevisionNo > latest.RevisionNo {
+			latest = r
+		}
+	}
+	return latest, nil
+}
+
 func (s *fakeStore) CreateTTSSegment(_ context.Context, seg TTSSegment) (TTSSegment, error) {
 	s.segments[seg.NarrationRevisionID] = append(s.segments[seg.NarrationRevisionID], seg)
 	return seg, nil
@@ -99,6 +113,24 @@ func (s *fakeStore) GetActiveAudioAsset(_ context.Context, chapterID string) (Au
 		}
 	}
 	return AudioAsset{}, ErrAudioAssetNotFound
+}
+
+func (s *fakeStore) GetLatestReadyAudioAsset(_ context.Context, chapterID string) (AudioAsset, error) {
+	var latest AudioAsset
+	found := false
+	for _, a := range s.assets[chapterID] {
+		if a.Status != "READY" || a.IsActive {
+			continue
+		}
+		if !found || a.VersionNo > latest.VersionNo {
+			latest = a
+			found = true
+		}
+	}
+	if !found {
+		return AudioAsset{}, ErrReadyAudioAssetNotFound
+	}
+	return latest, nil
 }
 
 func (s *fakeStore) SetActiveAudioAsset(_ context.Context, chapterID, assetID string) (AudioAsset, error) {

@@ -13,3 +13,19 @@ export function canStartChapterGeneration(input: {
   hasGenerationRun: boolean
   hasGenerationRunProvenance: boolean
 }): boolean
+
+export function canSynthesizeNarration(input: {
+  hasApprovedContent: boolean
+  hasNarration: boolean
+  narrationBelongsToChapter: boolean
+  selectionLoading: boolean
+  actionInProgress: boolean
+}): boolean
+
+export function canActivateAudio(input: {
+  hasReadyAsset: boolean
+  readyAssetBelongsToChapter: boolean
+  readyAssetIsInactive: boolean
+  selectionLoading: boolean
+  actionInProgress: boolean
+}): boolean
