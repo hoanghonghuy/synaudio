@@ -41,6 +41,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	r.Use(LimitRequestBody(DefaultMaxRequestBodyBytes))
 	if deps.Logger != nil {
 		r.Use(WithRequestLogger(deps.Logger))
 	}

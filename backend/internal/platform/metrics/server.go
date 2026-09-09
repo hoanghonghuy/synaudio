@@ -5,7 +5,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/synaudio/synaudio/backend/internal/platform/httpserver"
 )
 
 // NewPrivateServer builds a metrics-only HTTP server and rejects wildcard or
@@ -24,9 +25,10 @@ func NewPrivateServer(addr string, handler http.Handler) (*http.Server, error) {
 	if ip == nil || (!ip.IsLoopback() && !ip.IsPrivate()) {
 		return nil, fmt.Errorf("metrics address must use an explicit loopback/private IP")
 	}
-	return &http.Server{
-		Addr:              addr,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-	}, nil
+	server := &http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}
+	httpserver.ApplyMetricsPolicy(server)
+	return server, nil
 }

@@ -3,6 +3,7 @@ package metrics
 import (
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestNewPrivateServerAcceptsOnlyExplicitPrivateAddresses(t *testing.T) {
@@ -15,6 +16,15 @@ func TestNewPrivateServerAcceptsOnlyExplicitPrivateAddresses(t *testing.T) {
 		}
 		if server == nil || server.Addr != addr {
 			t.Fatalf("expected server for %q", addr)
+		}
+		if server.ReadHeaderTimeout != 5*time.Second || server.ReadTimeout != 15*time.Second {
+			t.Fatalf("expected explicit metrics read timeouts, got header=%v read=%v", server.ReadHeaderTimeout, server.ReadTimeout)
+		}
+		if server.WriteTimeout != 30*time.Second || server.IdleTimeout != 60*time.Second {
+			t.Fatalf("expected explicit metrics write/idle timeouts, got write=%v idle=%v", server.WriteTimeout, server.IdleTimeout)
+		}
+		if server.MaxHeaderBytes != 32*1024 {
+			t.Fatalf("expected bounded metrics MaxHeaderBytes, got %d", server.MaxHeaderBytes)
 		}
 	}
 
