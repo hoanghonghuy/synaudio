@@ -87,6 +87,7 @@ onMounted(load)
     <p class="page-intro">Khởi tạo và theo dõi những câu chuyện đang được xây dựng trong Synaudio.</p>
     <div class="story-row-actions">
       <RouterLink class="control-link" to="/admin/audit">Audit & Provenance</RouterLink>
+      <RouterLink class="control-link" to="/admin/security">Quản lý bảo mật</RouterLink>
       <RouterLink class="control-link" to="/account/security">Bảo mật tài khoản</RouterLink>
     </div>
 
