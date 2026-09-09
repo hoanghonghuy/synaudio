@@ -15,6 +15,7 @@ type fakeStore struct {
 
 	listenerMu                      sync.Mutex
 	onBeforeListenerAudioValidation func(*fakeStore)
+	onBeforeListenerPresign         func(*fakeStore, AudioAsset)
 }
 
 func newFakeStore() *fakeStore {
@@ -35,6 +36,18 @@ func (s *fakeStore) NextNarrationRevision(_ context.Context, chapterID string) (
 func (s *fakeStore) CreateNarrationRevision(_ context.Context, r NarrationRevision) (NarrationRevision, error) {
 	s.narrations[r.ChapterID] = append(s.narrations[r.ChapterID], r)
 	return r, nil
+}
+
+func (s *fakeStore) CreateNarrationRevisionAtomically(ctx context.Context, r NarrationRevision) (NarrationRevision, error) {
+	s.listenerMu.Lock()
+	defer s.listenerMu.Unlock()
+
+	revisionNo, err := s.NextNarrationRevision(ctx, r.ChapterID)
+	if err != nil {
+		return NarrationRevision{}, err
+	}
+	r.RevisionNo = revisionNo
+	return s.CreateNarrationRevision(ctx, r)
 }
 
 func (s *fakeStore) GetNarrationRevision(_ context.Context, revisionID string) (NarrationRevision, error) {
@@ -156,10 +169,24 @@ func (s *fakeStore) SetActiveAudioAssetForLatestNarration(ctx context.Context, c
 	return s.SetActiveAudioAsset(ctx, chapterID, assetID)
 }
 
-func (s *fakeStore) GetListenerEligibleActiveAudio(ctx context.Context, chapterID string) (AudioAsset, error) {
+func (s *fakeStore) IssueListenerEligibleAudioURL(
+	ctx context.Context,
+	chapterID string,
+	issue ListenerEligibleAudioIssuer,
+) (string, error) {
 	s.listenerMu.Lock()
 	defer s.listenerMu.Unlock()
-	return s.getListenerEligibleActiveAudioLocked(ctx, chapterID)
+
+	asset, err := s.getListenerEligibleActiveAudioLocked(ctx, chapterID)
+	if err != nil {
+		return "", err
+	}
+
+	if s.onBeforeListenerPresign != nil {
+		s.onBeforeListenerPresign(s, asset)
+	}
+
+	return issue(ctx, asset)
 }
 
 func (s *fakeStore) getListenerEligibleActiveAudioLocked(ctx context.Context, chapterID string) (AudioAsset, error) {

@@ -61,10 +61,14 @@ func TestSynthesizeSegmentWithoutTTSFails(t *testing.T) {
 }
 
 type fakePresigner struct {
-	url string
+	url          string
+	beforeReturn func()
 }
 
 func (f fakePresigner) PresignedGetObject(_ context.Context, key string, _ time.Duration) (string, error) {
+	if f.beforeReturn != nil {
+		f.beforeReturn()
+	}
 	return f.url + "/" + key, nil
 }
 

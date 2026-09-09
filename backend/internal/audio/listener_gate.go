@@ -36,10 +36,5 @@ func (s *Service) GetListenerAudioURL(ctx context.Context, chapterID string) (st
 		return "", err
 	}
 
-	asset, err := s.getValidatedListenerActiveAudio(ctx, chapterID)
-	if err != nil {
-		return "", err
-	}
-
-	return s.presignAudioAsset(ctx, asset)
+	return s.issueValidatedListenerAudioURL(ctx, chapterID)
 }

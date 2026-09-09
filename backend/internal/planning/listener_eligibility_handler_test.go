@@ -72,38 +72,42 @@ func (s *integrationAudioStore) GetActiveAudioAsset(_ context.Context, chapterID
 	return audio.AudioAsset{}, audio.ErrAudioAssetNotFound
 }
 
-func (s *integrationAudioStore) GetListenerEligibleActiveAudio(ctx context.Context, chapterID string) (audio.AudioAsset, error) {
+func (s *integrationAudioStore) IssueListenerEligibleAudioURL(
+	ctx context.Context,
+	chapterID string,
+	issue audio.ListenerEligibleAudioIssuer,
+) (string, error) {
 	latestBefore, err := s.GetLatestNarrationRevision(ctx, chapterID)
 	if err != nil {
 		if errors.Is(err, audio.ErrNarrationNotFound) {
-			return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+			return "", audio.ErrListenerAudioNotEligible
 		}
-		return audio.AudioAsset{}, err
+		return "", err
 	}
 
 	asset, err := s.GetActiveAudioAsset(ctx, chapterID)
 	if err != nil {
 		if errors.Is(err, audio.ErrAudioAssetNotFound) {
-			return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+			return "", audio.ErrListenerAudioNotEligible
 		}
-		return audio.AudioAsset{}, err
+		return "", err
 	}
 	if asset.Status != "READY" {
-		return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+		return "", audio.ErrListenerAudioNotEligible
 	}
 
 	latestAfter, err := s.GetLatestNarrationRevision(ctx, chapterID)
 	if err != nil {
 		if errors.Is(err, audio.ErrNarrationNotFound) {
-			return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+			return "", audio.ErrListenerAudioNotEligible
 		}
-		return audio.AudioAsset{}, err
+		return "", err
 	}
 	if latestAfter.ID != latestBefore.ID || asset.SourceNarrationRevisionID != latestAfter.ID {
-		return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+		return "", audio.ErrListenerAudioNotEligible
 	}
 
-	return asset, nil
+	return issue(ctx, asset)
 }
 
 func (s *integrationAudioStore) GetLatestReadyAudioAssetForNarration(_ context.Context, _, _ string) (audio.AudioAsset, error) {
