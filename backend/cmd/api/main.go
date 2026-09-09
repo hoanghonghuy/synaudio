@@ -116,6 +116,7 @@ func main() {
 		os.Exit(1)
 	}
 	var authHandler http.Handler = identity.NewAuthHandler(authService)
+	authHandler = identity.WrapSecurityAssurance(authHandler, authService)
 	if emailCfg.Mode != config.EmailModeDisabled {
 		emailStore := pgstore.NewEmailOutboxStore(database)
 		emailService, err := providers.BuildEmail(emailCfg, emailStore)

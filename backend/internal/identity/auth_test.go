@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/synaudio/synaudio/backend/internal/identity"
 )
@@ -50,6 +51,9 @@ type fakeStore struct {
 	mfaMethods         map[string]*identity.MFAMethod
 	userRoles          map[string][]string
 	rolePermissions    map[string][]string
+	recoveryHashes     map[string]bool
+	assuredSessions    map[string]time.Time
+	recentSessions     map[string]time.Time
 	nextID             int
 }
 

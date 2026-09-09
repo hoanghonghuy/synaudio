@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/synaudio/synaudio/backend/internal/audit"
+	"github.com/synaudio/synaudio/backend/internal/identity"
 )
 
 var ErrDependencyUnavailable = errors.New("dependency unavailable")
@@ -168,7 +169,7 @@ func requireAdmin(
 				}
 				allowed, err := check(r.Context(), r)
 				if err != nil {
-					writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+					writePrivilegedError(w, err)
 					return
 				}
 				if !allowed {
@@ -184,7 +185,7 @@ func requireAdmin(
 			}
 			allowed, err := check(r.Context(), r)
 			if err != nil {
-				writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+				writePrivilegedError(w, err)
 				return
 			}
 			if !allowed {
@@ -209,4 +210,17 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 			"message": message,
 		},
 	})
+}
+
+func writePrivilegedError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, identity.ErrMFARequired):
+		writeError(w, http.StatusForbidden, "MFA_REQUIRED", "mfa verification required")
+	case errors.Is(err, identity.ErrEmailVerificationRequired):
+		writeError(w, http.StatusForbidden, "EMAIL_VERIFICATION_REQUIRED", "email verification required")
+	case errors.Is(err, identity.ErrForbidden):
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "admin access required")
+	default:
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+	}
 }
