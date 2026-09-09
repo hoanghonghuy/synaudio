@@ -15,7 +15,7 @@ func (s *libraryTestStore) RemoveFavorite(context.Context, string, string) error
 func (s *libraryTestStore) IsFavorite(context.Context, string, string) (bool, error) { return false, nil }
 func (s *libraryTestStore) ListFavorites(context.Context, string) ([]Favorite, error) { return nil, nil }
 func (s *libraryTestStore) GetProgress(context.Context, string, string) (ListeningProgress, error) { return ListeningProgress{}, ErrProgressNotFound }
-func (s *libraryTestStore) SaveProgress(_ context.Context, p ListeningProgress) (ListeningProgress, error) { return p, nil }
+func (s *libraryTestStore) SaveProgress(_ context.Context, p ListeningProgress, _ int64) (ListeningProgress, error) { return p, nil }
 func (s *libraryTestStore) MarkCompleted(context.Context, string, string) (ListeningProgress, error) { return ListeningProgress{}, nil }
 func (s *libraryTestStore) ApplyRelistenStatus(context.Context, string, string) (int64, error) { return 0, nil }
 func (s *libraryTestStore) ListLibraryProgress(context.Context, string) ([]LibraryItem, error) { return append([]LibraryItem(nil), s.progress...), nil }

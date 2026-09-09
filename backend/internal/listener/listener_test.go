@@ -64,7 +64,7 @@ func TestSaveProgressCreatesAndUpdates(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store)
 
-	p1, err := svc.SaveProgress(context.Background(), "u1", "c1", 5000, "asset-1", "session-1")
+	p1, err := svc.SaveProgress(context.Background(), "u1", "c1", 5000, "asset-1", "session-1", 0)
 	if err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestSaveProgressCreatesAndUpdates(t *testing.T) {
 		t.Fatalf("expected 5000, got %d", p1.PositionMs)
 	}
 
-	p2, err := svc.SaveProgress(context.Background(), "u1", "c1", 10000, "asset-1", "session-1")
+	p2, err := svc.SaveProgress(context.Background(), "u1", "c1", 10000, "asset-1", "session-1", p1.Version)
 	if err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestMarkCompleted(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store)
 
-	_, _ = svc.SaveProgress(context.Background(), "u1", "c1", 5000, "asset-1", "session-1")
+	_, _ = svc.SaveProgress(context.Background(), "u1", "c1", 5000, "asset-1", "session-1", 0)
 
 	completed, err := svc.MarkCompleted(context.Background(), "u1", "c1")
 	if err != nil {

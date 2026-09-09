@@ -6,8 +6,23 @@ import (
 )
 
 var (
-	ErrProgressNotFound = errors.New("listening progress not found")
+	ErrProgressNotFound         = errors.New("listening progress not found")
+	ErrProgressVersionConflict  = errors.New("progress version conflict")
 )
+
+// ProgressVersionConflict reports an optimistic concurrency failure and carries
+// the authoritative server progress for client refresh.
+type ProgressVersionConflict struct {
+	Current ListeningProgress
+}
+
+func (e *ProgressVersionConflict) Error() string {
+	return ErrProgressVersionConflict.Error()
+}
+
+func (e *ProgressVersionConflict) Unwrap() error {
+	return ErrProgressVersionConflict
+}
 
 // Favorite is a user's favorited story.
 type Favorite struct {
@@ -35,7 +50,7 @@ type Store interface {
 	ListFavorites(ctx context.Context, userID string) ([]Favorite, error)
 
 	GetProgress(ctx context.Context, userID, chapterID string) (ListeningProgress, error)
-	SaveProgress(ctx context.Context, p ListeningProgress) (ListeningProgress, error)
+	SaveProgress(ctx context.Context, p ListeningProgress, expectedVersion int64) (ListeningProgress, error)
 	MarkCompleted(ctx context.Context, userID, chapterID string) (ListeningProgress, error)
 
 	ApplyRelistenStatus(ctx context.Context, chapterID, status string) (int64, error)
@@ -70,23 +85,19 @@ func (s *Service) ListFavorites(ctx context.Context, userID string) ([]Favorite,
 	return s.store.ListFavorites(ctx, userID)
 }
 
-// SaveProgress records a playback position update.
-func (s *Service) SaveProgress(ctx context.Context, userID, chapterID string, positionMs int64, audioAssetID, sessionID string) (ListeningProgress, error) {
-	existing, err := s.store.GetProgress(ctx, userID, chapterID)
-	if err != nil && !errors.Is(err, ErrProgressNotFound) {
-		return ListeningProgress{}, err
-	}
-
+// SaveProgress records a playback position update using optimistic concurrency on
+// expectedVersion. Writers that observed version N must pass N; the store commits
+// version N+1 only when the server row is still at N.
+func (s *Service) SaveProgress(ctx context.Context, userID, chapterID string, positionMs int64, audioAssetID, sessionID string, expectedVersion int64) (ListeningProgress, error) {
 	p := ListeningProgress{
 		UserID:                userID,
 		ChapterID:             chapterID,
 		PositionMs:            positionMs,
 		LastAudioAssetID:      audioAssetID,
 		LastPlaybackSessionID: sessionID,
-		Version:               existing.Version + 1,
 	}
 
-	return s.store.SaveProgress(ctx, p)
+	return s.store.SaveProgress(ctx, p, expectedVersion)
 }
 
 // GetProgress returns a user's progress for a chapter.

@@ -10,7 +10,7 @@ func TestApplyRevisionImpactMarksRelistenRequired(t *testing.T) {
 	svc := NewService(store)
 
 	// Seed progress for a user who completed the chapter.
-	_, _ = svc.SaveProgress(context.Background(), "u1", "ch1", 1000, "a1", "s1")
+	_, _ = svc.SaveProgress(context.Background(), "u1", "ch1", 1000, "a1", "s1", 0)
 	_, _ = svc.MarkCompleted(context.Background(), "u1", "ch1")
 
 	affected, err := svc.ApplyRevisionImpact(context.Background(), "ch1", "RELISTEN_REQUIRED")
@@ -34,7 +34,7 @@ func TestApplyRevisionImpactNoRelistenNeeded(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store)
 
-	_, _ = svc.SaveProgress(context.Background(), "u1", "ch1", 1000, "a1", "s1")
+	_, _ = svc.SaveProgress(context.Background(), "u1", "ch1", 1000, "a1", "s1", 0)
 
 	affected, err := svc.ApplyRevisionImpact(context.Background(), "ch1", "NO_RELISTEN_NEEDED")
 	if err != nil {
@@ -54,7 +54,7 @@ func TestApplyRevisionImpactPreservesCompletion(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store)
 
-	_, _ = svc.SaveProgress(context.Background(), "u1", "ch1", 1000, "a1", "s1")
+	_, _ = svc.SaveProgress(context.Background(), "u1", "ch1", 1000, "a1", "s1", 0)
 	_, _ = svc.MarkCompleted(context.Background(), "u1", "ch1")
 
 	_, _ = svc.ApplyRevisionImpact(context.Background(), "ch1", "RELISTEN_REQUIRED")
