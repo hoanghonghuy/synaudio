@@ -133,8 +133,19 @@ type geminiResponse struct {
 	} `json:"error,omitempty"`
 }
 
+func candidateParts(resp geminiResponse) ([]geminiPart, error) {
+	if len(resp.Candidates) == 0 {
+		return nil, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("provider returned no candidates"))
+	}
+	return resp.Candidates[0].Content.Parts, nil
+}
+
 func responseText(resp geminiResponse) (string, error) {
-	for _, part := range resp.Candidates[0].Content.Parts {
+	parts, err := candidateParts(resp)
+	if err != nil {
+		return "", err
+	}
+	for _, part := range parts {
 		if strings.TrimSpace(part.Text) != "" {
 			return strings.TrimSpace(part.Text), nil
 		}
@@ -241,7 +252,11 @@ func (g *geminiTTS) Synthesize(ctx context.Context, in audio.TTSInput) (audio.TT
 		return audio.TTSOutput{}, err
 	}
 
-	for _, part := range resp.Candidates[0].Content.Parts {
+	parts, err := candidateParts(resp)
+	if err != nil {
+		return audio.TTSOutput{}, err
+	}
+	for _, part := range parts {
 		if part.InlineData == nil || part.InlineData.Data == "" {
 			continue
 		}
