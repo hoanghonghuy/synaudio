@@ -25,7 +25,11 @@ SELECT COUNT(*)
 FROM user_roles ur
 JOIN roles r ON r.id = ur.role_id
 JOIN users u ON u.id = ur.user_id
-WHERE r.code = 'ADMIN' AND u.status = 'ACTIVE'
+JOIN user_mfa_methods m ON m.user_id = u.id
+WHERE r.code = 'ADMIN'
+  AND u.status = 'ACTIVE'
+  AND m.confirmed_at IS NOT NULL
+  AND m.disabled_at IS NULL
 `
 
 func (q *Queries) CountActiveAdmins(ctx context.Context) (int64, error) {

@@ -423,6 +423,12 @@ type ListeningProgress struct {
 	RelistenStatus        string             `json:"relisten_status"`
 }
 
+type Migration000017AdminPermissionOwnership struct {
+	PermissionID        pgtype.UUID `json:"permission_id"`
+	PermissionCreated   bool        `json:"permission_created"`
+	AdminBindingCreated bool        `json:"admin_binding_created"`
+}
+
 type NarrationRevision struct {
 	ID                      pgtype.UUID        `json:"id"`
 	ChapterID               pgtype.UUID        `json:"chapter_id"`
