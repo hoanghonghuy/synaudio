@@ -447,6 +447,39 @@ func (q *Queries) GetContentRevision(ctx context.Context, id pgtype.UUID) (Chapt
 	return i, err
 }
 
+const getGenerationJob = `-- name: GetGenerationJob :one
+SELECT id, run_id, job_type, status, priority, available_at, input_fingerprint,
+       attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+       completed_at, last_error_class, last_error_code, output_ref, created_at
+FROM generation_jobs
+WHERE id = $1
+`
+
+func (q *Queries) GetGenerationJob(ctx context.Context, id pgtype.UUID) (GenerationJob, error) {
+	row := q.db.QueryRow(ctx, getGenerationJob, id)
+	var i GenerationJob
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.JobType,
+		&i.Status,
+		&i.Priority,
+		&i.AvailableAt,
+		&i.InputFingerprint,
+		&i.AttemptCount,
+		&i.MaxAttempts,
+		&i.LockedBy,
+		&i.LockExpiresAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastErrorClass,
+		&i.LastErrorCode,
+		&i.OutputRef,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getGenerationRun = `-- name: GetGenerationRun :one
 SELECT id, run_type, story_id, chapter_id, status, waiting_reason, workflow_version,
        priority, base_canon_version_id, context_snapshot_id, requested_by,
@@ -473,6 +506,45 @@ func (q *Queries) GetGenerationRun(ctx context.Context, id pgtype.UUID) (Generat
 		&i.IdempotencyKey,
 		&i.StartedAt,
 		&i.CompletedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLatestWriterJobForChapter = `-- name: GetLatestWriterJobForChapter :one
+SELECT g.id, g.run_id, g.job_type, g.status, g.priority, g.available_at, g.input_fingerprint,
+       g.attempt_count, g.max_attempts, g.locked_by, g.lock_expires_at, g.started_at,
+       g.completed_at, g.last_error_class, g.last_error_code, g.output_ref, g.created_at
+FROM generation_jobs g
+JOIN generation_job_writer_inputs wi ON wi.job_id = g.id
+JOIN generation_runs r ON r.id = g.run_id
+WHERE wi.chapter_id = $1
+  AND g.job_type = 'WRITER'
+  AND r.run_type = 'CHAPTER_GENERATION'
+ORDER BY g.created_at DESC, g.id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestWriterJobForChapter(ctx context.Context, chapterID pgtype.UUID) (GenerationJob, error) {
+	row := q.db.QueryRow(ctx, getLatestWriterJobForChapter, chapterID)
+	var i GenerationJob
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.JobType,
+		&i.Status,
+		&i.Priority,
+		&i.AvailableAt,
+		&i.InputFingerprint,
+		&i.AttemptCount,
+		&i.MaxAttempts,
+		&i.LockedBy,
+		&i.LockExpiresAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastErrorClass,
+		&i.LastErrorCode,
+		&i.OutputRef,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -763,6 +835,47 @@ func (q *Queries) ReclaimStaleJobs(ctx context.Context) ([]GenerationJob, error)
 		return nil, err
 	}
 	return items, nil
+}
+
+const requeueGenerationJob = `-- name: RequeueGenerationJob :one
+UPDATE generation_jobs
+SET status = 'PENDING',
+    completed_at = NULL,
+    locked_by = NULL,
+    lock_expires_at = NULL,
+    available_at = NOW()
+WHERE id = $1
+  AND status = 'FAILED'
+  AND attempt_count < max_attempts
+  AND last_error_class IN ('TRANSIENT', 'INTERRUPTED')
+RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
+          attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+          completed_at, last_error_class, last_error_code, output_ref, created_at
+`
+
+func (q *Queries) RequeueGenerationJob(ctx context.Context, id pgtype.UUID) (GenerationJob, error) {
+	row := q.db.QueryRow(ctx, requeueGenerationJob, id)
+	var i GenerationJob
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.JobType,
+		&i.Status,
+		&i.Priority,
+		&i.AvailableAt,
+		&i.InputFingerprint,
+		&i.AttemptCount,
+		&i.MaxAttempts,
+		&i.LockedBy,
+		&i.LockExpiresAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastErrorClass,
+		&i.LastErrorCode,
+		&i.OutputRef,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updateContentRevisionStatus = `-- name: UpdateContentRevisionStatus :one

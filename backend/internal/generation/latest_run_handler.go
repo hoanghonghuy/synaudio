@@ -64,9 +64,18 @@ func NewLatestRunAwareHandler(base http.Handler, svc *Service) http.Handler {
 			return
 		}
 
+		var generationJob *JobView
+		if jobView, err := svc.ObserveChapterWriterJob(req.Context(), chapterID); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+			return
+		} else if jobView != nil {
+			generationJob = jobView
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{
-			"revisions":      revisions,
-			"generation_run": run,
+			"revisions":       revisions,
+			"generation_run":  run,
+			"generation_job":  generationJob,
 		})
 	})
 

@@ -6,34 +6,6 @@ import (
 	"testing"
 )
 
-func (s *fakeStore) EstablishWriterBatch(_ context.Context, run GenerationRun, jobs []WriterBatchJob) (GenerationRun, error) {
-	stagedInputs := make(map[string]WriterJobInput, len(jobs))
-	stagedJobs := make([]GenerationJob, 0, len(jobs))
-	for _, item := range jobs {
-		input, ok := s.currentWriterPlans[item.ChapterID]
-		if !ok {
-			input = WriterJobInput{
-				ChapterID:          item.ChapterID,
-				PlanRevisionID:     "plan-" + item.ChapterID,
-				Plan:               map[string]any{"chapter_id": item.ChapterID},
-				BaseCanonVersionID: "canon-" + item.ChapterID,
-			}
-		}
-		input.JobID = item.Job.ID
-		input.ChapterID = item.ChapterID
-		input.Plan = clonePlan(input.Plan)
-		stagedInputs[item.Job.ID] = input
-		stagedJobs = append(stagedJobs, item.Job)
-	}
-
-	s.runs[run.StoryID] = append(s.runs[run.StoryID], run)
-	s.jobs[run.ID] = append(s.jobs[run.ID], stagedJobs...)
-	for jobID, input := range stagedInputs {
-		s.writerInputs[jobID] = input
-	}
-	return run, nil
-}
-
 type controlledBatchStore struct {
 	*fakeStore
 	plans  map[string]WriterJobInput

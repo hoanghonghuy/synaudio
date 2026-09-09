@@ -60,10 +60,13 @@ type Store interface {
 	CreateChapterReview(ctx context.Context, r ChapterReview) (ChapterReview, error)
 	ListChapterReviews(ctx context.Context, chapterID string) ([]ChapterReview, error)
 
+	GetGenerationJob(ctx context.Context, jobID string) (GenerationJob, error)
+	GetLatestWriterJobForChapter(ctx context.Context, chapterID string) (GenerationJob, error)
 	ClaimNextJob(ctx context.Context, workerID string) (GenerationJob, error)
 	UpdateJobStatus(ctx context.Context, jobID, status, errorClass, errorCode string) (GenerationJob, error)
 	UpdateJobAttemptStatus(ctx context.Context, attemptID, status, errorClass, errorCode string) (JobAttempt, error)
 	ReclaimStaleJobs(ctx context.Context, olderThan string) ([]GenerationJob, error)
+	RequeueGenerationJob(ctx context.Context, jobID string) (GenerationJob, error)
 	CancelJob(ctx context.Context, jobID string) (GenerationJob, error)
 	ListJobsByRun(ctx context.Context, runID string) ([]GenerationJob, error)
 

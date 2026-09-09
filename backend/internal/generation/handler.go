@@ -34,6 +34,8 @@ func NewHandler(svc *Service, resolveID func(context.Context, *http.Request) (st
 	r.Post("/admin/revisions/{revisionID}/reject", h.rejectContent)
 	r.Post("/admin/runs", h.createRun)
 	r.Get("/admin/runs/{runID}", h.getRun)
+	r.Get("/admin/generation-jobs/{jobID}", h.getJob)
+	r.Post("/admin/generation-jobs/{jobID}/retry", h.retryJob)
 	r.Post("/admin/runs/{runID}/jobs", h.createJob)
 	r.Post("/admin/stories/{storyID}/batch-generate", h.startBatchGeneration)
 	r.Post("/admin/runs/{runID}/mark-stale", h.markDownstreamStale)
@@ -223,7 +225,61 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, run)
+	jobs, err := h.svc.store.ListJobsByRun(r.Context(), runID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	jobViews := make([]JobView, 0, len(jobs))
+	for _, job := range jobs {
+		jobViews = append(jobViews, ObserveJob(job))
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"run":  run,
+		"jobs": jobViews,
+	})
+}
+
+func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobID")
+
+	job, err := h.svc.GetGenerationJob(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, ErrGenerationJobNotFound) {
+			writeError(w, http.StatusNotFound, "JOB_NOT_FOUND", "generation job not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ObserveJob(job))
+}
+
+func (h *Handler) retryJob(w http.ResponseWriter, r *http.Request) {
+	_, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+
+	jobID := chi.URLParam(r, "jobID")
+	view, err := h.svc.RetryGenerationJob(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, ErrGenerationJobNotFound) {
+			writeError(w, http.StatusNotFound, "JOB_NOT_FOUND", "generation job not found")
+			return
+		}
+		if errors.Is(err, ErrJobNotRetryable) {
+			writeError(w, http.StatusConflict, "JOB_NOT_RETRYABLE", "generation job is not retryable")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, view)
 }
 
 type createJobRequest struct {

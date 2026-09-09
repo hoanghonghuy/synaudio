@@ -30,6 +30,26 @@ RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprin
           attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
           completed_at, last_error_class, last_error_code, output_ref, created_at;
 
+-- name: GetGenerationJob :one
+SELECT id, run_id, job_type, status, priority, available_at, input_fingerprint,
+       attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+       completed_at, last_error_class, last_error_code, output_ref, created_at
+FROM generation_jobs
+WHERE id = $1;
+
+-- name: GetLatestWriterJobForChapter :one
+SELECT g.id, g.run_id, g.job_type, g.status, g.priority, g.available_at, g.input_fingerprint,
+       g.attempt_count, g.max_attempts, g.locked_by, g.lock_expires_at, g.started_at,
+       g.completed_at, g.last_error_class, g.last_error_code, g.output_ref, g.created_at
+FROM generation_jobs g
+JOIN generation_job_writer_inputs wi ON wi.job_id = g.id
+JOIN generation_runs r ON r.id = g.run_id
+WHERE wi.chapter_id = $1
+  AND g.job_type = 'WRITER'
+  AND r.run_type = 'CHAPTER_GENERATION'
+ORDER BY g.created_at DESC, g.id DESC
+LIMIT 1;
+
 -- name: ListJobsByRun :many
 SELECT id, run_id, job_type, status, priority, available_at, input_fingerprint,
        attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
@@ -37,6 +57,21 @@ SELECT id, run_id, job_type, status, priority, available_at, input_fingerprint,
 FROM generation_jobs
 WHERE run_id = $1
 ORDER BY created_at;
+
+-- name: RequeueGenerationJob :one
+UPDATE generation_jobs
+SET status = 'PENDING',
+    completed_at = NULL,
+    locked_by = NULL,
+    lock_expires_at = NULL,
+    available_at = NOW()
+WHERE id = $1
+  AND status = 'FAILED'
+  AND attempt_count < max_attempts
+  AND last_error_class IN ('TRANSIENT', 'INTERRUPTED')
+RETURNING id, run_id, job_type, status, priority, available_at, input_fingerprint,
+          attempt_count, max_attempts, locked_by, lock_expires_at, started_at,
+          completed_at, last_error_class, last_error_code, output_ref, created_at;
 
 -- name: NextAttemptNo :one
 SELECT COALESCE(MAX(attempt_no), 0) + 1

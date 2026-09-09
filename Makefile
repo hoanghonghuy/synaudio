@@ -29,6 +29,11 @@ backend-test:
 
 test: backend-test
 
+smoke:
+	cd backend && go test ./internal/planning -run TestSmokeChapterAudioListenPipeline -count=1
+
+test-smoke: smoke
+
 tidy:
 	cd backend && go mod tidy
 
