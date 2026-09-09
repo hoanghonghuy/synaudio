@@ -100,6 +100,11 @@ export const API_OPERATIONS = [
   { method: "GET", path: "/api/v1/admin/stories/{storyID}/workflow-settings", operationId: "getApiV1AdminStoriesStoryidWorkflowSettings" },
   { method: "PUT", path: "/api/v1/admin/stories/{storyID}/workflow-settings", operationId: "putApiV1AdminStoriesStoryidWorkflowSettings" },
   { method: "POST", path: "/api/v1/admin/tts-segments/{segmentID}/synthesize", operationId: "postApiV1AdminTtsSegmentsSegmentidSynthesize" },
+  { method: "GET", path: "/api/v1/admin/users", operationId: "getApiV1AdminUsers" },
+  { method: "GET", path: "/api/v1/admin/users/{userID}", operationId: "getApiV1AdminUsersUserid" },
+  { method: "DELETE", path: "/api/v1/admin/users/{userID}/roles/admin", operationId: "deleteApiV1AdminUsersUseridRolesAdmin" },
+  { method: "POST", path: "/api/v1/admin/users/{userID}/roles/admin", operationId: "postApiV1AdminUsersUseridRolesAdmin" },
+  { method: "PATCH", path: "/api/v1/admin/users/{userID}/status", operationId: "patchApiV1AdminUsersUseridStatus" },
   { method: "POST", path: "/api/v1/auth/account/deletion/cancel", operationId: "postApiV1AuthAccountDeletionCancel" },
   { method: "POST", path: "/api/v1/auth/account/deletion/request", operationId: "postApiV1AuthAccountDeletionRequest" },
   { method: "POST", path: "/api/v1/auth/email/resend", operationId: "postApiV1AuthEmailResend" },
@@ -151,6 +156,23 @@ export interface AdminChapterContentResponse {
   generation_job?: JobViewPascal
   generation_run?: GenerationRunPascal
   revisions: ContentRevisionPascal[]
+}
+
+export interface AdminStatusRequest {
+  status: "ACTIVE" | "SUSPENDED" | "DEACTIVATED"
+}
+
+export interface AdminUserListResponse {
+  users: AdminUserSummary[]
+}
+
+export interface AdminUserSummary {
+  display_name: string
+  email: string
+  email_verified: boolean
+  id: string
+  roles: "GUEST" | "USER" | "ADMIN"[]
+  status: "ACTIVE" | "SUSPENDED" | "DEACTIVATED"
 }
 
 export interface AnalyzeDurationRequest {

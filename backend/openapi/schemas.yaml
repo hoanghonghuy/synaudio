@@ -145,6 +145,30 @@ components:
       required: [secret]
       properties:
         secret: { type: string }
+    AdminUserSummary:
+      type: object
+      required: [id, email, display_name, status, email_verified, roles]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DEACTIVATED] }
+        email_verified: { type: boolean }
+        roles:
+          type: array
+          items: { type: string, enum: [GUEST, USER, ADMIN] }
+    AdminUserListResponse:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUserSummary" }
+    AdminStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DEACTIVATED] }
     MFAConfirmResponse:
       type: object
       required: [recovery_codes]

@@ -162,6 +162,12 @@ var OperationBindings = map[string]OperationBinding{
 	// Audit
 	"getApiV1AdminAudit":         {Response: "AuditEventListResponse", Description: "Audit events"},
 	"getApiV1AdminAuditEventid":  {Response: "AuditEvent", Description: "Audit event detail"},
+	// Admin security directory
+	"getApiV1AdminUsers":                        {Response: "AdminUserListResponse", Description: "Privileged admin user directory"},
+	"getApiV1AdminUsersUserid":                  {Response: "AdminUserSummary", Description: "Privileged admin user detail"},
+	"postApiV1AdminUsersUseridRolesAdmin":       {Response: "StatusResponse", Description: "Admin role granted"},
+	"deleteApiV1AdminUsersUseridRolesAdmin":     {Response: "StatusResponse", Description: "Admin role revoked"},
+	"patchApiV1AdminUsersUseridStatus":          {Request: "AdminStatusRequest", Response: "StatusResponse", Description: "Admin user account status updated"},
 }
 
 // Document is the OpenAPI contract root structure enriched by this package.

@@ -161,6 +161,7 @@ func runtimeRoutes(t *testing.T) map[string]struct{} {
 	sources := []routeSource{
 		{path: "../internal/platform/httpapi/router.go"},
 		{path: "../internal/identity/handler.go", prefix: "/api/v1/auth"},
+		{path: "../internal/identity/admin_handler.go", prefix: "/api/v1"},
 		{path: "../internal/story/handler.go", prefix: "/api/v1"},
 		{path: "../internal/story/readiness_handler.go", prefix: "/api/v1"},
 		{path: "../internal/planning/handler.go", prefix: "/api/v1"},

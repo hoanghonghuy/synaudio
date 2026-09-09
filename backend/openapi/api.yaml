@@ -2541,6 +2541,89 @@ paths:
                     $ref: '#/components/responses/Forbidden'
             security:
                 - bearerAuth: []
+    /api/v1/admin/users:
+        get:
+            operationId: getApiV1AdminUsers
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUserListResponse'
+                    description: Privileged admin user directory
+            security:
+                - bearerAuth: []
+    /api/v1/admin/users/{userID}:
+        get:
+            operationId: getApiV1AdminUsersUserid
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUserSummary'
+                    description: Privileged admin user detail
+            security:
+                - bearerAuth: []
+        parameters:
+            - in: path
+              name: userID
+              required: true
+              schema:
+                type: string
+    /api/v1/admin/users/{userID}/roles/admin:
+        delete:
+            operationId: deleteApiV1AdminUsersUseridRolesAdmin
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StatusResponse'
+                    description: Admin role revoked
+            security:
+                - bearerAuth: []
+        parameters:
+            - in: path
+              name: userID
+              required: true
+              schema:
+                type: string
+        post:
+            operationId: postApiV1AdminUsersUseridRolesAdmin
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StatusResponse'
+                    description: Admin role granted
+            security:
+                - bearerAuth: []
+    /api/v1/admin/users/{userID}/status:
+        parameters:
+            - in: path
+              name: userID
+              required: true
+              schema:
+                type: string
+        patch:
+            operationId: patchApiV1AdminUsersUseridStatus
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AdminStatusRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StatusResponse'
+                    description: Admin user account status updated
+            security:
+                - bearerAuth: []
     /api/v1/auth/account/deletion/cancel:
         post:
             operationId: postApiV1AuthAccountDeletionCancel
@@ -3282,6 +3365,59 @@ components:
                     type: array
             required:
                 - revisions
+            type: object
+        AdminStatusRequest:
+            properties:
+                status:
+                    enum:
+                        - ACTIVE
+                        - SUSPENDED
+                        - DEACTIVATED
+                    type: string
+            required:
+                - status
+            type: object
+        AdminUserListResponse:
+            properties:
+                users:
+                    items:
+                        $ref: '#/components/schemas/AdminUserSummary'
+                    type: array
+            required:
+                - users
+            type: object
+        AdminUserSummary:
+            properties:
+                display_name:
+                    type: string
+                email:
+                    format: email
+                    type: string
+                email_verified:
+                    type: boolean
+                id:
+                    type: string
+                roles:
+                    items:
+                        enum:
+                            - GUEST
+                            - USER
+                            - ADMIN
+                        type: string
+                    type: array
+                status:
+                    enum:
+                        - ACTIVE
+                        - SUSPENDED
+                        - DEACTIVATED
+                    type: string
+            required:
+                - id
+                - email
+                - display_name
+                - status
+                - email_verified
+                - roles
             type: object
         AnalyzeDurationRequest:
             properties:
