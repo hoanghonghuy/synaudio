@@ -66,7 +66,7 @@ Build verification is part of CI (`go build` API/worker, `npm run build` fronten
   - Distinct `WORKER_ID` per concurrent worker replica (`docs/operations/worker-identity.md`)
 - Optional private telemetry binds: `API_METRICS_ADDR`, `WORKER_METRICS_ADDR`, `WORKER_PROBE_ADDR` (loopback/private IP only).
 
-When #50 auth-abuse controls are deployed, production requires `AUTH_ABUSE_BACKEND=postgres` and migration `000017` before API rollout (`docs/operations/auth-abuse-controls.md`).
+When #50 auth-abuse controls are deployed, production requires `AUTH_ABUSE_BACKEND=postgres` and migration `000018` before API rollout (`docs/operations/auth-abuse-controls.md`).
 
 ## Object storage security contract
 

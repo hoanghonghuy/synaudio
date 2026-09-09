@@ -96,18 +96,37 @@ func (s *AuthService) ResolveAdminPermission(ctx context.Context, r *http.Reques
 	return s.Authorize(ctx, principal.UserID, permission)
 }
 
-// RequireRecentAuth enforces the frozen 10-minute high-risk action window.
-// Successful TOTP confirmation refreshes recent_auth_at for the exact session.
+// RequireRecentAuth enforces the frozen high-risk action window for privileged
+// admin mutations. The caller must already satisfy privileged-session assurance.
 func (s *AuthService) RequireRecentAuth(ctx context.Context, r *http.Request) error {
 	principal, _, err := s.privilegedPrincipal(ctx, r)
 	if err != nil {
 		return err
 	}
+	return s.requireSessionRecentAuth(ctx, principal)
+}
+
+// RequireSessionRecentAuth enforces the frozen recent-auth window for
+// consequential /auth security mutations. Authorization is derived only from the
+// authenticated exact session, never from request payload identity fields.
+func (s *AuthService) RequireSessionRecentAuth(ctx context.Context, r *http.Request) error {
+	principal, _, err := s.AuthenticateRequest(ctx, r)
+	if err != nil {
+		return err
+	}
+	return s.requireSessionRecentAuth(ctx, principal)
+}
+
+func (s *AuthService) requireSessionRecentAuth(ctx context.Context, principal Principal) error {
 	securityStore, ok := s.store.(mfaSecurityStore)
 	if !ok {
 		return ErrForbidden
 	}
-	fresh, err := securityStore.HasRecentAuth(ctx, principal.UserID, principal.SessionID, s.settings.Now().UTC().Add(-10*time.Minute))
+	window := s.settings.RecentAuthWindow
+	if window <= 0 {
+		window = 10 * time.Minute
+	}
+	fresh, err := securityStore.HasRecentAuth(ctx, principal.UserID, principal.SessionID, s.settings.Now().UTC().Add(-window))
 	if err != nil {
 		return err
 	}
