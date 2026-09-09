@@ -25,33 +25,22 @@ func (s *IdentityStore) RequestAccountDeletionSafely(ctx context.Context, userID
 	}
 
 	var currentStatus string
-	var targetIsAdmin bool
 	if err := tx.QueryRow(ctx, `
-SELECT u.status,
-       EXISTS (
-           SELECT 1
-             FROM user_roles ur
-             JOIN roles r ON r.id = ur.role_id
-            WHERE ur.user_id = u.id
-              AND r.code = 'ADMIN'
-       )
+SELECT u.status
   FROM users u
  WHERE u.id = $1
  FOR UPDATE
-`, toUUID(userID)).Scan(&currentStatus, &targetIsAdmin); err != nil {
+`, toUUID(userID)).Scan(&currentStatus); err != nil {
 		return identity.ErrUserNotFound
 	}
 
-	if currentStatus == identity.StatusActive && targetIsAdmin {
-		var activeAdmins int
-		if err := tx.QueryRow(ctx, `
-SELECT COUNT(*)
-  FROM user_roles ur
-  JOIN roles r ON r.id = ur.role_id
-  JOIN users u ON u.id = ur.user_id
- WHERE r.code = 'ADMIN'
-   AND u.status = 'ACTIVE'
-`).Scan(&activeAdmins); err != nil {
+	targetIsMfaCapable, err := targetIsMfaCapableActiveAdmin(ctx, tx, userID)
+	if err != nil {
+		return err
+	}
+	if currentStatus == identity.StatusActive && targetIsMfaCapable {
+		activeAdmins, err := countMfaCapableActiveAdmins(ctx, tx)
+		if err != nil {
 			return err
 		}
 		if activeAdmins <= 1 {

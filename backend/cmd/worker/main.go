@@ -50,6 +50,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	acceptingWork := func() bool {
+		return ctx.Err() == nil
+	}
+
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Error("database pool create failed", "error", err)
@@ -76,6 +80,7 @@ func main() {
 	providers.WireMetrics(metricRegistry)
 	metricRegistry.WorkerHeartbeat(time.Now())
 	startWorkerMetrics(ctx, metricRegistry, log)
+	startWorkerProbe(ctx, pool, metricRegistry, acceptingWork, log)
 	startBacklogSampler(ctx, pool, metricRegistry, log)
 
 	jobAudit := func(ctx context.Context, event generation.JobAuditEvent) error {

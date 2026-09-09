@@ -6,6 +6,7 @@ Synaudio exposes Prometheus-compatible metrics without replacing the existing he
 
 - API metrics are disabled unless `API_METRICS_ADDR` is explicitly configured. The metrics server accepts only explicit loopback/private IP binds; wildcard, public-IP and DNS-name binds are rejected.
 - Worker metrics are served on `WORKER_METRICS_ADDR`, defaulting to `127.0.0.1:9091`, through the same private-bind validation.
+- Worker deployment probes use `WORKER_PROBE_ADDR` (default `127.0.0.1:8081`) with `GET /health` (liveness) and `GET /ready` (database + loop heartbeat freshness). See `docs/operations/production-deployment.md`.
 - `/health` and `/ready` remain on the normal product API listener and keep their existing semantics.
 
 Metrics are diagnostic/operator surfaces, not public product endpoints. Production scrape targets should remain on the private monitoring network.
@@ -20,6 +21,7 @@ API request metrics use the chi route pattern after routing, not the raw request
 
 - `synaudio_api_requests_total{method,route,status_class}`: API traffic and status-class trend.
 - `synaudio_api_request_duration_seconds_sum{method,route,status_class}`: cumulative request latency. Divide by the matching request count for mean latency.
+- `synaudio_auth_throttled_total{route,dimension}`: auth abuse throttles by bounded route (`POST /login`, `POST /password/forgot`, `POST /re-auth`, etc.) and dimension (`client`, `account`, `session`).
 - `synaudio_worker_heartbeat_unixtime`: last observed worker loop heartbeat.
 - `synaudio_worker_loop_runs_total{loop,outcome}`: success/failure of generation polling, stale reclaim, audit delivery, transactional email delivery and account-deletion reconciliation.
 - `synaudio_worker_loop_items_total{loop,result}`: bounded item outcomes including reclaimed, processed, claimed, delivered, retrying, dead-letter and purged.

@@ -15,7 +15,8 @@ func newTestHandler() http.Handler {
 	store := newFakeStore()
 	svc := identity.NewAuthService(store)
 	r := chi.NewRouter()
-	r.Mount("/api/v1/auth", identity.NewAuthHandler(svc))
+	authHandler := identity.WrapSecurityAssurance(identity.NewAuthHandler(svc), svc)
+	r.Mount("/api/v1/auth", authHandler)
 	return r
 }
 

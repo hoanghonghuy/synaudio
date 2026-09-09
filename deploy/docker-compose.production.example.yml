@@ -1,0 +1,78 @@
+# Production reference topology — EXAMPLE ONLY.
+# Adapt to your orchestrator. Inject secrets externally. See deploy/README.md and
+# docs/operations/production-deployment.md for the canonical contract.
+
+x-common-production-env: &production-env
+  APP_ENV: production
+  # DATABASE_URL, STORAGE_*, AI/TTS, ACCESS_TOKEN_KEYS, EMAIL_*, WORKER_ID
+  # must be injected from your secret manager — never committed here.
+  HTTP_ADDR: ":8080"
+  WORKER_PROBE_ADDR: "127.0.0.1:8081"
+  WORKER_METRICS_ADDR: "127.0.0.1:9091"
+  AUDIO_PROCESSOR_MODE: ffmpeg
+
+services:
+  migrate:
+    image: migrate/migrate:v4.18.3
+    restart: "no"
+    command:
+      - "-path=/migrations"
+      - "-database"
+      - "${DATABASE_URL}"
+      - "up"
+    volumes:
+      - ../backend/db/migrations:/migrations:ro
+
+  api:
+    image: synaudio-api:${RELEASE:?set RELEASE to an immutable tag or digest}
+    restart: unless-stopped
+    environment:
+      <<: *production-env
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  worker:
+    image: synaudio-api:${RELEASE}
+    restart: unless-stopped
+    command: ["/app/worker"]
+    environment:
+      <<: *production-env
+      WORKER_ID: "${WORKER_ID:?set a unique WORKER_ID per replica}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  web:
+    image: synaudio-frontend:${RELEASE}
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
