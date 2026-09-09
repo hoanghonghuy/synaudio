@@ -444,6 +444,28 @@ func (s *Service) MakePrivate(ctx context.Context, storyID string) (Story, error
 	return s.store.UpdateStory(ctx, st)
 }
 
+// GetStoryVisibility returns the listener-facing story status and visibility.
+func (s *Service) GetStoryVisibility(ctx context.Context, storyID string) (status, visibility string, err error) {
+	st, err := s.store.GetStory(ctx, storyID)
+	if err != nil {
+		return "", "", err
+	}
+	return st.Status, st.Visibility, nil
+}
+
+// CheckStoryPermitsChapterPublish reports missing story-level prerequisites for
+// chapter publish.
+func (s *Service) CheckStoryPermitsChapterPublish(ctx context.Context, storyID string) ([]string, error) {
+	status, _, err := s.GetStoryVisibility(ctx, storyID)
+	if err != nil {
+		return nil, err
+	}
+	if status != StatusActive && status != StatusCompleted {
+		return []string{"story_status"}, nil
+	}
+	return nil, nil
+}
+
 // UploadCover stores a cover image in object storage and links it to the story.
 func (s *Service) UploadCover(ctx context.Context, in UploadCoverInput) (StoryAsset, error) {
 	if _, err := s.store.GetStory(ctx, in.StoryID); err != nil {

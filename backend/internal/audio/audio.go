@@ -105,6 +105,7 @@ type Presigner interface {
 type Service struct {
 	store           Store
 	approvedContent ApprovedContentAuthority
+	listenerGate    ListenerAudioGate
 	tts             TTSProvider
 	objectStorage   ObjectStorage
 	presigner       Presigner

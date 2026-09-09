@@ -6,8 +6,9 @@ import (
 )
 
 var (
-	ErrPublishNotReady = errors.New("chapter not ready to publish")
-	ErrNotPublished    = errors.New("chapter not published")
+	ErrPublishNotReady           = errors.New("chapter not ready to publish")
+	ErrPublishAuthorityRequired  = errors.New("publish authority not configured")
+	ErrNotPublished              = errors.New("chapter not published")
 )
 
 // PublishChecker reports missing dependencies blocking chapter publish.
@@ -25,14 +26,16 @@ func (s *Service) PublishChapter(ctx context.Context, chapterID string) (Chapter
 		return Chapter{}, ErrPublishNotReady
 	}
 
-	if s.publishChecker != nil {
-		missing, err := s.publishChecker.CheckPublishReady(ctx, chapterID)
-		if err != nil {
-			return Chapter{}, err
-		}
-		if len(missing) > 0 {
-			return Chapter{}, ErrPublishNotReady
-		}
+	if s.publishChecker == nil {
+		return Chapter{}, ErrPublishAuthorityRequired
+	}
+
+	missing, err := s.publishChecker.CheckPublishReady(ctx, chapterID)
+	if err != nil {
+		return Chapter{}, err
+	}
+	if len(missing) > 0 {
+		return Chapter{}, ErrPublishNotReady
 	}
 
 	return s.store.UpdateChapterStatus(ctx, chapterID, "PUBLISHED")

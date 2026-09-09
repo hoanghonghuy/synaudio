@@ -40,6 +40,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Get("/admin/stories/{storyID}/context-snapshots", h.listContextSnapshots)
 	r.Post("/admin/canon-branches/{branchID}/commit", h.commitCanon)
 	r.Post("/admin/stories/{storyID}/canon-repair", h.repairCanonData)
+	r.Get("/admin/chapters/{chapterID}/publish-readiness", h.getPublishReadiness)
 	r.Post("/admin/chapters/{chapterID}/publish", h.publishChapter)
 	r.Post("/admin/chapters/{chapterID}/unpublish", h.unpublishChapter)
 	r.Get("/admin/stories/{storyID}/creative-decisions", h.listCreativeDecisions)
@@ -550,16 +551,38 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+func (h *Handler) getPublishReadiness(w http.ResponseWriter, r *http.Request) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	result, err := h.svc.CheckPublishReadiness(r.Context(), chapterID)
+	if err != nil {
+		if errors.Is(err, ErrChapterNotFound) {
+			writeError(w, http.StatusNotFound, "CHAPTER_NOT_FOUND", "chapter not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ready":   result.Ready,
+		"missing": result.Missing,
+	})
+}
+
 func (h *Handler) publishChapter(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
 
 	ch, err := h.svc.PublishChapter(r.Context(), chapterID)
 	if err != nil {
-		if errors.Is(err, ErrPublishNotReady) {
+		switch {
+		case errors.Is(err, ErrPublishNotReady):
 			writeError(w, http.StatusConflict, "PUBLISH_NOT_READY", "chapter not ready to publish")
-			return
+		case errors.Is(err, ErrPublishAuthorityRequired):
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		default:
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
 	}
 

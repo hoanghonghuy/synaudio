@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   canActivateAudio,
   canCreateNarration,
+  canPublishChapter,
   canSelectChapter,
   canStartChapterGeneration,
   canSynthesizeNarration,
@@ -234,4 +235,39 @@ test('in-flight activate blocks chapter switch so mutation target cannot be aban
 test('chapter selection is blocked while other durable chapter mutations are in flight', () => {
   assert.equal(canSelectChapter({ action: 'create-narration' }), false)
   assert.equal(canSelectChapter({ action: 'start-generation' }), false)
+})
+
+test('publish is blocked without backend readiness or while chapter state is loading', () => {
+  assert.equal(canPublishChapter({
+    chapterStatus: 'READY',
+    publishReadiness: { ready: true },
+    selectionLoading: false,
+    actionInProgress: false,
+  }), true)
+
+  assert.equal(canPublishChapter({
+    chapterStatus: 'READY',
+    publishReadiness: { ready: false },
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+
+  assert.equal(canPublishChapter({
+    chapterStatus: 'DRAFT',
+    publishReadiness: { ready: true },
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+
+  assert.equal(canPublishChapter({
+    chapterStatus: 'READY',
+    publishReadiness: { ready: true },
+    selectionLoading: true,
+    actionInProgress: false,
+  }), false)
+})
+
+test('chapter selection is blocked while publish is in flight', () => {
+  assert.equal(isChapterSelectionBlockingAction('publish'), true)
+  assert.equal(canSelectChapter({ action: 'publish' }), false)
 })

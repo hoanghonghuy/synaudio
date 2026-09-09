@@ -118,3 +118,15 @@ func TestUnpublishChapterRejectsWhenNotPublished(t *testing.T) {
 		t.Fatalf("expected ErrNotPublished, got %v", err)
 	}
 }
+
+func TestPublishChapterRejectsWhenPublishCheckerMissing(t *testing.T) {
+	store := newPublishFakeStore()
+	svc := NewService(store)
+
+	ch, _ := svc.CreateChapter(context.Background(), "s1", "Chapter 1", "u1")
+	_, _ = store.UpdateChapterStatus(context.Background(), ch.ID, "READY")
+
+	if _, err := svc.PublishChapter(context.Background(), ch.ID); !errors.Is(err, ErrPublishAuthorityRequired) {
+		t.Fatalf("expected ErrPublishAuthorityRequired, got %v", err)
+	}
+}

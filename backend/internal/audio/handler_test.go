@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -188,4 +189,63 @@ func TestSynthesizeNarrationForChapterRejectsMissingNarration(t *testing.T) {
 	if _, err := svc.SynthesizeNarrationForChapter(t.Context(), "chapter-1", "missing"); !errors.Is(err, ErrNarrationNotFound) {
 		t.Fatalf("expected not found, got %v", err)
 	}
+}
+
+func TestGetAudioURLEndpointRejectsIneligibleChapter(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(
+		store,
+		WithPresigner(fakePresigner{url: "https://cdn.example.com"}),
+		WithListenerAudioGate(&fakeListenerAudioGate{err: ErrListenerAudioNotEligible}),
+	)
+	handler := NewHandler(svc)
+
+	nar, _ := svc.CreateNarrationRevision(t.Context(), "chapter-1", "cr-1", "voice-1", "Hello.", "u1")
+	asset, _ := svc.CreateAudioAsset(t.Context(), "chapter-1", nar.ID, "audio/chapter-1/v1.mp3", "audio/mpeg", 100, 1000, 128)
+	_, _ = svc.ActivateAudioAsset(t.Context(), "chapter-1", asset.ID)
+
+	req := httptest.NewRequest(http.MethodGet, "/chapters/chapter-1/audio-url", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for ineligible chapter, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGetAudioURLEndpointReturnsPresignedURLForEligibleChapter(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(
+		store,
+		WithPresigner(fakePresigner{url: "https://cdn.example.com"}),
+		WithListenerAudioGate(&fakeListenerAudioGate{}),
+	)
+	handler := NewHandler(svc)
+
+	nar, _ := svc.CreateNarrationRevision(t.Context(), "chapter-1", "cr-1", "voice-1", "Hello.", "u1")
+	asset, _ := svc.CreateAudioAsset(t.Context(), "chapter-1", nar.ID, "audio/chapter-1/v1.mp3", "audio/mpeg", 100, 1000, 128)
+	_, _ = svc.ActivateAudioAsset(t.Context(), "chapter-1", asset.ID)
+
+	req := httptest.NewRequest(http.MethodGet, "/chapters/chapter-1/audio-url", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["url"] != "https://cdn.example.com/audio/chapter-1/v1.mp3" {
+		t.Fatalf("unexpected url: %q", body["url"])
+	}
+}
+
+type fakeListenerAudioGate struct {
+	err error
+}
+
+func (f *fakeListenerAudioGate) CheckListenerAudioEligible(ctx context.Context, chapterID string) error {
+	return f.err
 }

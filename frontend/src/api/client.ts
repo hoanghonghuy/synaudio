@@ -142,6 +142,11 @@ export type ActivationReadiness = {
   story_workspace?: StoryWorkspaceSnapshot
 }
 
+export type PublishReadiness = {
+  ready: boolean
+  missing: string[]
+}
+
 export type FoundationResult = {
   bible: StoryBibleVersion
   ending: EndingPlanVersion
@@ -545,6 +550,14 @@ export function synthesizeNarration(chapterID: string, narrationID: string): Pro
 
 export function activateAudioAsset(chapterID: string, assetID: string): Promise<AudioAsset> {
   return request<AudioAsset>(`/admin/chapters/${chapterID}/audio/${assetID}/activate`, { method: 'POST' })
+}
+
+export function getPublishReadiness(chapterID: string): Promise<PublishReadiness> {
+  return request<PublishReadiness>(`/admin/chapters/${chapterID}/publish-readiness`)
+}
+
+export function publishChapter(chapterID: string): Promise<Chapter> {
+  return request<Chapter>(`/admin/chapters/${chapterID}/publish`, { method: 'POST' })
 }
 export function getListenerLibrary(): Promise<ListenerLibrary> { return request<ListenerLibrary>('/me/library') }
 export function listFavorites(): Promise<FavoriteListResponse> { return request<FavoriteListResponse>('/me/favorites') }
