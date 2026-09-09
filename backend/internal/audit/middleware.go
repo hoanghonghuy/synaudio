@@ -223,6 +223,9 @@ var semanticRoutes = map[string]routeDescriptor{
 	"POST /admin/chapters/{chapterID}/audio":                    {"AUDIO_ASSET_CREATED", "AUDIO_ASSET", ""},
 	"POST /admin/chapters/{chapterID}/audio/{assetID}/activate": {"AUDIO_ACTIVATED", "AUDIO_ASSET", "assetID"},
 	"POST /admin/chapters/{chapterID}/revision-impact":          {"LISTENER_REVISION_IMPACT_APPLIED", "CHAPTER", "chapterID"},
+	"POST /admin/users/{userID}/roles/admin":                  {"ADMIN_ROLE_GRANTED", "USER", "userID"},
+	"DELETE /admin/users/{userID}/roles/admin":                {"ADMIN_ROLE_REVOKED", "USER", "userID"},
+	"PATCH /admin/users/{userID}/status":                      {"ADMIN_STATUS_CHANGED", "USER", "userID"},
 }
 
 var authRoutes = map[string]routeDescriptor{
@@ -237,6 +240,7 @@ var authRoutes = map[string]routeDescriptor{
 	"POST /mfa/totp/setup":           {"MFA_SETUP_STARTED", "USER", ""},
 	"POST /mfa/totp/confirm":         {"MFA_ENABLED", "USER", ""},
 	"POST /mfa/totp/disable":         {"MFA_DISABLED", "USER", ""},
+	"POST /re-auth":                  {"PRIVILEGED_REAUTH", "AUTH_SESSION", ""},
 	"POST /account/deletion/request": {"ACCOUNT_DELETION_REQUESTED", "USER", ""},
 	"POST /account/deletion/cancel":  {"ACCOUNT_DELETION_CANCELLED", "USER", ""},
 }

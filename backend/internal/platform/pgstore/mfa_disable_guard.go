@@ -43,16 +43,13 @@ SELECT u.status,
 		return identity.ErrUserNotFound
 	}
 
-	if status == identity.StatusActive && isAdmin {
-		var activeAdmins int
-		if err := tx.QueryRow(ctx, `
-SELECT COUNT(*)
-  FROM user_roles ur
-  JOIN roles r ON r.id = ur.role_id
-  JOIN users u ON u.id = ur.user_id
- WHERE r.code = 'ADMIN'
-   AND u.status = 'ACTIVE'
-`).Scan(&activeAdmins); err != nil {
+	targetIsMfaCapable, err := targetIsMfaCapableActiveAdmin(ctx, tx, userID)
+	if err != nil {
+		return err
+	}
+	if status == identity.StatusActive && isAdmin && targetIsMfaCapable {
+		activeAdmins, err := countMfaCapableActiveAdmins(ctx, tx)
+		if err != nil {
 			return err
 		}
 		if activeAdmins <= 1 {

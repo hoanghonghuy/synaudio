@@ -110,6 +110,7 @@ func main() {
 		AccessTokenTTL:        cfg.AccessTokenTTL,
 		RefreshSessionTTL:     cfg.RefreshSessionTTL,
 		RefreshSessionIdleTTL: cfg.RefreshSessionIdleTTL,
+		RecentAuthWindow:      cfg.RecentAuthWindow,
 	}, accessTokenKeyring.ActiveKeyID, accessTokenKeyring.Keys, accessTokenKeyring.MaxTTL)
 	if err != nil {
 		log.Error("access-token manager init failed", "error", err)
@@ -204,6 +205,8 @@ func main() {
 		dependencyChecks["ffmpeg"] = ffmpegProcessor.Validate
 	}
 
+	adminSecurityHandler := identity.NewAdminSecurityHandler(authService)
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		ReadyCheck: func() error {
 			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -221,7 +224,11 @@ func main() {
 		DependencyChecks:         dependencyChecks,
 		Logger:                   log,
 		AdminCheck:               authService.ResolveAdmin,
+		AdminPermissionCheck:     authService.ResolveAdminPermission,
+		AdminRecentAuthCheck:     authService.RequireRecentAuth,
+		AuthRecentAuthCheck:      authService.RequireSessionRecentAuth,
 		AdminActor:               authService.ResolveUserID,
+		AdminSecurityHandler:     adminSecurityHandler,
 		AuditRecord:              auditService.RecordReliable,
 		AuditBoundary:            auditBoundary,
 		AuthHandler:              authHandler,
