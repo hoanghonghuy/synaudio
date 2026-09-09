@@ -138,7 +138,7 @@ func main() {
 		log.Error("storage init failed", "error", err)
 		os.Exit(1)
 	}
-	planningStore := pgstore.NewPlanningStore(queries)
+	planningStore := pgstore.NewPlanningStore(queries, database)
 
 	generationStore := pgstore.NewGenerationStore(queries)
 	generationService := generation.NewService(generationStore, generation.WithTextAI(aiProviders.TextAI))

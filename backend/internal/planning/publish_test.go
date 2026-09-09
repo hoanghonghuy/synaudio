@@ -3,13 +3,18 @@ package planning
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 )
 
 type publishFakeStore struct {
 	*fakeStore
-	statuses map[string]string
+	statuses                map[string]string
+	publishMu               sync.Mutex
+	onDuringPublishValidate func()
 }
+
+var _ atomicPublishStore = (*publishFakeStore)(nil)
 
 func newPublishFakeStore() *publishFakeStore {
 	return &publishFakeStore{
@@ -41,6 +46,37 @@ func (s *publishFakeStore) GetChapter(ctx context.Context, chapterID string) (Ch
 		}
 	}
 	return Chapter{}, ErrChapterNotFound
+}
+
+func (s *publishFakeStore) PublishChapterAtomically(
+	ctx context.Context,
+	chapterID string,
+	validate ChapterPublishValidator,
+) (Chapter, error) {
+	s.publishMu.Lock()
+	defer s.publishMu.Unlock()
+
+	ch, err := s.GetChapter(ctx, chapterID)
+	if err != nil {
+		return Chapter{}, err
+	}
+	if ch.Status != "READY" {
+		return Chapter{}, ErrPublishNotReady
+	}
+
+	if s.onDuringPublishValidate != nil {
+		s.onDuringPublishValidate()
+	}
+
+	missing, err := validate(ctx)
+	if err != nil {
+		return Chapter{}, err
+	}
+	if len(missing) > 0 {
+		return Chapter{}, ErrPublishNotReady
+	}
+
+	return s.UpdateChapterStatus(ctx, chapterID, "PUBLISHED")
 }
 
 type fakePublishChecker struct {

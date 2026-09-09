@@ -12,8 +12,9 @@ import (
 )
 
 type integrationAudioStore struct {
-	active    audio.AudioAsset
-	hasActive bool
+	active     audio.AudioAsset
+	hasActive  bool
+	narrations []audio.NarrationRevision
 }
 
 func (s *integrationAudioStore) NextNarrationRevision(_ context.Context, _ string) (int, error) {
@@ -28,8 +29,15 @@ func (s *integrationAudioStore) GetNarrationRevision(_ context.Context, revision
 	return audio.NarrationRevision{ID: revisionID}, nil
 }
 
-func (s *integrationAudioStore) GetLatestNarrationRevision(_ context.Context, _ string) (audio.NarrationRevision, error) {
-	return audio.NarrationRevision{}, audio.ErrNarrationNotFound
+func (s *integrationAudioStore) GetLatestNarrationRevision(_ context.Context, chapterID string) (audio.NarrationRevision, error) {
+	if len(s.narrations) == 0 {
+		return audio.NarrationRevision{}, audio.ErrNarrationNotFound
+	}
+	latest := s.narrations[len(s.narrations)-1]
+	if latest.ChapterID != chapterID {
+		return audio.NarrationRevision{}, audio.ErrNarrationNotFound
+	}
+	return latest, nil
 }
 
 func (s *integrationAudioStore) CreateTTSSegment(_ context.Context, seg audio.TTSSegment) (audio.TTSSegment, error) {
@@ -96,12 +104,14 @@ func newListenerAudioHandler(t *testing.T, chapterStatus string, storyStatus, st
 	audioStore := &integrationAudioStore{
 		hasActive: hasActive,
 		active: audio.AudioAsset{
-			ID:         "asset-1",
-			ChapterID:  ch.ID,
-			Status:     "READY",
-			StorageKey: "audio/ch-1/v1.mp3",
-			IsActive:   true,
+			ID:                        "asset-1",
+			ChapterID:                 ch.ID,
+			Status:                    "READY",
+			StorageKey:                "audio/ch-1/v1.mp3",
+			IsActive:                  true,
+			SourceNarrationRevisionID: "nar-1",
 		},
+		narrations: []audio.NarrationRevision{{ID: "nar-1", ChapterID: ch.ID, RevisionNo: 1}},
 	}
 	svc := audio.NewService(audioStore, audio.WithPresigner(integrationPresigner{}))
 	svc.SetListenerAudioGate(gate)
@@ -143,6 +153,43 @@ func TestListenerAudioURLHandlerWithRealEligibilityGateRejectsInactiveStory(t *t
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for inactive story, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertAudioNotAvailableCode(t, rec.Body.Bytes())
+}
+
+func TestListenerAudioURLHandlerWithRealEligibilityGateRejectsStaleActiveAudio(t *testing.T) {
+	store := newPublishFakeStore()
+	ch, err := store.CreateChapter(context.Background(), Chapter{ID: "ch-1", StoryID: "s1", Title: "Chapter 1", Status: "PUBLISHED"})
+	if err != nil {
+		t.Fatalf("create chapter: %v", err)
+	}
+
+	gate := NewListenerEligibility(store, &fakeStoryVisibilityReader{status: "ACTIVE", visibility: "PUBLIC"})
+	audioStore := &integrationAudioStore{
+		hasActive: true,
+		active: audio.AudioAsset{
+			ID:                        "asset-1",
+			ChapterID:                 ch.ID,
+			Status:                    "READY",
+			StorageKey:                "audio/ch-1/v1.mp3",
+			IsActive:                  true,
+			SourceNarrationRevisionID: "nar-1",
+		},
+		narrations: []audio.NarrationRevision{
+			{ID: "nar-1", ChapterID: ch.ID, RevisionNo: 1},
+			{ID: "nar-2", ChapterID: ch.ID, RevisionNo: 2},
+		},
+	}
+	svc := audio.NewService(audioStore, audio.WithPresigner(integrationPresigner{}))
+	svc.SetListenerAudioGate(gate)
+	handler := audio.NewHandler(svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/chapters/"+ch.ID+"/audio-url", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for stale active audio, got %d: %s", rec.Code, rec.Body.String())
 	}
 	assertAudioNotAvailableCode(t, rec.Body.Bytes())
 }

@@ -13,11 +13,18 @@ import (
 
 // PlanningStore implements planning.Store backed by PostgreSQL via sqlc.
 type PlanningStore struct {
-	q *db.Queries
+	q       *db.Queries
+	beginTx transactionBeginner
 }
 
-func NewPlanningStore(q *db.Queries) *PlanningStore {
-	return &PlanningStore{q: q}
+func NewPlanningStore(q *db.Queries, executor ...db.DBTX) *PlanningStore {
+	store := &PlanningStore{q: q}
+	if len(executor) > 0 {
+		if beginner, ok := executor[0].(transactionBeginner); ok {
+			store.beginTx = beginner
+		}
+	}
+	return store
 }
 
 // ============================================================

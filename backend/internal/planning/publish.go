@@ -16,8 +16,30 @@ type PublishChecker interface {
 	CheckPublishReady(ctx context.Context, chapterID string) (missing []string, err error)
 }
 
+// ChapterPublishValidator revalidates publish prerequisites inside the atomic
+// publish boundary.
+type ChapterPublishValidator func(context.Context) ([]string, error)
+
+// atomicPublishStore serializes publish readiness revalidation with narration
+// version allocation on the same chapter-scoped advisory lock.
+type atomicPublishStore interface {
+	PublishChapterAtomically(ctx context.Context, chapterID string, validate ChapterPublishValidator) (Chapter, error)
+}
+
 // PublishChapter transitions a READY chapter to PUBLISHED.
 func (s *Service) PublishChapter(ctx context.Context, chapterID string) (Chapter, error) {
+	if s.publishChecker == nil {
+		return Chapter{}, ErrPublishAuthorityRequired
+	}
+
+	validate := func(ctx context.Context) ([]string, error) {
+		return s.publishChecker.CheckPublishReady(ctx, chapterID)
+	}
+
+	if atomic, ok := s.store.(atomicPublishStore); ok {
+		return atomic.PublishChapterAtomically(ctx, chapterID, validate)
+	}
+
 	ch, err := s.store.GetChapter(ctx, chapterID)
 	if err != nil {
 		return Chapter{}, err
@@ -26,11 +48,7 @@ func (s *Service) PublishChapter(ctx context.Context, chapterID string) (Chapter
 		return Chapter{}, ErrPublishNotReady
 	}
 
-	if s.publishChecker == nil {
-		return Chapter{}, ErrPublishAuthorityRequired
-	}
-
-	missing, err := s.publishChecker.CheckPublishReady(ctx, chapterID)
+	missing, err := validate(ctx)
 	if err != nil {
 		return Chapter{}, err
 	}

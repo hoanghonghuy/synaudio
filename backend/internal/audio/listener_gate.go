@@ -35,5 +35,8 @@ func (s *Service) GetListenerAudioURL(ctx context.Context, chapterID string) (st
 	if err := s.listenerGate.CheckListenerAudioEligible(ctx, chapterID); err != nil {
 		return "", err
 	}
+	if err := s.AssertActiveAudioMatchesLatestNarration(ctx, chapterID); err != nil {
+		return "", err
+	}
 	return s.GetAudioURL(ctx, chapterID)
 }
