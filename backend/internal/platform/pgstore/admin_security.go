@@ -248,31 +248,14 @@ func (s *IdentityStore) RevokeAdminRoleSafely(ctx context.Context, targetID stri
 		return err
 	}
 
-	var targetIsActiveAdmin bool
-	if err := tx.QueryRow(ctx, `
-SELECT EXISTS (
-    SELECT 1
-      FROM users u
-      JOIN user_roles ur ON ur.user_id = u.id
-      JOIN roles r ON r.id = ur.role_id
-     WHERE u.id = $1
-       AND u.status = 'ACTIVE'
-       AND r.code = 'ADMIN'
-)
-`, toUUID(targetID)).Scan(&targetIsActiveAdmin); err != nil {
+	targetIsMfaCapable, err := targetIsMfaCapableActiveAdmin(ctx, tx, targetID)
+	if err != nil {
 		return err
 	}
 
-	if targetIsActiveAdmin {
-		var activeAdmins int
-		if err := tx.QueryRow(ctx, `
-SELECT COUNT(*)
-  FROM user_roles ur
-  JOIN roles r ON r.id = ur.role_id
-  JOIN users u ON u.id = ur.user_id
- WHERE r.code = 'ADMIN'
-   AND u.status = 'ACTIVE'
-`).Scan(&activeAdmins); err != nil {
+	if targetIsMfaCapable {
+		activeAdmins, err := countMfaCapableActiveAdmins(ctx, tx)
+		if err != nil {
 			return err
 		}
 		if activeAdmins <= 1 {

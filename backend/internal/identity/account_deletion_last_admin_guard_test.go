@@ -13,15 +13,8 @@ func (s *fakeStore) RequestAccountDeletionSafely(ctx context.Context, userID str
 	if err != nil {
 		return err
 	}
-	if u.Status == identity.StatusActive && contains(s.userRoles[userID], identity.RoleAdmin) {
-		activeAdmins := 0
-		for id, roles := range s.userRoles {
-			candidate, userErr := s.GetUserByID(ctx, id)
-			if userErr == nil && candidate.Status == identity.StatusActive && contains(roles, identity.RoleAdmin) {
-				activeAdmins++
-			}
-		}
-		if activeAdmins <= 1 {
+	if u.Status == identity.StatusActive && isMfaCapableActiveAdmin(s, userID) {
+		if countMfaCapableActiveAdmins(s) <= 1 {
 			return identity.ErrLastAdmin
 		}
 	}
@@ -40,6 +33,7 @@ func TestAccountDeletionRejectsFinalActiveAdmin(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	store.userRoles[admin.ID] = []string{identity.RoleAdmin}
+	store.mfaMethods[admin.ID] = &identity.MFAMethod{Secret: "secret", Confirmed: true}
 
 	if err := svc.RequestAccountDeletion(context.Background(), admin.ID); !errors.Is(err, identity.ErrLastAdmin) {
 		t.Fatalf("expected ErrLastAdmin, got %v", err)
@@ -61,6 +55,8 @@ func TestAccountDeletionAllowsOneOfTwoActiveAdmins(t *testing.T) {
 	second, _ := svc.Register(context.Background(), "admin2@example.com", "password123")
 	store.userRoles[first.ID] = []string{identity.RoleAdmin}
 	store.userRoles[second.ID] = []string{identity.RoleAdmin}
+	store.mfaMethods[first.ID] = &identity.MFAMethod{Secret: "secret-1", Confirmed: true}
+	store.mfaMethods[second.ID] = &identity.MFAMethod{Secret: "secret-2", Confirmed: true}
 
 	if err := svc.RequestAccountDeletion(context.Background(), first.ID); err != nil {
 		t.Fatalf("request deletion: %v", err)
@@ -71,5 +67,24 @@ func TestAccountDeletionAllowsOneOfTwoActiveAdmins(t *testing.T) {
 	}
 	if !store.sessionsRevoked {
 		t.Fatal("expected sessions revoked with deletion deactivation")
+	}
+}
+
+func TestAccountDeletionRejectsWhenOnlyOtherAdminHasNoMFA(t *testing.T) {
+	store := newFakeStore()
+	svc := identity.NewAuthService(store)
+
+	first, _ := svc.Register(context.Background(), "admin1@example.com", "password123")
+	second, _ := svc.Register(context.Background(), "admin2@example.com", "password123")
+	store.userRoles[first.ID] = []string{identity.RoleAdmin}
+	store.userRoles[second.ID] = []string{identity.RoleAdmin}
+	store.mfaMethods[first.ID] = &identity.MFAMethod{Secret: "secret-1", Confirmed: true}
+
+	if err := svc.RequestAccountDeletion(context.Background(), first.ID); !errors.Is(err, identity.ErrLastAdmin) {
+		t.Fatalf("expected ErrLastAdmin, got %v", err)
+	}
+	got, _ := store.GetUserByID(context.Background(), first.ID)
+	if got.Status != identity.StatusActive {
+		t.Fatalf("sole MFA-capable admin must remain ACTIVE, got %q", got.Status)
 	}
 }

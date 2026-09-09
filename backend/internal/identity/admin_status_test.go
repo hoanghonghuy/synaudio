@@ -22,27 +22,8 @@ func (s *fakeStore) SetUserStatusSafely(_ context.Context, targetID, status stri
 		return identity.ErrUserNotFound
 	}
 
-	isAdmin := false
-	for _, role := range s.userRoles[targetID] {
-		if role == identity.RoleAdmin {
-			isAdmin = true
-			break
-		}
-	}
-	if target.Status == identity.StatusActive && status != identity.StatusActive && isAdmin {
-		activeAdmins := 0
-		for _, user := range s.users {
-			if user.Status != identity.StatusActive {
-				continue
-			}
-			for _, role := range s.userRoles[user.ID] {
-				if role == identity.RoleAdmin {
-					activeAdmins++
-					break
-				}
-			}
-		}
-		if activeAdmins <= 1 {
+	if target.Status == identity.StatusActive && status != identity.StatusActive && isMfaCapableActiveAdmin(s, targetID) {
+		if countMfaCapableActiveAdmins(s) <= 1 {
 			return identity.ErrLastAdmin
 		}
 	}
@@ -58,6 +39,7 @@ func TestAdminStatusChangeRejectsLastActiveAdminSuspension(t *testing.T) {
 	store.users[actor.Email] = actor
 	store.userRoles[actor.ID] = []string{identity.RoleAdmin}
 	store.rolePermissions[identity.RoleAdmin] = []string{identity.PermAdminStatusManage}
+	store.mfaMethods[actor.ID] = &identity.MFAMethod{Secret: "secret", Confirmed: true}
 
 	svc := identity.NewAuthService(store)
 	err := svc.SetUserStatusAsAdmin(context.Background(), actor.ID, actor.ID, identity.StatusSuspended)
@@ -78,6 +60,8 @@ func TestAdminStatusChangeAllowsSuspendingOneOfTwoActiveAdmins(t *testing.T) {
 	store.userRoles[actor.ID] = []string{identity.RoleAdmin}
 	store.userRoles[target.ID] = []string{identity.RoleAdmin}
 	store.rolePermissions[identity.RoleAdmin] = []string{identity.PermAdminStatusManage}
+	store.mfaMethods[actor.ID] = &identity.MFAMethod{Secret: "secret-1", Confirmed: true}
+	store.mfaMethods[target.ID] = &identity.MFAMethod{Secret: "secret-2", Confirmed: true}
 
 	svc := identity.NewAuthService(store)
 	if err := svc.SetUserStatusAsAdmin(context.Background(), actor.ID, target.ID, identity.StatusSuspended); err != nil {
