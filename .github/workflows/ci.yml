@@ -90,10 +90,10 @@ jobs:
       - name: Install
         run: npm ci
       - name: npm dependency vulnerability scan
-        working-directory: ..
+        working-directory: .
         run: bash ./scripts/npm-audit-gate.sh
       - name: Verify npm audit gate regression
-        working-directory: ..
+        working-directory: .
         run: bash ./scripts/test-npm-audit-gate.sh
       - name: Test
         run: npm test
