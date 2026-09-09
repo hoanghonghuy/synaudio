@@ -87,6 +87,14 @@ type AuditEvent struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type AuthAbuseCounter struct {
+	Scope       string             `json:"scope"`
+	KeyHash     string             `json:"key_hash"`
+	WindowStart pgtype.Timestamptz `json:"window_start"`
+	Count       int32              `json:"count"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CanonBranch struct {
 	ID              pgtype.UUID        `json:"id"`
 	StoryID         pgtype.UUID        `json:"story_id"`
@@ -413,6 +421,12 @@ type ListeningProgress struct {
 	LastListenedAt        pgtype.Timestamptz `json:"last_listened_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	RelistenStatus        string             `json:"relisten_status"`
+}
+
+type Migration000017AdminPermissionOwnership struct {
+	PermissionID        pgtype.UUID `json:"permission_id"`
+	PermissionCreated   bool        `json:"permission_created"`
+	AdminBindingCreated bool        `json:"admin_binding_created"`
 }
 
 type NarrationRevision struct {
