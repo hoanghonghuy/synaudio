@@ -16,6 +16,8 @@ func TestRegistryPrometheusOutputUsesBoundedLabels(t *testing.T) {
 	r.AddWorkerItems("audit_delivery", "dead_letter", 2)
 	r.ObserveGenerationJob("WRITER", "failure", "TRANSIENT")
 	r.ObserveGenerationJob("user-controlled-job-type", "failure", "raw provider error with content")
+	r.ObserveProviderCall("gemini", "generate_content", "failure", "TRANSIENT", "scheduled", 150*time.Millisecond)
+	r.ObserveProviderCall("user-controlled-provider", "raw-operation", "failure", "raw provider error", "scheduled", time.Second)
 	r.SetBacklog("generation", 3, 42*time.Second, 0)
 	r.SetBacklog("user-controlled-queue", 4, time.Minute, 2)
 	r.WorkerHeartbeat(time.Unix(123, 0))
@@ -32,6 +34,7 @@ func TestRegistryPrometheusOutputUsesBoundedLabels(t *testing.T) {
 		`synaudio_worker_loop_items_total{loop="audit_delivery",result="dead_letter"} 2`,
 		`synaudio_generation_jobs_total{job_type="WRITER",outcome="failure",error_class="TRANSIENT"} 1`,
 		`synaudio_generation_jobs_total{job_type="UNKNOWN",outcome="failure",error_class="other"} 1`,
+		`synaudio_provider_calls_total{provider="gemini",operation="generate_content",outcome="failure",failure_class="TRANSIENT",retry_decision="scheduled"} 1`,
 		`synaudio_backlog_depth{queue="generation"} 3`,
 		`synaudio_backlog_oldest_age_seconds{queue="generation"} 42`,
 		`synaudio_backlog_dead_letter{queue="generation"} 0`,

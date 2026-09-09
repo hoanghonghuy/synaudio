@@ -73,6 +73,7 @@ func main() {
 	}
 
 	metricRegistry := platformmetrics.NewRegistry()
+	providers.WireMetrics(metricRegistry)
 	metricRegistry.WorkerHeartbeat(time.Now())
 	startWorkerMetrics(ctx, metricRegistry, log)
 	startBacklogSampler(ctx, pool, metricRegistry, log)

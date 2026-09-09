@@ -236,6 +236,7 @@ func main() {
 	})
 
 	metricRegistry := metrics.NewRegistry()
+	providers.WireMetrics(metricRegistry)
 	metricsServer, err := metrics.NewPrivateServer(os.Getenv("API_METRICS_ADDR"), metricRegistry.Handler())
 	if err != nil {
 		log.Error("metrics config invalid", "error", err)

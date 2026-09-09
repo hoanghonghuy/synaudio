@@ -29,6 +29,8 @@ type Registry struct {
 	workerLoopItems    map[string]uint64
 	generationJobs     map[string]uint64
 	generationDuration map[string]float64
+	providerCalls      map[string]uint64
+	providerDuration   map[string]float64
 	backlogs            map[string]backlogGauge
 }
 
@@ -40,6 +42,8 @@ func NewRegistry() *Registry {
 		workerLoopItems:    make(map[string]uint64),
 		generationJobs:     make(map[string]uint64),
 		generationDuration: make(map[string]float64),
+		providerCalls:      make(map[string]uint64),
+		providerDuration:   make(map[string]float64),
 		backlogs:           make(map[string]backlogGauge),
 	}
 }
@@ -131,6 +135,14 @@ func (r *Registry) ObserveGenerationDuration(jobType, outcome, errorClass string
 	r.mu.Unlock()
 }
 
+func (r *Registry) ObserveProviderCall(provider, operation, outcome, failureClass, retryDecision string, duration time.Duration) {
+	key := providerKey(provider, operation, outcome, failureClass, retryDecision)
+	r.mu.Lock()
+	r.providerCalls[key]++
+	r.providerDuration[key] += duration.Seconds()
+	r.mu.Unlock()
+}
+
 func (r *Registry) SetBacklog(queue string, depth int64, oldestAge time.Duration, deadLetter int64) {
 	queue = boundedQueue(queue)
 	if depth < 0 {
@@ -149,6 +161,16 @@ func (r *Registry) SetBacklog(queue string, depth int64, oldestAge time.Duration
 
 func generationKey(jobType, outcome, errorClass string) string {
 	return strings.Join([]string{boundedJobType(jobType), boundedOutcome(outcome), boundedErrorClass(errorClass)}, "\x00")
+}
+
+func providerKey(provider, operation, outcome, failureClass, retryDecision string) string {
+	return strings.Join([]string{
+		boundedProvider(provider),
+		boundedProviderOperation(operation),
+		boundedOutcome(outcome),
+		boundedProviderFailureClass(failureClass),
+		boundedRetryDecision(retryDecision),
+	}, "\x00")
 }
 
 func (r *Registry) Handler() http.Handler {
@@ -206,6 +228,20 @@ func (r *Registry) writePrometheus(w http.ResponseWriter) {
 	for _, key := range sortedKeys(r.generationDuration) {
 		parts := strings.Split(key, "\x00")
 		_, _ = fmt.Fprintf(w, "synaudio_generation_attempt_duration_seconds_sum{job_type=%q,outcome=%q,error_class=%q} %g\n", parts[0], parts[1], parts[2], r.generationDuration[key])
+	}
+
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_provider_calls_total Outbound provider attempts using bounded provider/operation/outcome labels.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_provider_calls_total counter")
+	for _, key := range sortedKeys(r.providerCalls) {
+		parts := strings.Split(key, "\x00")
+		_, _ = fmt.Fprintf(w, "synaudio_provider_calls_total{provider=%q,operation=%q,outcome=%q,failure_class=%q,retry_decision=%q} %d\n", parts[0], parts[1], parts[2], parts[3], parts[4], r.providerCalls[key])
+	}
+
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_provider_call_duration_seconds_sum Cumulative outbound provider attempt duration using bounded labels.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_provider_call_duration_seconds_sum counter")
+	for _, key := range sortedKeys(r.providerDuration) {
+		parts := strings.Split(key, "\x00")
+		_, _ = fmt.Fprintf(w, "synaudio_provider_call_duration_seconds_sum{provider=%q,operation=%q,outcome=%q,failure_class=%q,retry_decision=%q} %g\n", parts[0], parts[1], parts[2], parts[3], parts[4], r.providerDuration[key])
 	}
 
 	_, _ = fmt.Fprintln(w, "# HELP synaudio_backlog_depth Current authoritative pending/retry backlog depth by bounded queue.")
@@ -289,6 +325,42 @@ func boundedErrorClass(v string) string {
 		if v == "" {
 			return "none"
 		}
+		return v
+	default:
+		return "other"
+	}
+}
+
+func boundedProvider(v string) string {
+	switch v {
+	case "gemini":
+		return v
+	default:
+		return "other"
+	}
+}
+
+func boundedProviderOperation(v string) string {
+	switch v {
+	case "generate_content":
+		return v
+	default:
+		return "other"
+	}
+}
+
+func boundedProviderFailureClass(v string) string {
+	switch v {
+	case "none", "TRANSIENT", "PERMANENT":
+		return v
+	default:
+		return "other"
+	}
+}
+
+func boundedRetryDecision(v string) string {
+	switch v {
+	case "none", "scheduled", "exhausted", "not_allowed":
 		return v
 	default:
 		return "other"

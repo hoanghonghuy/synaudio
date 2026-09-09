@@ -201,3 +201,38 @@ func TestWriterProviderFailureIsRetryableAndCreatesNoOutput(t *testing.T) {
 		t.Fatal("provider failure must not record writer output")
 	}
 }
+
+func TestWriterPermanentProviderFailureIsNotRetryable(t *testing.T) {
+	store := newFakeStore()
+	store.currentWriterPlans["c1"] = WriterJobInput{
+		ChapterID:      "c1",
+		PlanRevisionID: "plan-v1",
+		Plan:           map[string]any{"beat": "one"},
+	}
+	_, _ = store.CreateGenerationRun(context.Background(), GenerationRun{
+		ID:        "run-1",
+		RunType:   "CHAPTER_GENERATION",
+		StoryID:   "story-1",
+		ChapterID: "c1",
+		Status:    "PENDING",
+	})
+
+	provider := &captureTextAI{err: &ClassifiedError{Class: "PERMANENT", Code: "PROVIDER_AUTH", Err: errors.New("provider authentication failed")}}
+	svc := NewService(store, WithTextAI(provider))
+	job, err := svc.CreateGenerationJob(context.Background(), "run-1", "WRITER", 3)
+	if err != nil {
+		t.Fatalf("create writer job: %v", err)
+	}
+
+	_, err = svc.ExecuteWriterJob(context.Background(), job)
+	if err == nil {
+		t.Fatal("expected provider failure")
+	}
+	class, code := ClassifyError(err)
+	if class != "PERMANENT" || code != "WRITER_PROVIDER_AUTH" {
+		t.Fatalf("expected PERMANENT/WRITER_PROVIDER_AUTH, got %s/%s (%v)", class, code, err)
+	}
+	if shouldRetry(class, 1, 3) {
+		t.Fatal("permanent provider auth failure must not be retryable")
+	}
+}
