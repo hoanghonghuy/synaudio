@@ -8,8 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/synaudio/synaudio/backend/internal/audio"
 	"github.com/synaudio/synaudio/backend/internal/audit"
 	"github.com/synaudio/synaudio/backend/internal/generation"
@@ -81,10 +79,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	poolSettings, err := config.LoadDatabasePoolSettings(cfg.AppEnv)
+	if err != nil {
+		log.Error("database pool config failed", "error", err)
+		os.Exit(1)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL, poolSettings)
 	if err != nil {
 		log.Error("database pool create failed", "error", err)
 		os.Exit(1)
@@ -237,6 +241,7 @@ func main() {
 	})
 
 	metricRegistry := metrics.NewRegistry()
+	metrics.StartDatabasePoolSampler(ctx, pool, metricRegistry, config.DatabasePoolRoleAPI, 15*time.Second)
 	metricsServer, err := metrics.NewPrivateServer(os.Getenv("API_METRICS_ADDR"), metricRegistry.Handler())
 	if err != nil {
 		log.Error("metrics config invalid", "error", err)

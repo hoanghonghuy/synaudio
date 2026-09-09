@@ -29,7 +29,8 @@ type Registry struct {
 	workerLoopItems    map[string]uint64
 	generationJobs     map[string]uint64
 	generationDuration map[string]float64
-	backlogs            map[string]backlogGauge
+	backlogs           map[string]backlogGauge
+	databasePools      map[string]databasePoolSnapshot
 }
 
 func NewRegistry() *Registry {
@@ -40,7 +41,8 @@ func NewRegistry() *Registry {
 		workerLoopItems:    make(map[string]uint64),
 		generationJobs:     make(map[string]uint64),
 		generationDuration: make(map[string]float64),
-		backlogs:           make(map[string]backlogGauge),
+		backlogs:      make(map[string]backlogGauge),
+		databasePools: make(map[string]databasePoolSnapshot),
 	}
 }
 
@@ -232,6 +234,40 @@ func (r *Registry) writePrometheus(w http.ResponseWriter) {
 		_, _ = fmt.Fprintf(w, "synaudio_backlog_oldest_age_seconds{queue=%q} %g\n", queue, gauge.oldestAgeSeconds)
 		_, _ = fmt.Fprintf(w, "synaudio_backlog_dead_letter{queue=%q} %d\n", queue, gauge.deadLetter)
 	}
+
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_database_pool_acquired_conns Current acquired PostgreSQL pool connections by bounded process role.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_database_pool_acquired_conns gauge")
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_database_pool_idle_conns Current idle PostgreSQL pool connections by bounded process role.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_database_pool_idle_conns gauge")
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_database_pool_total_conns Current total PostgreSQL pool connections by bounded process role.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_database_pool_total_conns gauge")
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_database_pool_max_conns Configured PostgreSQL pool maximum by bounded process role.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_database_pool_max_conns gauge")
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_database_pool_canceled_acquires_total Cumulative canceled pool acquire attempts by bounded process role.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_database_pool_canceled_acquires_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_database_pool_empty_acquires_total Cumulative pool acquires that waited for a connection by bounded process role.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_database_pool_empty_acquires_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_database_pool_empty_acquire_wait_seconds_sum Cumulative wait time for empty pool acquires by bounded process role.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_database_pool_empty_acquire_wait_seconds_sum counter")
+	for _, role := range sortedKeysString(r.databasePools) {
+		snapshot := r.databasePools[role]
+		_, _ = fmt.Fprintf(w, "synaudio_database_pool_acquired_conns{role=%q} %d\n", role, snapshot.acquiredConns)
+		_, _ = fmt.Fprintf(w, "synaudio_database_pool_idle_conns{role=%q} %d\n", role, snapshot.idleConns)
+		_, _ = fmt.Fprintf(w, "synaudio_database_pool_total_conns{role=%q} %d\n", role, snapshot.totalConns)
+		_, _ = fmt.Fprintf(w, "synaudio_database_pool_max_conns{role=%q} %d\n", role, snapshot.maxConns)
+		_, _ = fmt.Fprintf(w, "synaudio_database_pool_canceled_acquires_total{role=%q} %d\n", role, snapshot.canceledAcquires)
+		_, _ = fmt.Fprintf(w, "synaudio_database_pool_empty_acquires_total{role=%q} %d\n", role, snapshot.emptyAcquires)
+		_, _ = fmt.Fprintf(w, "synaudio_database_pool_empty_acquire_wait_seconds_sum{role=%q} %g\n", role, snapshot.emptyAcquireWaitSec)
+	}
+}
+
+func sortedKeysString[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func boundedMethod(v string) string {
