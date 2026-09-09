@@ -116,3 +116,28 @@ WHERE aa.chapter_id = $1
 RETURNING aa.id, aa.chapter_id, aa.version_no, aa.source_narration_revision_id, aa.status, aa.storage_key,
           aa.mime_type, aa.size_bytes, aa.duration_ms, aa.bitrate_kbps, aa.checksum, aa.is_active,
           aa.generation_run_id, aa.created_at;
+
+-- name: SetActiveAudioAssetForLatestNarration :many
+WITH latest_narration AS (
+    SELECT nr.id
+    FROM narration_revisions AS nr
+    WHERE nr.chapter_id = $1
+    ORDER BY nr.revision_no DESC
+    LIMIT 1
+),
+eligible_target AS (
+    SELECT aa.id
+    FROM audio_assets AS aa
+    INNER JOIN latest_narration AS ln ON aa.source_narration_revision_id = ln.id
+    WHERE aa.chapter_id = $1
+      AND aa.id = $2
+      AND aa.status = 'READY'
+    FOR UPDATE OF aa
+)
+UPDATE audio_assets AS aa
+SET is_active = (aa.id = $2)
+WHERE aa.chapter_id = $1
+  AND EXISTS (SELECT 1 FROM eligible_target)
+RETURNING aa.id, aa.chapter_id, aa.version_no, aa.source_narration_revision_id, aa.status, aa.storage_key,
+          aa.mime_type, aa.size_bytes, aa.duration_ms, aa.bitrate_kbps, aa.checksum, aa.is_active,
+          aa.generation_run_id, aa.created_at;

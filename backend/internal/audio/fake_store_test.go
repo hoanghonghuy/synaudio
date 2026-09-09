@@ -133,6 +133,24 @@ func (s *fakeStore) GetLatestReadyAudioAssetForNarration(_ context.Context, chap
 	return latest, nil
 }
 
+func (s *fakeStore) SetActiveAudioAssetForLatestNarration(ctx context.Context, chapterID, assetID string) (AudioAsset, error) {
+	latest, err := s.GetLatestNarrationRevision(ctx, chapterID)
+	if err != nil {
+		return AudioAsset{}, err
+	}
+	asset, err := s.GetAudioAsset(ctx, assetID)
+	if err != nil {
+		return AudioAsset{}, err
+	}
+	if asset.ChapterID != chapterID || asset.Status != "READY" {
+		return AudioAsset{}, ErrAudioAssetNotFound
+	}
+	if asset.SourceNarrationRevisionID != latest.ID {
+		return AudioAsset{}, ErrAudioAssetStaleForNarration
+	}
+	return s.SetActiveAudioAsset(ctx, chapterID, assetID)
+}
+
 func (s *fakeStore) SetActiveAudioAsset(_ context.Context, chapterID, assetID string) (AudioAsset, error) {
 	targetIndex := -1
 	for i, a := range s.assets[chapterID] {

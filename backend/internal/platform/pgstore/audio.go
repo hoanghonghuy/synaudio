@@ -279,10 +279,77 @@ func (s *AudioStore) SetActiveAudioAsset(ctx context.Context, chapterID, assetID
 	if err != nil {
 		return audio.AudioAsset{}, err
 	}
+	return activatedAudioAssetFromRows(rows, assetID)
+}
+
+// SetActiveAudioAssetForLatestNarration serializes activation with narration
+// version allocation on the same chapter-scoped advisory lock and only commits
+// when the target READY asset still matches the latest narration revision.
+func (s *AudioStore) SetActiveAudioAssetForLatestNarration(ctx context.Context, chapterID, assetID string) (audio.AudioAsset, error) {
+	if s.beginTx == nil {
+		return audio.AudioAsset{}, errors.New("atomic audio activation requires transaction-capable database")
+	}
+	tx, err := s.beginTx.Begin(ctx)
+	if err != nil {
+		return audio.AudioAsset{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "narration-version:"+chapterID); err != nil {
+		return audio.AudioAsset{}, fmt.Errorf("lock chapter narration activation: %w", err)
+	}
+
+	qtx := s.q.WithTx(tx)
+	rows, err := qtx.SetActiveAudioAssetForLatestNarration(ctx, db.SetActiveAudioAssetForLatestNarrationParams{
+		ChapterID: toUUID(chapterID),
+		ID:        toUUID(assetID),
+	})
+	if err != nil {
+		return audio.AudioAsset{}, err
+	}
+	activated, err := activatedAudioAssetFromRows(rows, assetID)
+	if err == nil {
+		if err := tx.Commit(ctx); err != nil {
+			return audio.AudioAsset{}, err
+		}
+		return activated, nil
+	}
+	if !errors.Is(err, audio.ErrAudioAssetNotFound) {
+		return audio.AudioAsset{}, err
+	}
+	return classifyLatestNarrationActivationFailure(ctx, qtx, chapterID, assetID)
+}
+
+func activatedAudioAssetFromRows(rows []db.AudioAsset, assetID string) (audio.AudioAsset, error) {
 	for _, row := range rows {
 		if fromUUID(row.ID) == assetID {
 			return toAudioAsset(row), nil
 		}
+	}
+	return audio.AudioAsset{}, audio.ErrAudioAssetNotFound
+}
+
+func classifyLatestNarrationActivationFailure(ctx context.Context, q *db.Queries, chapterID, assetID string) (audio.AudioAsset, error) {
+	assetRow, err := q.GetAudioAsset(ctx, toUUID(assetID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return audio.AudioAsset{}, audio.ErrAudioAssetNotFound
+		}
+		return audio.AudioAsset{}, err
+	}
+	asset := toAudioAsset(assetRow)
+	if asset.ChapterID != chapterID || asset.Status != "READY" {
+		return audio.AudioAsset{}, audio.ErrAudioAssetNotFound
+	}
+	latest, err := q.GetLatestNarrationRevision(ctx, toUUID(chapterID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return audio.AudioAsset{}, audio.ErrNarrationNotFound
+		}
+		return audio.AudioAsset{}, err
+	}
+	if asset.SourceNarrationRevisionID != fromUUID(latest.ID) {
+		return audio.AudioAsset{}, audio.ErrAudioAssetStaleForNarration
 	}
 	return audio.AudioAsset{}, audio.ErrAudioAssetNotFound
 }

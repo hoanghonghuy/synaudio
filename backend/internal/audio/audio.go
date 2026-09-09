@@ -69,6 +69,7 @@ type Store interface {
 	GetActiveAudioAsset(ctx context.Context, chapterID string) (AudioAsset, error)
 	GetLatestReadyAudioAssetForNarration(ctx context.Context, chapterID, narrationRevisionID string) (AudioAsset, error)
 	SetActiveAudioAsset(ctx context.Context, chapterID, assetID string) (AudioAsset, error)
+	SetActiveAudioAssetForLatestNarration(ctx context.Context, chapterID, assetID string) (AudioAsset, error)
 }
 
 // atomicVersionStore is an optional production persistence capability that
@@ -225,23 +226,10 @@ func (s *Service) ActivateAudioAsset(ctx context.Context, chapterID, assetID str
 }
 
 // ActivateAudioAssetForChapter activates only when the asset is READY for the
-// chapter's latest narration revision, so stale READY assets cannot be promoted.
+// chapter's latest narration revision at commit time. Eligibility is enforced
+// inside the persistence boundary so a newer narration cannot interleave.
 func (s *Service) ActivateAudioAssetForChapter(ctx context.Context, chapterID, assetID string) (AudioAsset, error) {
-	latestNar, err := s.store.GetLatestNarrationRevision(ctx, chapterID)
-	if err != nil {
-		return AudioAsset{}, err
-	}
-	asset, err := s.store.GetAudioAsset(ctx, assetID)
-	if err != nil {
-		return AudioAsset{}, err
-	}
-	if asset.ChapterID != chapterID {
-		return AudioAsset{}, ErrAudioAssetNotFound
-	}
-	if asset.SourceNarrationRevisionID != latestNar.ID {
-		return AudioAsset{}, ErrAudioAssetStaleForNarration
-	}
-	return s.store.SetActiveAudioAsset(ctx, chapterID, assetID)
+	return s.store.SetActiveAudioAssetForLatestNarration(ctx, chapterID, assetID)
 }
 
 // GetActiveAudioAsset returns the currently active audio asset for a chapter.
