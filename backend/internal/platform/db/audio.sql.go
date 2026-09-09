@@ -206,20 +206,26 @@ func (q *Queries) GetActiveAudioAsset(ctx context.Context, chapterID pgtype.UUID
 	return i, err
 }
 
-const getLatestReadyAudioAsset = `-- name: GetLatestReadyAudioAsset :one
+const getLatestReadyAudioAssetForNarration = `-- name: GetLatestReadyAudioAssetForNarration :one
 SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage_key,
        mime_type, size_bytes, duration_ms, bitrate_kbps, checksum, is_active,
        generation_run_id, created_at
 FROM audio_assets
 WHERE chapter_id = $1
+  AND source_narration_revision_id = $2
   AND status = 'READY'
   AND is_active = false
 ORDER BY version_no DESC
 LIMIT 1
 `
 
-func (q *Queries) GetLatestReadyAudioAsset(ctx context.Context, chapterID pgtype.UUID) (AudioAsset, error) {
-	row := q.db.QueryRow(ctx, getLatestReadyAudioAsset, chapterID)
+type GetLatestReadyAudioAssetForNarrationParams struct {
+	ChapterID                 pgtype.UUID `json:"chapter_id"`
+	SourceNarrationRevisionID pgtype.UUID `json:"source_narration_revision_id"`
+}
+
+func (q *Queries) GetLatestReadyAudioAssetForNarration(ctx context.Context, arg GetLatestReadyAudioAssetForNarrationParams) (AudioAsset, error) {
+	row := q.db.QueryRow(ctx, getLatestReadyAudioAssetForNarration, arg.ChapterID, arg.SourceNarrationRevisionID)
 	var i AudioAsset
 	err := row.Scan(
 		&i.ID,

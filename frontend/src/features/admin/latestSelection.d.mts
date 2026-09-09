@@ -26,6 +26,7 @@ export function canActivateAudio(input: {
   hasReadyAsset: boolean
   readyAssetBelongsToChapter: boolean
   readyAssetIsInactive: boolean
+  readyAssetMatchesLatestNarration: boolean
   selectionLoading: boolean
   actionInProgress: boolean
 }): boolean

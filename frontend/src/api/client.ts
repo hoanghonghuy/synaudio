@@ -520,9 +520,9 @@ export async function getActiveAudioAsset(chapterID: string): Promise<AudioAsset
   }
 }
 
-export async function getLatestReadyAudioAsset(chapterID: string): Promise<AudioAsset | null> {
+export async function getLatestReadyAudioAsset(chapterID: string, narrationID: string): Promise<AudioAsset | null> {
   try {
-    return await request<AudioAsset>(`/admin/chapters/${chapterID}/audio/latest-ready`)
+    return await request<AudioAsset>(`/admin/chapters/${chapterID}/narration/${narrationID}/audio/latest-ready`)
   } catch (error) {
     if (isExplicitNotFound(error)) return null
     throw error

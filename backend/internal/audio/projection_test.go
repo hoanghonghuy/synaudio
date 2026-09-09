@@ -30,16 +30,17 @@ func TestGetLatestNarrationRevisionReturnsNotFoundForEmptyChapter(t *testing.T) 
 	}
 }
 
-func TestGetLatestReadyAudioAssetReturnsNewestNonActiveReady(t *testing.T) {
+func TestGetLatestReadyAudioAssetForNarrationReturnsNewestNonActiveReady(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store)
+	store.narrations["c1"] = []NarrationRevision{{ID: "nar-1", ChapterID: "c1", RevisionNo: 1}}
 	store.assets["c1"] = []AudioAsset{
-		{ID: "a1", ChapterID: "c1", VersionNo: 1, Status: "READY", IsActive: true},
-		{ID: "a2", ChapterID: "c1", VersionNo: 2, Status: "READY", IsActive: false},
-		{ID: "a3", ChapterID: "c1", VersionNo: 3, Status: "FAILED", IsActive: false},
+		{ID: "a1", ChapterID: "c1", VersionNo: 1, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: true},
+		{ID: "a2", ChapterID: "c1", VersionNo: 2, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: false},
+		{ID: "a3", ChapterID: "c1", VersionNo: 3, SourceNarrationRevisionID: "nar-1", Status: "FAILED", IsActive: false},
 	}
 
-	got, err := svc.GetLatestReadyAudioAsset(context.Background(), "c1")
+	got, err := svc.GetLatestReadyAudioAssetForNarration(context.Background(), "c1", "nar-1")
 	if err != nil {
 		t.Fatalf("get latest ready audio: %v", err)
 	}
@@ -48,15 +49,48 @@ func TestGetLatestReadyAudioAssetReturnsNewestNonActiveReady(t *testing.T) {
 	}
 }
 
-func TestGetLatestReadyAudioAssetReturnsNotFoundWhenOnlyActiveExists(t *testing.T) {
+func TestGetLatestReadyAudioAssetForNarrationReturnsNotFoundWhenOnlyActiveExists(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store)
+	store.narrations["c1"] = []NarrationRevision{{ID: "nar-1", ChapterID: "c1", RevisionNo: 1}}
 	store.assets["c1"] = []AudioAsset{
-		{ID: "a1", ChapterID: "c1", VersionNo: 1, Status: "READY", IsActive: true},
+		{ID: "a1", ChapterID: "c1", VersionNo: 1, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: true},
 	}
 
-	if _, err := svc.GetLatestReadyAudioAsset(context.Background(), "c1"); !errors.Is(err, ErrReadyAudioAssetNotFound) {
+	if _, err := svc.GetLatestReadyAudioAssetForNarration(context.Background(), "c1", "nar-1"); !errors.Is(err, ErrReadyAudioAssetNotFound) {
 		t.Fatalf("expected ready-not-found, got %v", err)
+	}
+}
+
+func TestGetLatestReadyAudioAssetForNarrationIgnoresStaleReadyFromOlderNarration(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store)
+	store.narrations["c1"] = []NarrationRevision{
+		{ID: "nar-1", ChapterID: "c1", RevisionNo: 1},
+		{ID: "nar-2", ChapterID: "c1", RevisionNo: 2},
+	}
+	store.assets["c1"] = []AudioAsset{
+		{ID: "a1", ChapterID: "c1", VersionNo: 1, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: false},
+	}
+
+	if _, err := svc.GetLatestReadyAudioAssetForNarration(context.Background(), "c1", "nar-2"); !errors.Is(err, ErrReadyAudioAssetNotFound) {
+		t.Fatalf("expected ready-not-found for latest narration without synthesis, got %v", err)
+	}
+}
+
+func TestActivateAudioAssetForChapterRejectsStaleReadyFromOlderNarration(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store)
+	store.narrations["c1"] = []NarrationRevision{
+		{ID: "nar-1", ChapterID: "c1", RevisionNo: 1},
+		{ID: "nar-2", ChapterID: "c1", RevisionNo: 2},
+	}
+	store.assets["c1"] = []AudioAsset{
+		{ID: "a1", ChapterID: "c1", VersionNo: 1, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: false},
+	}
+
+	if _, err := svc.ActivateAudioAssetForChapter(context.Background(), "c1", "a1"); !errors.Is(err, ErrAudioAssetStaleForNarration) {
+		t.Fatalf("expected stale-for-narration rejection, got %v", err)
 	}
 }
 

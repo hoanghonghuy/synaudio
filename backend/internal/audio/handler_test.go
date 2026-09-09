@@ -45,17 +45,18 @@ func TestGetLatestNarrationRevisionEndpointReturnsNotFoundWithoutSideEffect(t *t
 	}
 }
 
-func TestGetLatestReadyAudioAssetEndpointReturnsNewestReadyCandidate(t *testing.T) {
+func TestGetLatestReadyAudioAssetForNarrationEndpointReturnsNewestReadyCandidate(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store)
 	handler := NewHandler(svc)
 
+	store.narrations["chapter-1"] = []NarrationRevision{{ID: "nar-1", ChapterID: "chapter-1", RevisionNo: 1, Status: "DRAFT"}}
 	store.assets["chapter-1"] = []AudioAsset{
-		{ID: "asset-1", ChapterID: "chapter-1", VersionNo: 1, Status: "READY", IsActive: true},
-		{ID: "asset-2", ChapterID: "chapter-1", VersionNo: 2, Status: "READY", IsActive: false, Checksum: "abc"},
+		{ID: "asset-1", ChapterID: "chapter-1", VersionNo: 1, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: true},
+		{ID: "asset-2", ChapterID: "chapter-1", VersionNo: 2, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: false, Checksum: "abc"},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/chapters/chapter-1/audio/latest-ready", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/chapters/chapter-1/narration/nar-1/audio/latest-ready", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -68,6 +69,53 @@ func TestGetLatestReadyAudioAssetEndpointReturnsNewestReadyCandidate(t *testing.
 	}
 	if got.ID != "asset-2" || got.Checksum != "abc" || got.IsActive {
 		t.Fatalf("unexpected ready asset: %#v", got)
+	}
+}
+
+func TestGetLatestReadyAudioAssetForNarrationEndpointReturnsNotFoundForStaleOlderNarrationAsset(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store)
+	handler := NewHandler(svc)
+
+	store.narrations["chapter-1"] = []NarrationRevision{
+		{ID: "nar-1", ChapterID: "chapter-1", RevisionNo: 1, Status: "DRAFT"},
+		{ID: "nar-2", ChapterID: "chapter-1", RevisionNo: 2, Status: "DRAFT"},
+	}
+	store.assets["chapter-1"] = []AudioAsset{
+		{ID: "asset-1", ChapterID: "chapter-1", VersionNo: 1, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: false},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/chapters/chapter-1/narration/nar-2/audio/latest-ready", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for latest narration without matching READY asset, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestActivateAudioAssetEndpointRejectsStaleReadyFromOlderNarration(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store)
+	handler := NewHandler(svc)
+
+	store.narrations["chapter-1"] = []NarrationRevision{
+		{ID: "nar-1", ChapterID: "chapter-1", RevisionNo: 1, Status: "DRAFT"},
+		{ID: "nar-2", ChapterID: "chapter-1", RevisionNo: 2, Status: "DRAFT"},
+	}
+	store.assets["chapter-1"] = []AudioAsset{
+		{ID: "asset-1", ChapterID: "chapter-1", VersionNo: 1, SourceNarrationRevisionID: "nar-1", Status: "READY", IsActive: false},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/chapters/chapter-1/audio/asset-1/activate", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for stale activation, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if store.assets["chapter-1"][0].IsActive {
+		t.Fatal("stale activation must not promote asset")
 	}
 }
 

@@ -115,11 +115,11 @@ func (s *fakeStore) GetActiveAudioAsset(_ context.Context, chapterID string) (Au
 	return AudioAsset{}, ErrAudioAssetNotFound
 }
 
-func (s *fakeStore) GetLatestReadyAudioAsset(_ context.Context, chapterID string) (AudioAsset, error) {
+func (s *fakeStore) GetLatestReadyAudioAssetForNarration(_ context.Context, chapterID, narrationRevisionID string) (AudioAsset, error) {
 	var latest AudioAsset
 	found := false
 	for _, a := range s.assets[chapterID] {
-		if a.Status != "READY" || a.IsActive {
+		if a.Status != "READY" || a.IsActive || a.SourceNarrationRevisionID != narrationRevisionID {
 			continue
 		}
 		if !found || a.VersionNo > latest.VersionNo {

@@ -88,12 +88,13 @@ SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage
 FROM audio_assets
 WHERE chapter_id = $1 AND is_active = true;
 
--- name: GetLatestReadyAudioAsset :one
+-- name: GetLatestReadyAudioAssetForNarration :one
 SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage_key,
        mime_type, size_bytes, duration_ms, bitrate_kbps, checksum, is_active,
        generation_run_id, created_at
 FROM audio_assets
 WHERE chapter_id = $1
+  AND source_narration_revision_id = $2
   AND status = 'READY'
   AND is_active = false
 ORDER BY version_no DESC

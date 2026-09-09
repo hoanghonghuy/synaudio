@@ -24,8 +24,8 @@ func NewHandler(svc *Service) http.Handler {
 	r.Post("/admin/chapters/{chapterID}/audio", h.createAudioAsset)
 	r.Post("/admin/chapters/{chapterID}/audio/{assetID}/activate", h.activateAudioAsset)
 	r.Get("/admin/chapters/{chapterID}/narration/latest", h.getLatestNarrationRevision)
+	r.Get("/admin/chapters/{chapterID}/narration/{narrationID}/audio/latest-ready", h.getLatestReadyAudioAssetForNarration)
 	r.Get("/admin/chapters/{chapterID}/audio", h.getActiveAudioAsset)
-	r.Get("/admin/chapters/{chapterID}/audio/latest-ready", h.getLatestReadyAudioAsset)
 	r.Get("/chapters/{chapterID}/audio-url", h.getAudioURL)
 	return r
 }
@@ -142,13 +142,18 @@ func (h *Handler) activateAudioAsset(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
 	assetID := chi.URLParam(r, "assetID")
 
-	asset, err := h.svc.ActivateAudioAsset(r.Context(), chapterID, assetID)
+	asset, err := h.svc.ActivateAudioAssetForChapter(r.Context(), chapterID, assetID)
 	if err != nil {
-		if errors.Is(err, ErrAudioAssetNotFound) {
+		switch {
+		case errors.Is(err, ErrAudioAssetNotFound):
 			writeError(w, http.StatusNotFound, "AUDIO_ASSET_NOT_FOUND", "audio asset not found")
-			return
+		case errors.Is(err, ErrAudioAssetStaleForNarration):
+			writeError(w, http.StatusBadRequest, "AUDIO_ASSET_STALE_FOR_NARRATION", "audio asset is stale relative to latest narration")
+		case errors.Is(err, ErrNarrationNotFound):
+			writeError(w, http.StatusNotFound, "NARRATION_NOT_FOUND", "narration revision not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
 	}
 
@@ -187,16 +192,22 @@ func (h *Handler) getActiveAudioAsset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, asset)
 }
 
-func (h *Handler) getLatestReadyAudioAsset(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getLatestReadyAudioAssetForNarration(w http.ResponseWriter, r *http.Request) {
 	chapterID := chi.URLParam(r, "chapterID")
+	narrationID := chi.URLParam(r, "narrationID")
 
-	asset, err := h.svc.GetLatestReadyAudioAsset(r.Context(), chapterID)
+	asset, err := h.svc.GetLatestReadyAudioAssetForNarration(r.Context(), chapterID, narrationID)
 	if err != nil {
-		if errors.Is(err, ErrReadyAudioAssetNotFound) {
+		switch {
+		case errors.Is(err, ErrReadyAudioAssetNotFound):
 			writeError(w, http.StatusNotFound, "READY_AUDIO_ASSET_NOT_FOUND", "ready audio asset not found")
-			return
+		case errors.Is(err, ErrNarrationNotFound):
+			writeError(w, http.StatusNotFound, "NARRATION_NOT_FOUND", "narration revision not found")
+		case errors.Is(err, ErrNarrationChapterMismatch):
+			writeError(w, http.StatusBadRequest, "NARRATION_CHAPTER_MISMATCH", "narration revision does not belong to chapter")
+		default:
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
 	}
 

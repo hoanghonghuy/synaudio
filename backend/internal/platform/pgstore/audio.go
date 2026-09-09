@@ -257,8 +257,11 @@ func (s *AudioStore) GetActiveAudioAsset(ctx context.Context, chapterID string) 
 	return toAudioAsset(row), nil
 }
 
-func (s *AudioStore) GetLatestReadyAudioAsset(ctx context.Context, chapterID string) (audio.AudioAsset, error) {
-	row, err := s.q.GetLatestReadyAudioAsset(ctx, toUUID(chapterID))
+func (s *AudioStore) GetLatestReadyAudioAssetForNarration(ctx context.Context, chapterID, narrationRevisionID string) (audio.AudioAsset, error) {
+	row, err := s.q.GetLatestReadyAudioAssetForNarration(ctx, db.GetLatestReadyAudioAssetForNarrationParams{
+		ChapterID:                 toUUID(chapterID),
+		SourceNarrationRevisionID: toUUID(narrationRevisionID),
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return audio.AudioAsset{}, audio.ErrReadyAudioAssetNotFound

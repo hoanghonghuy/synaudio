@@ -115,6 +115,7 @@ test('activate is blocked while authoritative chapter state is loading', () => {
     hasReadyAsset: true,
     readyAssetBelongsToChapter: true,
     readyAssetIsInactive: true,
+    readyAssetMatchesLatestNarration: true,
     selectionLoading: true,
     actionInProgress: false,
   }), false)
@@ -125,6 +126,7 @@ test('activate is blocked without an inactive ready asset for the selected chapt
     hasReadyAsset: false,
     readyAssetBelongsToChapter: false,
     readyAssetIsInactive: false,
+    readyAssetMatchesLatestNarration: false,
     selectionLoading: false,
     actionInProgress: false,
   }), false)
@@ -132,16 +134,29 @@ test('activate is blocked without an inactive ready asset for the selected chapt
     hasReadyAsset: true,
     readyAssetBelongsToChapter: true,
     readyAssetIsInactive: false,
+    readyAssetMatchesLatestNarration: true,
     selectionLoading: false,
     actionInProgress: false,
   }), false)
 })
 
-test('activate is allowed only for an inactive ready asset owned by the selected chapter', () => {
+test('activate is blocked when ready asset is stale relative to latest narration', () => {
   assert.equal(canActivateAudio({
     hasReadyAsset: true,
     readyAssetBelongsToChapter: true,
     readyAssetIsInactive: true,
+    readyAssetMatchesLatestNarration: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('activate is allowed only for an inactive ready asset owned by the selected chapter and latest narration', () => {
+  assert.equal(canActivateAudio({
+    hasReadyAsset: true,
+    readyAssetBelongsToChapter: true,
+    readyAssetIsInactive: true,
+    readyAssetMatchesLatestNarration: true,
     selectionLoading: false,
     actionInProgress: false,
   }), true)

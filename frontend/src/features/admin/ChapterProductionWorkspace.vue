@@ -51,6 +51,11 @@ const readyAssetBelongsToChapter = computed(() => Boolean(
   && activeChapter.value
   && latestReadyAudio.value.ChapterID === activeChapter.value.ID,
 ))
+const readyAssetMatchesLatestNarration = computed(() => Boolean(
+  latestReadyAudio.value
+  && latestNarration.value
+  && latestReadyAudio.value.SourceNarrationRevisionID === latestNarration.value.ID,
+))
 
 const mayStartGeneration = computed(() => canStartChapterGeneration({
   hasPlanRevision: Boolean(activeChapter.value?.CurrentPlanRevisionID),
@@ -72,6 +77,7 @@ const mayActivate = computed(() => canActivateAudio({
   hasReadyAsset: Boolean(latestReadyAudio.value),
   readyAssetBelongsToChapter: readyAssetBelongsToChapter.value,
   readyAssetIsInactive: Boolean(latestReadyAudio.value && !latestReadyAudio.value.IsActive),
+  readyAssetMatchesLatestNarration: readyAssetMatchesLatestNarration.value,
   selectionLoading: selectionLoading.value,
   actionInProgress: Boolean(action.value),
 }))
@@ -91,6 +97,7 @@ const audioStatus = computed(() => {
   }
   if (latestReadyAudio.value) {
     if (!readyAssetBelongsToChapter.value) return 'BLOCKED — READY asset projection không thuộc chương đang chọn'
+    if (!readyAssetMatchesLatestNarration.value) return 'BLOCKED — READY asset thuộc narration cũ, không khớp narration mới nhất'
     return `READY v${latestReadyAudio.value.VersionNo} · ${latestReadyAudio.value.ID} · checksum ${latestReadyAudio.value.Checksum || '—'} · chưa activate`
   }
   if (!latestNarration.value) return 'WAITING — cần narration trước khi synthesize audio'
@@ -100,11 +107,11 @@ const audioStatus = computed(() => {
 const publishStatus = computed(() => 'BLOCKED — publish wiring chưa có trong slice này; cần active audio + publish authority')
 
 async function loadAudioProjections(chapterID: string) {
-  const [narration, active, ready] = await Promise.all([
+  const [narration, active] = await Promise.all([
     getLatestNarrationRevision(chapterID),
     getActiveAudioAsset(chapterID),
-    getLatestReadyAudioAsset(chapterID),
   ])
+  const ready = narration ? await getLatestReadyAudioAsset(chapterID, narration.ID) : null
   return { narration, active, ready }
 }
 
@@ -212,7 +219,8 @@ async function runActivate() {
     if (activeChapter.value?.ID !== chapter.ID) return
     activeAudio.value = asset
     latestReadyAudio.value = asset.IsActive ? null : asset
-    const refreshed = await getLatestReadyAudioAsset(chapter.ID)
+    const narration = latestNarration.value
+    const refreshed = narration ? await getLatestReadyAudioAsset(chapter.ID, narration.ID) : null
     if (activeChapter.value?.ID === chapter.ID) latestReadyAudio.value = refreshed
   } catch (e) {
     if (activeChapter.value?.ID === chapter.ID) {

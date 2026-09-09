@@ -49,6 +49,7 @@ export function canActivateAudio({
   hasReadyAsset,
   readyAssetBelongsToChapter,
   readyAssetIsInactive,
+  readyAssetMatchesLatestNarration,
   selectionLoading,
   actionInProgress,
 }) {
@@ -56,6 +57,7 @@ export function canActivateAudio({
     hasReadyAsset
     && readyAssetBelongsToChapter
     && readyAssetIsInactive
+    && readyAssetMatchesLatestNarration
     && !selectionLoading
     && !actionInProgress,
   )
