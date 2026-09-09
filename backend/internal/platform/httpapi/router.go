@@ -22,10 +22,13 @@ type Dependencies struct {
 	DependencyChecks         map[string]func() error
 	Logger                   *slog.Logger
 	AdminCheck               func(context.Context, *http.Request) (bool, error)
+	AdminPermissionCheck     func(context.Context, *http.Request, string) (bool, error)
+	AdminRecentAuthCheck     func(context.Context, *http.Request) error
 	AdminActor               func(context.Context, *http.Request) (string, error)
 	AuditRecord              audit.RecordFunc
 	AuditBoundary            audit.TransactionBoundary
 	AuthHandler              http.Handler
+	AdminSecurityHandler     http.Handler
 	AuditHandler             http.Handler
 	StoryHandler             http.Handler
 	StoryReadinessHandler    http.Handler
@@ -95,6 +98,7 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	api := chi.NewRouter()
 	for _, h := range []http.Handler{
+		deps.AdminSecurityHandler,
 		deps.AuditHandler,
 		deps.StoryHandler,
 		deps.StoryReadinessHandler,
@@ -108,7 +112,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		if h == nil {
 			continue
 		}
-		mountRoutes(api, h, deps.AdminCheck, deps.AdminActor, deps.AuditRecord, deps.AuditBoundary)
+		mountRoutes(api, h, deps.AdminCheck, deps.AdminPermissionCheck, deps.AdminRecentAuthCheck, deps.AdminActor, deps.AuditRecord, deps.AuditBoundary)
 	}
 	r.Mount("/api/v1", api)
 
@@ -123,6 +127,8 @@ func mountRoutes(
 	dst chi.Router,
 	src http.Handler,
 	adminCheck func(context.Context, *http.Request) (bool, error),
+	adminPermissionCheck func(context.Context, *http.Request, string) (bool, error),
+	adminRecentAuthCheck func(context.Context, *http.Request) error,
 	adminActor func(context.Context, *http.Request) (string, error),
 	auditRecord audit.RecordFunc,
 	auditBoundary audit.TransactionBoundary,
@@ -133,7 +139,15 @@ func mountRoutes(
 	}
 	_ = chi.Walk(routes, func(method, route string, handler http.Handler, _ ...func(http.Handler) http.Handler) error {
 		if strings.HasPrefix(route, "/admin/") {
-			handler = requireAdmin(adminCheck, adminActor)(handler)
+			policy := adminPolicyFor(method, route)
+			if policy.Permission != "" {
+				handler = requireAdminPermission(adminPermissionCheck, adminActor, policy.Permission)(handler)
+			} else {
+				handler = requireAdmin(adminCheck, adminActor)(handler)
+			}
+			if policy.RecentAuth {
+				handler = requireRecentAdminAuth(adminRecentAuthCheck)(handler)
+			}
 		}
 		// Audit wraps authorization too, so denied security-sensitive mutations
 		// are recorded as DENIED instead of disappearing before the audit layer.
@@ -167,6 +181,10 @@ func requireAdmin(
 					writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
 					return
 				}
+				if check == nil {
+					writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+					return
+				}
 				allowed, err := check(r.Context(), r)
 				if err != nil {
 					writePrivilegedError(w, err)
@@ -190,6 +208,52 @@ func requireAdmin(
 			}
 			if !allowed {
 				writeError(w, http.StatusForbidden, "FORBIDDEN", "admin access required")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func requireAdminPermission(
+	check func(context.Context, *http.Request, string) (bool, error),
+	actor func(context.Context, *http.Request) (string, error),
+	permission string,
+) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if actor == nil || check == nil {
+				writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+				return
+			}
+			actorID, err := actor(r.Context(), r)
+			if err != nil || actorID == "" {
+				writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+				return
+			}
+			allowed, err := check(r.Context(), r, permission)
+			if err != nil {
+				writePrivilegedError(w, err)
+				return
+			}
+			if !allowed {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "permission required")
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(withAdminActor(r.Context(), actorID)))
+		})
+	}
+}
+
+func requireRecentAdminAuth(check func(context.Context, *http.Request) error) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if check == nil {
+				writeError(w, http.StatusForbidden, "RECENT_AUTH_REQUIRED", "recent authentication required")
+				return
+			}
+			if err := check(r.Context(), r); err != nil {
+				writeError(w, http.StatusForbidden, "RECENT_AUTH_REQUIRED", "recent authentication required")
 				return
 			}
 			next.ServeHTTP(w, r)

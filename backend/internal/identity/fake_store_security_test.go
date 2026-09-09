@@ -88,15 +88,48 @@ func (s *fakeStore) HasRecentAuth(_ context.Context, userID, sessionID string, c
 }
 
 func (s *fakeStore) DisableMFAMethodSafely(ctx context.Context, userID string) error {
+	targetActiveAdmin := false
+	activeAdmins := 0
+	for _, u := range s.users {
+		isAdmin := false
+		for _, role := range s.userRoles[u.ID] {
+			if role == identity.RoleAdmin {
+				isAdmin = true
+				break
+			}
+		}
+		if isAdmin && u.Status == identity.StatusActive {
+			activeAdmins++
+			if u.ID == userID {
+				targetActiveAdmin = true
+			}
+		}
+	}
+	if targetActiveAdmin && activeAdmins <= 1 {
+		return identity.ErrLastAdmin
+	}
 	return s.DisableMFAMethod(ctx, userID)
 }
 
 func (s *fakeStore) RevokeAdminRoleSafely(ctx context.Context, targetID string) error {
-	count, err := s.CountActiveAdmins(ctx)
-	if err != nil {
-		return err
+	targetActiveAdmin := false
+	activeAdmins := 0
+	for _, u := range s.users {
+		isAdmin := false
+		for _, role := range s.userRoles[u.ID] {
+			if role == identity.RoleAdmin {
+				isAdmin = true
+				break
+			}
+		}
+		if isAdmin && u.Status == identity.StatusActive {
+			activeAdmins++
+			if u.ID == targetID {
+				targetActiveAdmin = true
+			}
+		}
 	}
-	if count <= 1 && contains(s.userRoles[targetID], identity.RoleAdmin) {
+	if targetActiveAdmin && activeAdmins <= 1 {
 		return identity.ErrLastAdmin
 	}
 	return s.RevokeRole(ctx, targetID, identity.RoleAdmin)

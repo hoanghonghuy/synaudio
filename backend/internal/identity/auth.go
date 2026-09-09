@@ -39,8 +39,10 @@ const (
 const (
 	PermStoryCreate = "STORY_CREATE"
 
-	PermAdminRoleGrant  = "ADMIN_ROLE_GRANT"
-	PermAdminRoleRevoke = "ADMIN_ROLE_REVOKE"
+	PermAdminRoleGrant    = "ADMIN_ROLE_GRANT"
+	PermAdminRoleRevoke   = "ADMIN_ROLE_REVOKE"
+	PermAdminStatusManage = "ADMIN_STATUS_MANAGE"
+	PermUserStatusManage  = "USER_STATUS_MANAGE"
 )
 
 type User struct {
@@ -132,7 +134,8 @@ type AuthSettings struct {
 	AccessTokenTTL        time.Duration
 	RefreshSessionTTL     time.Duration
 	RefreshSessionIdleTTL time.Duration
-	Now                    func() time.Time
+	RecentAuthWindow      time.Duration
+	Now                   func() time.Time
 }
 
 type AuthOption func(*AuthService)
@@ -154,6 +157,9 @@ func WithAuthSettings(settings AuthSettings) AuthOption {
 		if settings.Now != nil {
 			s.settings.Now = settings.Now
 		}
+		if settings.RecentAuthWindow > 0 {
+			s.settings.RecentAuthWindow = settings.RecentAuthWindow
+		}
 	}
 }
 
@@ -169,7 +175,8 @@ func NewAuthService(store Store, opts ...AuthOption) *AuthService {
 		AccessTokenTTL:        15 * time.Minute,
 		RefreshSessionTTL:     30 * 24 * time.Hour,
 		RefreshSessionIdleTTL: 7 * 24 * time.Hour,
-		Now:                    time.Now,
+		RecentAuthWindow:      10 * time.Minute,
+		Now:                   time.Now,
 	}
 	s := &AuthService{store: store, settings: settings}
 	for _, opt := range opts {

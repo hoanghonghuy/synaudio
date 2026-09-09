@@ -107,7 +107,11 @@ func (s *AuthService) RequireRecentAuth(ctx context.Context, r *http.Request) er
 	if !ok {
 		return ErrForbidden
 	}
-	fresh, err := securityStore.HasRecentAuth(ctx, principal.UserID, principal.SessionID, s.settings.Now().UTC().Add(-10*time.Minute))
+	window := s.settings.RecentAuthWindow
+	if window <= 0 {
+		window = 10 * time.Minute
+	}
+	fresh, err := securityStore.HasRecentAuth(ctx, principal.UserID, principal.SessionID, s.settings.Now().UTC().Add(-window))
 	if err != nil {
 		return err
 	}

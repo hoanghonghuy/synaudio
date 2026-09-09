@@ -22,8 +22,9 @@ func TestRouterAuditsRepresentativeCriticalAdminMutations(t *testing.T) {
 	actorID := "11111111-1111-1111-1111-111111111111"
 	var events []audit.Event
 	router := NewRouter(Dependencies{
-		AdminCheck: func(context.Context, *http.Request) (bool, error) { return true, nil },
-		AdminActor: func(context.Context, *http.Request) (string, error) { return actorID, nil },
+		AdminPermissionCheck: func(context.Context, *http.Request, string) (bool, error) { return true, nil },
+		AdminRecentAuthCheck: func(context.Context, *http.Request) error { return nil },
+		AdminActor:           func(context.Context, *http.Request) (string, error) { return actorID, nil },
 		AuditRecord: func(_ context.Context, event audit.Event) (audit.Event, error) {
 			events = append(events, event)
 			return event, nil
@@ -61,8 +62,8 @@ func TestRouterAuditsDeniedAdminMutation(t *testing.T) {
 	actorID := "11111111-1111-1111-1111-111111111111"
 	var got audit.Event
 	router := NewRouter(Dependencies{
-		AdminCheck: func(context.Context, *http.Request) (bool, error) { return false, nil },
-		AdminActor: func(context.Context, *http.Request) (string, error) { return actorID, nil },
+		AdminPermissionCheck: func(context.Context, *http.Request, string) (bool, error) { return false, nil },
+		AdminActor:           func(context.Context, *http.Request) (string, error) { return actorID, nil },
 		AuditRecord: func(_ context.Context, event audit.Event) (audit.Event, error) {
 			got = event
 			return event, nil
