@@ -1,3 +1,7 @@
+export function isChapterSelectionBlockingAction(action: string): boolean
+
+export function canSelectChapter(input: { action: string }): boolean
+
 export function createLatestSelectionGuard(): {
   begin(key: string): () => boolean
 }

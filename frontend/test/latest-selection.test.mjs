@@ -4,11 +4,20 @@ import test from 'node:test'
 import {
   canActivateAudio,
   canCreateNarration,
+  canSelectChapter,
   canStartChapterGeneration,
   canSynthesizeNarration,
   createLatestSelectionGuard,
   generationRunFromContentResponse,
+  isChapterSelectionBlockingAction,
 } from '../src/features/admin/latestSelection.mjs'
+
+function trySelectChapter(state, chapterID) {
+  if (!canSelectChapter({ action: state.action })) {
+    return state
+  }
+  return { ...state, activeChapterID: chapterID }
+}
 
 test('only latest chapter selection may commit', () => {
   const guard = createLatestSelectionGuard()
@@ -197,4 +206,32 @@ test('activate is allowed only for an inactive ready asset owned by the selected
     selectionLoading: false,
     actionInProgress: false,
   }), true)
+})
+
+test('chapter selection is blocked while synthesize or activate is in flight', () => {
+  assert.equal(isChapterSelectionBlockingAction('synthesize'), true)
+  assert.equal(isChapterSelectionBlockingAction('activate'), true)
+  assert.equal(canSelectChapter({ action: 'synthesize' }), false)
+  assert.equal(canSelectChapter({ action: 'activate' }), false)
+  assert.equal(canSelectChapter({ action: '' }), true)
+  assert.equal(canSelectChapter({ action: 'refresh-generation' }), true)
+})
+
+test('in-flight synthesize blocks chapter switch so mutation target cannot be abandoned', () => {
+  let state = { activeChapterID: 'chapter-a', action: 'synthesize' }
+  state = trySelectChapter(state, 'chapter-b')
+  assert.equal(state.activeChapterID, 'chapter-a')
+  assert.equal(state.action, 'synthesize')
+})
+
+test('in-flight activate blocks chapter switch so mutation target cannot be abandoned', () => {
+  let state = { activeChapterID: 'chapter-a', action: 'activate' }
+  state = trySelectChapter(state, 'chapter-b')
+  assert.equal(state.activeChapterID, 'chapter-a')
+  assert.equal(state.action, 'activate')
+})
+
+test('chapter selection is blocked while other durable chapter mutations are in flight', () => {
+  assert.equal(canSelectChapter({ action: 'create-narration' }), false)
+  assert.equal(canSelectChapter({ action: 'start-generation' }), false)
 })

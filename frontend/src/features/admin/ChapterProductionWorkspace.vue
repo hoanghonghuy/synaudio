@@ -20,6 +20,7 @@ import type { AudioAsset, Chapter, ChapterReview, ContentRevision, NarrationRevi
 import {
   canActivateAudio,
   canCreateNarration,
+  canSelectChapter,
   canStartChapterGeneration,
   canSynthesizeNarration,
   createLatestSelectionGuard,
@@ -83,6 +84,8 @@ const maySynthesize = computed(() => canSynthesizeNarration({
   actionInProgress: Boolean(action.value),
 }))
 
+const maySelectChapter = computed(() => canSelectChapter({ action: action.value }))
+
 const mayActivate = computed(() => canActivateAudio({
   hasReadyAsset: Boolean(latestReadyAudio.value),
   readyAssetBelongsToChapter: readyAssetBelongsToChapter.value,
@@ -126,6 +129,7 @@ async function loadAudioProjections(chapterID: string) {
 }
 
 async function selectChapter(chapter: Chapter) {
+  if (!maySelectChapter.value || activeChapter.value?.ID === chapter.ID) return
   const mayCommit = chapterSelection.begin(chapter.ID)
   activeChapter.value = chapter
   revisions.value = []
@@ -306,7 +310,7 @@ onMounted(load)
     <div v-if="!loading" class="workspace-grid">
       <aside class="chapter-panel">
         <h2>Chapters</h2>
-        <button v-for="chapter in chapters" :key="chapter.ID" type="button" :class="{ active: activeChapter?.ID === chapter.ID }" @click="selectChapter(chapter)">
+        <button v-for="chapter in chapters" :key="chapter.ID" type="button" :class="{ active: activeChapter?.ID === chapter.ID }" :disabled="!maySelectChapter" :aria-disabled="!maySelectChapter" @click="selectChapter(chapter)">
           <span>Chương {{ chapter.ChapterNumber }}</span>
           <strong>{{ chapter.Title }}</strong>
           <small>{{ chapter.Status }}</small>
@@ -360,6 +364,7 @@ onMounted(load)
 .chapter-panel, .pipeline-panel { border: 1px solid #d8d8d8; border-radius: 16px; padding: 18px; }
 .chapter-panel button { width: 100%; display: grid; gap: 3px; text-align: left; margin: 8px 0; padding: 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; }
 .chapter-panel button.active { border-color: currentColor; }
+.chapter-panel button:disabled { opacity: 0.55; cursor: not-allowed; }
 dl { display: grid; gap: 10px; }
 dl div { display: grid; grid-template-columns: 160px 1fr; gap: 12px; }
 dt { font-weight: 700; }
