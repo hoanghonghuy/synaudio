@@ -139,9 +139,945 @@ export type ApiMethod = ApiOperation["method"]
 export type ApiPath = ApiOperation["path"]
 export type ApiOperationId = ApiOperation["operationId"]
 
-export interface ApiErrorResponse {
-  status?: string
-  error: string
-  code?: string
-  message?: string
+export interface ActivationReadinessResponse {
+  generation_policy?: GenerationPolicyResponse
+  missing: string[]
+  ready: boolean
+  story_workspace?: Record<string, unknown>
 }
+
+export interface AdminChapterContentResponse {
+  generation_job?: JobViewPascal
+  generation_run?: GenerationRunPascal
+  revisions: ContentRevisionPascal[]
+}
+
+export interface AnalyzeDurationRequest {
+  revision_id?: string
+  text?: string
+}
+
+export interface ApplyRetconRequest {
+  applied_by?: string
+}
+
+export interface ApproveContentRequest {
+  approved_by?: string
+  revision_id: string
+}
+
+export interface ApproveRetconRequest {
+  approved_by?: string
+}
+
+export interface ArcCompletionResultPascal {
+  ArcID?: string
+  Complete?: boolean
+  CompletedChapters?: number
+  PendingChapters?: string[]
+  TotalChapters?: number
+}
+
+export interface AttentionItemListResponse {
+  items: AttentionItemPascal[]
+}
+
+export interface AttentionItemPascal {
+  Action?: string
+  ChapterID?: string
+  Detail?: string
+  ID?: string
+  Kind?: string
+  Priority?: string
+  Resolved?: boolean
+  StoryID?: string
+  Title?: string
+}
+
+export interface AudioAssetPascal {
+  BitrateKbps?: number
+  ChapterID?: string
+  Checksum?: string
+  DurationMs?: number
+  ID?: string
+  IsActive?: boolean
+  MimeType?: string
+  SizeBytes?: number
+  SourceNarrationRevisionID?: string
+  Status?: "READY"
+  StorageKey?: string
+  VersionNo?: number
+}
+
+export interface AudioURLResponse {
+  url: string
+}
+
+export interface AuditEvent {
+  action: string
+  actor_type: "USER" | "SYSTEM" | "AI" | "ANONYMOUS"
+  actor_user_id?: string
+  chapter_id?: string
+  correlation_id?: string
+  created_at: string
+  generation_run_id?: string
+  id: string
+  metadata?: Record<string, unknown>
+  provenance?: Record<string, unknown>
+  request_id?: string
+  resource_id?: string
+  resource_type?: string
+  result: "SUCCEEDED" | "FAILED" | "DENIED"
+  story_id?: string
+}
+
+export interface AuditEventListResponse {
+  items: AuditEvent[]
+}
+
+export interface CanonBranchPascal {
+  ID?: string
+  Status?: string
+  StoryID?: string
+  Type?: string
+}
+
+export interface CanonChangeItemPascal {
+  CanonVersionID?: string
+  ChangeType?: string
+  EntityID?: string
+  EntityType?: string
+  ID?: string
+  Metadata?: Record<string, unknown>
+}
+
+export interface CanonCommitResultPascal {
+  ChangeItems?: CanonChangeItemPascal[]
+  Version?: CanonVersionPascal
+}
+
+export interface CanonVersionListResponse {
+  versions: CanonVersionPascal[]
+}
+
+export interface CanonVersionPascal {
+  BranchID?: string
+  CommittedBy?: string
+  ID?: string
+  ParentVersionID?: string
+  SequenceNo?: number
+  SourceChapterID?: string
+  SourceContentRevisionID?: string
+  SourceProvisionalVersionID?: string
+  Status?: string
+  StoryID?: string
+}
+
+export interface ChapterListResponse {
+  chapters: ChapterPascal[]
+}
+
+export interface ChapterPascal {
+  ArcID?: string
+  ChapterNumber: number
+  ID: string
+  Status: "DRAFT" | "READY" | "PUBLISHED" | "ARCHIVED"
+  StoryID: string
+  Title: string
+}
+
+export interface ChapterPlanRevisionPascal {
+  ChapterID?: string
+  CreatedBy?: string
+  ID?: string
+  Plan?: Record<string, unknown>
+  RevisionNo?: number
+  SourceType?: string
+}
+
+export interface ChapterReviewListResponse {
+  reviews: ChapterReviewPascal[]
+}
+
+export interface ChapterReviewPascal {
+  ChapterID?: string
+  ContentRevisionID?: string
+  ID?: string
+  Outcome?: string
+  Report?: Record<string, unknown>
+  ReviewType?: string
+}
+
+export interface CharacterListResponse {
+  characters: CharacterPascal[]
+}
+
+export interface CharacterPascal {
+  CanonicalName?: string
+  CurrentProfileVersionID?: string
+  ID?: string
+  Importance?: string
+  StoryID?: string
+}
+
+export interface CommitCanonRequest {
+  committed_by?: string
+  content_revision_id: string
+  source_chapter_id: string
+  story_id: string
+}
+
+export interface ContentApprovalPascal {
+  ApprovedBy?: string
+  ChapterID?: string
+  ContentRevisionID?: string
+  ID?: string
+  OverrideSnapshot?: Record<string, unknown>
+  WarningsSnapshot?: Record<string, unknown>
+}
+
+export interface ContentProfileRequest {
+  allowed_themes?: string[]
+  constraints?: Record<string, unknown>
+  disallowed_themes?: string[]
+  language_limits?: string
+  maturity_target?: string
+  romance_limits?: string
+  violence_level?: string
+}
+
+export interface ContentProfileResponse {
+  id: string
+  profile: Record<string, unknown>
+  story_id: string
+  version_no: number
+}
+
+export interface ContentRevisionPascal {
+  BaseCanonVersionID?: string
+  BasedOnRevisionID?: string
+  ChapterID?: string
+  ContentText?: string
+  CreatedBy?: string
+  GenerationRunID?: string
+  ID?: string
+  PlanRevisionID?: string
+  RevisionNo?: number
+  SourceType?: string
+  Status?: "CANDIDATE" | "APPROVED"
+}
+
+export interface ContextSnapshotListResponse {
+  snapshots: ContextSnapshotPascal[]
+}
+
+export interface ContextSnapshotPascal {
+  ArcVersionID?: string
+  BibleVersionID?: string
+  ChapterID?: string
+  ContentProfileVersionID?: string
+  EndingPlanVersionID?: string
+  ID?: string
+  Model?: string
+  PromptVersion?: string
+  Provider?: string
+  StoryID?: string
+  WorkflowVersion?: string
+}
+
+export interface CreateArcRequest {
+  content: Record<string, unknown>
+}
+
+export interface CreateAttentionItemRequest {
+  action?: string
+  chapter_id?: string
+  detail?: string
+  kind?: string
+  priority?: string
+  title: string
+}
+
+export interface CreateAudioAssetRequest {
+  bitrate_kbps?: number
+  duration_ms?: number
+  mime_type: string
+  size_bytes?: number
+  source_narration_revision_id: string
+  storage_key: string
+}
+
+export interface CreateCanonBranchRequest {
+  type?: string
+}
+
+export interface CreateCanonVersionRequest {
+  committed_by?: string
+  source_chapter_id: string
+  story_id: string
+}
+
+export interface CreateChapterRequest {
+  created_by?: string
+  title: string
+}
+
+export interface CreateCharacterRequest {
+  importance?: string
+  name: string
+  profile?: Record<string, unknown>
+}
+
+export interface CreateContextSnapshotRequest {
+  arc_version_id?: string
+  bible_version_id?: string
+  chapter_id?: string
+  content_profile_version_id?: string
+  ending_plan_version_id?: string
+  model?: string
+  prompt_version?: string
+  provider?: string
+  workflow_version?: string
+}
+
+export interface CreateCreativeDecisionRequest {
+  arc_id?: string
+  blocking_level?: string
+  chapter_id?: string
+  context_summary?: string
+  created_by?: string
+  decision_type?: string
+  origin?: string
+  question: string
+  severity?: string
+}
+
+export interface CreateFactRequest {
+  fact_type: string
+  importance?: string
+  subject_id: string
+  subject_type: string
+  value: Record<string, unknown>
+}
+
+export interface CreateJobRequest {
+  job_type: string
+  max_attempts?: number
+}
+
+export interface CreateNarrationRequest {
+  created_by?: string
+  script?: string
+  source_content_revision_id: string
+  voice_id: string
+}
+
+export interface CreatePlanRequest {
+  created_by?: string
+  plan: Record<string, unknown>
+}
+
+export interface CreatePlotThreadEventRequest {
+  chapter_id?: string
+  detail?: Record<string, unknown>
+  event_type: string
+}
+
+export interface CreatePlotThreadRequest {
+  importance?: string
+  summary?: string
+  title: string
+}
+
+export interface CreateProvisionalCanonVersionRequest {
+  source_chapter_id: string
+  source_content_revision_id: string
+  story_id: string
+}
+
+export interface CreateRetconRequest {
+  proposed_change: string
+  reason: string
+  requested_by?: string
+  story_id: string
+  target_chapter_id: string
+}
+
+export interface CreateReviewRequest {
+  content_revision_id: string
+  outcome: "PASS" | "OVERRIDABLE_BLOCK"
+  report?: Record<string, unknown>
+  review_type: "CONTINUITY" | "QUALITY" | "SAFETY" | "DURATION"
+}
+
+export interface CreateRunRequest {
+  chapter_id?: string
+  requested_by?: string
+  run_type: string
+  story_id?: string
+}
+
+export interface CreateStoryRequest {
+  created_by?: string
+  description?: string
+  policy?: GenerationPolicyInput
+  title: string
+}
+
+export interface CreativeDecisionListResponse {
+  decisions: CreativeDecisionPascal[]
+}
+
+export interface CreativeDecisionPascal {
+  ArcID?: string
+  BlockingLevel?: string
+  ChapterID?: string
+  ContextSummary?: string
+  DecisionType?: string
+  ID?: string
+  Origin?: string
+  Question?: string
+  Severity?: string
+  Status?: string
+  StoryID?: string
+}
+
+export interface DurationOutputPascal {
+  EstimatedMinutes?: number
+  Outcome?: string
+  Report?: Record<string, unknown>
+}
+
+export interface EditContentRequest {
+  based_on_revision_id?: string
+  edited_by?: string
+  text: string
+}
+
+export interface EmailResendRequest {
+  email: string
+}
+
+export interface EmailVerifyRequest {
+  email: string
+  token: string
+}
+
+export interface EndingPlanVersionPascal {
+  BasedOnVersionID?: string
+  Content?: Record<string, unknown>
+  CreatedBy?: string
+  ID?: string
+  StoryID?: string
+  VersionNo?: number
+}
+
+export interface ErrorBody {
+  code: string
+  message: string
+}
+
+export interface ErrorResponse {
+  error: ErrorBody
+}
+
+export interface FavoriteListResponse {
+  favorites: Record<string, unknown>[]
+}
+
+export interface FavoriteStatusResponse {
+  status: "favorited" | "unfavorited"
+}
+
+export interface FavoriteStory {
+  description?: string
+  favorited_at?: string
+  slug?: string
+  story_id?: string
+  title?: string
+}
+
+export interface FoundationRequest {
+  created_by?: string
+  premise: string
+}
+
+export interface FoundationResponse {
+  arcs?: StoryArcPascal[]
+  bible?: StoryBibleVersionPascal
+  characters?: CharacterPascal[]
+  ending?: EndingPlanVersionPascal
+}
+
+export interface GenerationJobPascal {
+  AttemptCount?: number
+  ID?: string
+  InputFingerprint?: string
+  JobType?: string
+  LastErrorClass?: string
+  LastErrorCode?: string
+  LockedBy?: string
+  MaxAttempts?: number
+  OutputRef?: string
+  Priority?: number
+  RunID?: string
+  Status?: string
+}
+
+export interface GenerationPolicyInput {
+  content_origin?: string
+  language?: string
+  minimum_audio_duration_sec?: number
+  narration_language?: string
+  target_audio_duration_sec?: number
+}
+
+export interface GenerationPolicyResponse {
+  content_origin: string
+  language: string
+  minimum_audio_duration_sec: number
+  narration_language: string
+  policy_version: number
+  story_id: string
+  target_audio_duration_sec: number
+}
+
+export interface GenerationRunPascal {
+  BaseCanonVersionID?: string
+  ChapterID?: string
+  ContextSnapshotID?: string
+  ID?: string
+  IdempotencyKey?: string
+  Priority?: number
+  RequestedBy?: string
+  RunType?: string
+  Status?: string
+  StoryID?: string
+  WaitingReason?: string
+  WorkflowVersion?: string
+}
+
+export interface Genre {
+  id: string
+  name: string
+  slug: string
+}
+
+export interface GenreListResponse {
+  genres: Genre[]
+}
+
+export interface HealthResponse {
+  status: "ok"
+}
+
+export interface JobAttemptListResponse {
+  usage: JobAttemptPascal[]
+}
+
+export interface JobAttemptPascal {
+  AttemptNo?: number
+  ErrorClass?: string
+  ErrorCode?: string
+  ID?: string
+  JobID?: string
+  LatencyMs?: number
+  Model?: string
+  Provider?: string
+  Status?: string
+  Usage?: Record<string, unknown>
+}
+
+export interface JobViewPascal {
+  AttemptCount?: number
+  AttemptsExhausted?: boolean
+  ID?: string
+  JobType?: string
+  LastErrorClass?: string
+  LastErrorCode?: string
+  MaxAttempts?: number
+  Observation?: string
+  Retryable?: boolean
+  RunID?: string
+  Status?: string
+}
+
+export interface LibraryItem {
+  audio_asset_id?: string
+  audio_duration_ms?: number
+  chapter_id?: string
+  chapter_number?: number
+  chapter_title?: string
+  completed_at?: string
+  last_listened_at?: string
+  position_ms?: number
+  relisten_status?: RelistenStatus
+  story_description?: string
+  story_id?: string
+  story_slug?: string
+  story_title?: string
+  updated_at?: string
+}
+
+export interface LibraryResponse {
+  completed: LibraryItem[]
+  continue_listening?: LibraryItem
+  favorites: FavoriteStory[]
+  recent: LibraryItem[]
+}
+
+export interface ListeningProgressPascal {
+  ChapterID?: string
+  CompletedAt?: string
+  LastAudioAssetID?: string
+  LastPlaybackSessionID?: string
+  PositionMs?: number
+  RelistenStatus?: RelistenStatus
+  UserID?: string
+  Version?: number
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface MFAConfirmRequest {
+  code: string
+}
+
+export interface MFAConfirmResponse {
+  recovery_codes: string[]
+}
+
+export interface MFASetupResponse {
+  secret: string
+}
+
+export interface MarkStaleRequest {
+  chapter_id?: string
+}
+
+export interface MeResponse {
+  email: string
+  email_verified: boolean
+  id: string
+  mfa_enabled: boolean
+  roles: "GUEST" | "USER" | "ADMIN"[]
+  status: string
+}
+
+export interface NarrationRevisionPascal {
+  ChapterID?: string
+  CreatedBy?: string
+  ID?: string
+  RevisionNo?: number
+  Script?: string
+  SourceContentRevisionID?: string
+  Status?: string
+  VoiceID?: string
+}
+
+export interface PasswordForgotRequest {
+  email: string
+}
+
+export interface PasswordResetRequest {
+  email: string
+  new_password: string
+  token: string
+}
+
+export interface PlotThreadEventPascal {
+  ChapterID?: string
+  Detail?: Record<string, unknown>
+  EventType?: string
+  ID?: string
+  PlotThreadID?: string
+}
+
+export interface PlotThreadListResponse {
+  plot_threads: PlotThreadPascal[]
+}
+
+export interface PlotThreadPascal {
+  ID?: string
+  Importance?: string
+  Status?: string
+  StoryID?: string
+  Summary?: string
+  Title?: string
+}
+
+export interface ProgressConflictResponse {
+  error: ErrorBody
+  progress: ListeningProgressPascal
+}
+
+export interface PromoteProvisionalVersionRequest {
+  committed_by?: string
+}
+
+export interface PublishedChapterContentResponse {
+  chapter_id: string
+  content_text: string
+  revision_id: string
+}
+
+export interface PublishedChapterListResponse {
+  chapters: ChapterPascal[]
+}
+
+export interface ReadinessResponse {
+  missing: string[]
+  ready: boolean
+}
+
+export interface ReadyResponse {
+  dependencies?: Record<string, unknown>
+  error?: string
+  status: "ready" | "degraded" | "unavailable"
+}
+
+export interface RecordUsageRequest {
+  usage?: Record<string, unknown>
+}
+
+export interface RegenerateContentRequest {
+  based_on_revision_id?: string
+  requested_by?: string
+}
+
+export interface RegisterRequest {
+  email: string
+  password: string
+}
+
+export interface RejectContentRequest {
+  reason?: string
+  rejected_by?: string
+}
+
+export interface RejectCreativeDecisionRequest {
+  rejected_by?: string
+  scope?: string
+}
+
+export type RelistenStatus = "NO_RELISTEN_NEEDED" | "RELISTEN_REQUIRED" | "RELISTEN_RECOMMENDED"
+
+export interface RepairCanonRequest {
+  branch_id: string
+  committed_by?: string
+  content_revision_id: string
+  source_chapter_id: string
+}
+
+export interface RetconListResponse {
+  retcons: RetconRequestPascal[]
+}
+
+export interface RetconRequestPascal {
+  AppliedBy?: string
+  ApprovedBy?: string
+  ID?: string
+  ImpactScope?: string
+  ProposedChange?: string
+  Reason?: string
+  RequestedBy?: string
+  Status?: "DRAFT" | "ANALYZING" | "APPROVED" | "READY_TO_APPLY" | "APPLIED" | "CANCELLED"
+  StoryID?: string
+  TargetChapterID?: string
+}
+
+export interface RevisionImpactRequest {
+  relisten_status: RelistenStatus
+}
+
+export interface RevisionImpactResponse {
+  affected_listeners: number
+}
+
+export interface RewriteChapterRequest {
+  based_on_revision_id?: string
+  created_by?: string
+  feedback?: string
+}
+
+export interface RunReviewRequest {
+  revision_id?: string
+  text?: string
+}
+
+export interface SaveProgressRequest {
+  audio_asset_id?: string
+  expected_version?: number
+  playback_session_id?: string
+  position_ms: number
+}
+
+export interface SelectCreativeDecisionRequest {
+  selected_by?: string
+}
+
+export interface SessionListResponse {
+  items: SessionResponse[]
+}
+
+export interface SessionResponse {
+  created_at: string
+  current: boolean
+  expires_at: string
+  id: string
+  last_used_at: string
+  safe_ip_metadata?: string
+  user_agent_summary?: string
+}
+
+export interface StaleJobsResponse {
+  stale_jobs: GenerationJobPascal[]
+}
+
+export interface StartBatchRequest {
+  chapter_ids: string[]
+  requested_by?: string
+}
+
+export interface StatusResponse {
+  status: string
+}
+
+export interface StoryArcListResponse {
+  arcs: StoryArcPascal[]
+}
+
+export interface StoryArcPascal {
+  CurrentVersionID?: string
+  ID?: string
+  Ordinal?: number
+  Status?: string
+  StoryID?: string
+}
+
+export interface StoryAssetResponse {
+  id: string
+  mime_type: string
+  size_bytes: number
+  status: "PENDING" | "READY"
+  storage_key: string
+  story_id: string
+  type: "COVER"
+}
+
+export interface StoryBibleVersionPascal {
+  BasedOnVersionID?: string
+  Content?: Record<string, unknown>
+  CreatedBy?: string
+  ID?: string
+  StoryID?: string
+  VersionNo?: number
+}
+
+export interface StoryFactListResponse {
+  facts: StoryFactPascal[]
+}
+
+export interface StoryFactPascal {
+  FactType?: string
+  ID?: string
+  Importance?: string
+  Status?: string
+  StoryID?: string
+  SubjectID?: string
+  SubjectType?: string
+  SupersedesFactID?: string
+  Value?: Record<string, unknown>
+}
+
+export interface StoryListResponse {
+  stories: StorySummary[]
+}
+
+export interface StorySummary {
+  description: string
+  id: string
+  slug: string
+  status: "DRAFT" | "ACTIVE" | "COMPLETED" | "ARCHIVED"
+  title: string
+  visibility: "PRIVATE" | "PUBLIC"
+}
+
+export interface TTSSegmentListResponse {
+  segments: TTSSegmentPascal[]
+}
+
+export interface TTSSegmentPascal {
+  DurationMs?: number
+  ID?: string
+  Model?: string
+  NarrationRevisionID?: string
+  Provider?: string
+  SegmentNo?: number
+  Status?: string
+  TempStorageKey?: string
+  Text?: string
+  VoiceID?: string
+}
+
+export interface ThreadInactivityListResponse {
+  inactive_threads: Record<string, unknown>[]
+}
+
+export interface TokenResponse {
+  access_token: string
+  expires_in: number
+  status: string
+  token_type: "Bearer"
+}
+
+export interface UpdateMetadataRequest {
+  description?: string
+  title?: string
+}
+
+export interface UserResponse {
+  email: string
+  id: string
+  status: "ACTIVE" | "SUSPENDED" | "DEACTIVATED"
+}
+
+export interface VersionContentRequest {
+  content: Record<string, unknown>
+}
+
+export interface WorkflowSettingsRequest {
+  auto_ai_review?: boolean
+  batch_generation_size?: number
+  creative_autonomy?: string
+  fallback_policy?: Record<string, unknown>
+  pause_before_tts?: boolean
+  planning_horizon?: number
+  preferred_text_model?: string
+  preferred_text_provider?: string
+  preferred_tts_provider?: string
+  preferred_voice_id?: string
+}
+
+export interface WorkflowSettingsResponse {
+  auto_ai_review?: boolean
+  batch_generation_size?: number
+  creative_autonomy?: string
+  fallback_policy?: Record<string, unknown>
+  pause_before_tts?: boolean
+  planning_horizon?: number
+  preferred_text_model?: string
+  preferred_text_provider?: string
+  preferred_tts_provider?: string
+  preferred_voice_id?: string
+  story_id: string
+}
+
+export interface WriteChapterRequest {
+  created_by?: string
+  prompt?: string
+}
+

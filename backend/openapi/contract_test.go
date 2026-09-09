@@ -1,13 +1,13 @@
 package openapi_test
 
 import (
-	"fmt"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/synaudio/synaudio/backend/openapi"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -35,8 +35,11 @@ func TestRegenerateFrontendContract(t *testing.T) {
 	if os.Getenv("REGEN_OPENAPI_FRONTEND") == "" {
 		t.Skip("set REGEN_OPENAPI_FRONTEND=1 to regenerate frontend/src/api/openapi.generated.ts")
 	}
-	doc := loadDocument(t)
-	wantTS := generatedTypeScript(doc)
+	doc, err := openapi.LoadDocument("api.yaml")
+	if err != nil {
+		t.Fatalf("load OpenAPI contract: %v", err)
+	}
+	wantTS := openapi.GenerateFrontendContract(doc)
 	if err := os.WriteFile("../../frontend/src/api/openapi.generated.ts", []byte(wantTS), 0o644); err != nil {
 		t.Fatalf("write generated frontend contract: %v", err)
 	}
@@ -44,6 +47,9 @@ func TestRegenerateFrontendContract(t *testing.T) {
 
 func TestOpenAPIContract(t *testing.T) {
 	doc := loadDocument(t)
+	if err := openapi.ValidateOperationSchemas(toPackageDocument(doc)); err != nil {
+		t.Fatal(err)
+	}
 	runtime := runtimeRoutes(t)
 	documented := documentedRoutes(doc)
 
@@ -60,6 +66,7 @@ func TestOpenAPIContract(t *testing.T) {
 	if _, ok := doc.Components.Schemas["ErrorResponse"]; !ok {
 		t.Fatal("components.schemas.ErrorResponse is required")
 	}
+	validateBindingCoverage(t, doc)
 
 	operationIDs := map[string]string{}
 	for path, item := range doc.Paths {
@@ -84,13 +91,52 @@ func TestOpenAPIContract(t *testing.T) {
 		}
 	}
 
-	wantTS := generatedTypeScript(doc)
+	pkgDoc, err := openapi.LoadDocument("api.yaml")
+	if err != nil {
+		t.Fatalf("reload OpenAPI contract: %v", err)
+	}
+	wantTS := openapi.GenerateFrontendContract(pkgDoc)
 	gotTS, err := os.ReadFile("../../frontend/src/api/openapi.generated.ts")
 	if err != nil {
 		t.Fatalf("read generated frontend contract: %v", err)
 	}
 	if string(gotTS) != wantTS {
 		t.Fatal("frontend/src/api/openapi.generated.ts drifted from backend/openapi/api.yaml")
+	}
+}
+
+func toPackageDocument(doc openAPIDocument) *openapi.Document {
+	return &openapi.Document{
+		Paths: doc.Paths,
+		Components: map[string]any{
+			"schemas":         doc.Components.Schemas,
+			"securitySchemes": doc.Components.SecuritySchemes,
+			"responses":       map[string]any{},
+		},
+	}
+}
+
+func validateBindingCoverage(t *testing.T, doc openAPIDocument) {
+	t.Helper()
+	seen := map[string]struct{}{}
+	for _, item := range doc.Paths {
+		for method, raw := range item {
+			if _, ok := httpMethods[strings.ToLower(method)]; !ok {
+				continue
+			}
+			op, _ := raw.(map[string]any)
+			id, _ := op["operationId"].(string)
+			if id == "" {
+				continue
+			}
+			seen[id] = struct{}{}
+			if _, ok := openapi.OperationBindings[id]; !ok {
+				t.Fatalf("missing OperationBinding for operationId %q", id)
+			}
+		}
+	}
+	if len(seen) != len(openapi.OperationBindings) {
+		t.Fatalf("OperationBindings has %d entries but api.yaml declares %d operationIds", len(openapi.OperationBindings), len(seen))
 	}
 }
 
@@ -214,52 +260,6 @@ func isPublicOperation(path string) bool {
 	default:
 		return false
 	}
-}
-
-type operation struct {
-	Method string
-	Path   string
-	ID     string
-}
-
-func generatedTypeScript(doc openAPIDocument) string {
-	ops := make([]operation, 0)
-	for path, item := range doc.Paths {
-		for method, raw := range item {
-			if _, ok := httpMethods[strings.ToLower(method)]; !ok {
-				continue
-			}
-			op, _ := raw.(map[string]any)
-			id, _ := op["operationId"].(string)
-			ops = append(ops, operation{Method: strings.ToUpper(method), Path: path, ID: id})
-		}
-	}
-	sort.Slice(ops, func(i, j int) bool {
-		if ops[i].Path == ops[j].Path {
-			return ops[i].Method < ops[j].Method
-		}
-		return ops[i].Path < ops[j].Path
-	})
-
-	var b strings.Builder
-	b.WriteString("// Code generated from backend/openapi/api.yaml contract surface. DO NOT EDIT.\n")
-	b.WriteString("// backend/openapi/contract_test.go verifies this file stays synchronized.\n\n")
-	b.WriteString("export const API_OPERATIONS = [\n")
-	for _, op := range ops {
-		fmt.Fprintf(&b, "  { method: %q, path: %q, operationId: %q },\n", op.Method, op.Path, op.ID)
-	}
-	b.WriteString("] as const\n\n")
-	b.WriteString("export type ApiOperation = (typeof API_OPERATIONS)[number]\n")
-	b.WriteString("export type ApiMethod = ApiOperation[\"method\"]\n")
-	b.WriteString("export type ApiPath = ApiOperation[\"path\"]\n")
-	b.WriteString("export type ApiOperationId = ApiOperation[\"operationId\"]\n\n")
-	b.WriteString("export interface ApiErrorResponse {\n")
-	b.WriteString("  status?: string\n")
-	b.WriteString("  error: string\n")
-	b.WriteString("  code?: string\n")
-	b.WriteString("  message?: string\n")
-	b.WriteString("}\n")
-	return b.String()
 }
 
 func difference(left, right map[string]struct{}) []string {
