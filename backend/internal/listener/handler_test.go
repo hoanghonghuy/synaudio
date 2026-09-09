@@ -54,6 +54,7 @@ func TestListenerHandlerIgnoresUserIDHeader(t *testing.T) {
 		"position_ms":         1000,
 		"audio_asset_id":      "asset-1",
 		"playback_session_id": "playback-1",
+		"expected_version":    0,
 	})
 	req := httptest.NewRequest(http.MethodPut, "/me/progress/chapter-1", &body)
 	req.Header.Set("Content-Type", "application/json")

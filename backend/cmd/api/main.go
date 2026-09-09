@@ -19,6 +19,7 @@ import (
 	"github.com/synaudio/synaudio/backend/internal/platform/config"
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
+	"github.com/synaudio/synaudio/backend/internal/platform/httpserver"
 	"github.com/synaudio/synaudio/backend/internal/platform/logging"
 	"github.com/synaudio/synaudio/backend/internal/platform/metrics"
 	"github.com/synaudio/synaudio/backend/internal/platform/pgstore"
@@ -251,10 +252,10 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           metricRegistry.HTTPMiddleware(router),
-		ReadHeaderTimeout: 5 * time.Second,
+		Addr:    cfg.HTTPAddr,
+		Handler: metricRegistry.HTTPMiddleware(router),
 	}
+	httpserver.ApplyPublicAPIPolicy(server)
 
 	go func() {
 		log.Info("api listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv, "audio_processor", audioProcessorSettings.Mode)

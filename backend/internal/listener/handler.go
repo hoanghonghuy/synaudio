@@ -3,6 +3,7 @@ package listener
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -101,6 +102,7 @@ type saveProgressRequest struct {
 	PositionMs        int64  `json:"position_ms"`
 	AudioAssetID      string `json:"audio_asset_id"`
 	PlaybackSessionID string `json:"playback_session_id"`
+	ExpectedVersion   int64  `json:"expected_version"`
 }
 
 func (h *Handler) saveProgress(w http.ResponseWriter, r *http.Request) {
@@ -116,8 +118,17 @@ func (h *Handler) saveProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := h.svc.SaveProgress(r.Context(), userID, chapterID, req.PositionMs, req.AudioAssetID, req.PlaybackSessionID)
+	p, err := h.svc.SaveProgress(r.Context(), userID, chapterID, req.PositionMs, req.AudioAssetID, req.PlaybackSessionID, req.ExpectedVersion)
 	if err != nil {
+		var conflict *ProgressVersionConflict
+		if errors.As(err, &conflict) {
+			writeProgressConflict(w, conflict.Current)
+			return
+		}
+		if errors.Is(err, ErrProgressNotFound) {
+			writeError(w, http.StatusNotFound, "PROGRESS_NOT_FOUND", "progress not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
 		return
 	}
@@ -186,5 +197,15 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 			"code":    code,
 			"message": message,
 		},
+	})
+}
+
+func writeProgressConflict(w http.ResponseWriter, current ListeningProgress) {
+	writeJSON(w, http.StatusConflict, map[string]any{
+		"error": map[string]string{
+			"code":    "PROGRESS_VERSION_CONFLICT",
+			"message": "progress was updated elsewhere",
+		},
+		"progress": current,
 	})
 }

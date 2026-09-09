@@ -55,7 +55,20 @@ func (s *fakeStore) GetProgress(_ context.Context, userID, chapterID string) (Li
 	return p, nil
 }
 
-func (s *fakeStore) SaveProgress(_ context.Context, p ListeningProgress) (ListeningProgress, error) {
+func (s *fakeStore) SaveProgress(_ context.Context, p ListeningProgress, expectedVersion int64) (ListeningProgress, error) {
+	currentVersion := int64(0)
+	if s.progress[p.UserID] != nil {
+		if existing, ok := s.progress[p.UserID][p.ChapterID]; ok {
+			currentVersion = existing.Version
+		}
+	}
+	if currentVersion != expectedVersion {
+		if currentVersion == 0 {
+			return ListeningProgress{}, ErrProgressNotFound
+		}
+		return ListeningProgress{}, &ProgressVersionConflict{Current: s.progress[p.UserID][p.ChapterID]}
+	}
+	p.Version = expectedVersion + 1
 	if s.progress[p.UserID] == nil {
 		s.progress[p.UserID] = map[string]ListeningProgress{}
 	}

@@ -242,7 +242,9 @@ func (q *Queries) RemoveFavorite(ctx context.Context, arg RemoveFavoriteParams) 
 const saveProgress = `-- name: SaveProgress :one
 INSERT INTO listening_progress (user_id, chapter_id, position_ms, last_audio_asset_id,
                                 last_playback_session_id, version, last_listened_at)
-VALUES ($1, $2, $3, $4, $5, $6, NOW())
+SELECT $1, $2, $3, $4, $5, $6 + 1, NOW()
+WHERE $6 = 0
+   OR EXISTS (SELECT 1 FROM listening_progress lp WHERE lp.user_id = $1 AND lp.chapter_id = $2)
 ON CONFLICT (user_id, chapter_id)
 DO UPDATE SET position_ms = EXCLUDED.position_ms,
               last_audio_asset_id = EXCLUDED.last_audio_asset_id,
@@ -250,6 +252,7 @@ DO UPDATE SET position_ms = EXCLUDED.position_ms,
               version = EXCLUDED.version,
               last_listened_at = NOW(),
               updated_at = NOW()
+WHERE listening_progress.version = $6
 RETURNING user_id, chapter_id, position_ms, completed_at, last_audio_asset_id,
           last_playback_session_id, version, relisten_status, last_listened_at, updated_at
 `
@@ -260,7 +263,7 @@ type SaveProgressParams struct {
 	PositionMs            int64       `json:"position_ms"`
 	LastAudioAssetID      pgtype.UUID `json:"last_audio_asset_id"`
 	LastPlaybackSessionID pgtype.UUID `json:"last_playback_session_id"`
-	Version               int64       `json:"version"`
+	ExpectedVersion       interface{} `json:"expected_version"`
 }
 
 type SaveProgressRow struct {
@@ -283,7 +286,7 @@ func (q *Queries) SaveProgress(ctx context.Context, arg SaveProgressParams) (Sav
 		arg.PositionMs,
 		arg.LastAudioAssetID,
 		arg.LastPlaybackSessionID,
-		arg.Version,
+		arg.ExpectedVersion,
 	)
 	var i SaveProgressRow
 	err := row.Scan(

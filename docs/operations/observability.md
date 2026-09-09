@@ -41,6 +41,29 @@ Backlog gauges are sampled from durable queue tables every 15 seconds. They are 
 6. **Generation/provider failures and latency**: alert on sustained increases in `synaudio_generation_jobs_total{outcome="failure"}` and on abnormal mean generation attempt duration derived from duration sum / matching outcome count. Never add raw provider error text as a metric label; use structured logs for detailed diagnosis.
 7. **Readiness failure**: continue to use `/ready` for dependency gating. Metrics are diagnostic telemetry and do not replace readiness.
 
+## HTTP server timeout contract (application boundary)
+
+The API and metrics listeners set explicit `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, `IdleTimeout`, and `MaxHeaderBytes` values in `backend/internal/platform/httpserver` rather than relying on Go zero-value defaults or undocumented ingress behavior.
+
+Public API defaults (as of #52):
+
+- `ReadHeaderTimeout`: 5s
+- `ReadTimeout`: 60s (request body read bound; pairs with a 2 MiB JSON body limit at the router)
+- `WriteTimeout`: 11m (covers the longest synchronous TextAI admin handler budget of ~10m without leaving connections unbounded)
+- `IdleTimeout`: 120s
+- `MaxHeaderBytes`: 64 KiB
+- `PublicMaxRequestBodyBytes`: 2 MiB
+
+Private metrics defaults:
+
+- `ReadHeaderTimeout`: 5s
+- `ReadTimeout`: 15s
+- `WriteTimeout`: 30s
+- `IdleTimeout`: 60s
+- `MaxHeaderBytes`: 32 KiB
+
+Production ingress/reverse-proxy timeouts (#49) must be **at or above** these application bounds for the routes they front. If an ingress `proxy_read_timeout`/`proxy_send_timeout` is shorter than the API `WriteTimeout`, legitimate synchronous admin generation/review responses can be truncated even though the application would still be working. Metrics scrapes should use ingress/proxy timeouts no shorter than the metrics `WriteTimeout`.
+
 ## Scrape examples
 
 Prometheus should scrape API and worker metrics targets independently over their explicitly private addresses. Do not route either metrics listener through public ingress.
