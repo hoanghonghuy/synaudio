@@ -2,10 +2,9 @@ package planning
 
 import (
 	"context"
-	"errors"
-)
 
-var ErrListenerAudioNotEligible = errors.New("listener audio not eligible")
+	"github.com/synaudio/synaudio/backend/internal/audio"
+)
 
 // StoryVisibilityReader exposes the listener-facing story publication state.
 type StoryVisibilityReader interface {
@@ -26,7 +25,7 @@ func NewListenerEligibility(chapters Store, stories StoryVisibilityReader) *List
 // its parent story is listener-visible.
 func (l *ListenerEligibility) CheckListenerAudioEligible(ctx context.Context, chapterID string) error {
 	if l == nil || l.chapters == nil || l.stories == nil {
-		return ErrListenerAudioNotEligible
+		return audio.ErrListenerAudioNotEligible
 	}
 
 	ch, err := l.chapters.GetChapter(ctx, chapterID)
@@ -34,7 +33,7 @@ func (l *ListenerEligibility) CheckListenerAudioEligible(ctx context.Context, ch
 		return err
 	}
 	if ch.Status != "PUBLISHED" {
-		return ErrListenerAudioNotEligible
+		return audio.ErrListenerAudioNotEligible
 	}
 
 	status, visibility, err := l.stories.GetStoryVisibility(ctx, ch.StoryID)
@@ -42,10 +41,10 @@ func (l *ListenerEligibility) CheckListenerAudioEligible(ctx context.Context, ch
 		return err
 	}
 	if visibility != "PUBLIC" {
-		return ErrListenerAudioNotEligible
+		return audio.ErrListenerAudioNotEligible
 	}
 	if status != "ACTIVE" && status != "COMPLETED" {
-		return ErrListenerAudioNotEligible
+		return audio.ErrListenerAudioNotEligible
 	}
 
 	return nil

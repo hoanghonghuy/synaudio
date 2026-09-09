@@ -1,0 +1,177 @@
+package planning
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/synaudio/synaudio/backend/internal/audio"
+)
+
+type integrationAudioStore struct {
+	active    audio.AudioAsset
+	hasActive bool
+}
+
+func (s *integrationAudioStore) NextNarrationRevision(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+func (s *integrationAudioStore) CreateNarrationRevision(_ context.Context, r audio.NarrationRevision) (audio.NarrationRevision, error) {
+	return r, nil
+}
+
+func (s *integrationAudioStore) GetNarrationRevision(_ context.Context, revisionID string) (audio.NarrationRevision, error) {
+	return audio.NarrationRevision{ID: revisionID}, nil
+}
+
+func (s *integrationAudioStore) GetLatestNarrationRevision(_ context.Context, _ string) (audio.NarrationRevision, error) {
+	return audio.NarrationRevision{}, audio.ErrNarrationNotFound
+}
+
+func (s *integrationAudioStore) CreateTTSSegment(_ context.Context, seg audio.TTSSegment) (audio.TTSSegment, error) {
+	return seg, nil
+}
+
+func (s *integrationAudioStore) GetTTSSegment(_ context.Context, segmentID string) (audio.TTSSegment, error) {
+	return audio.TTSSegment{ID: segmentID}, nil
+}
+
+func (s *integrationAudioStore) UpdateTTSSegment(_ context.Context, seg audio.TTSSegment) (audio.TTSSegment, error) {
+	return seg, nil
+}
+
+func (s *integrationAudioStore) NextAudioVersion(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+func (s *integrationAudioStore) CreateAudioAsset(_ context.Context, a audio.AudioAsset) (audio.AudioAsset, error) {
+	return a, nil
+}
+
+func (s *integrationAudioStore) GetAudioAsset(_ context.Context, assetID string) (audio.AudioAsset, error) {
+	return audio.AudioAsset{ID: assetID}, nil
+}
+
+func (s *integrationAudioStore) GetActiveAudioAsset(_ context.Context, chapterID string) (audio.AudioAsset, error) {
+	if s.hasActive && s.active.ChapterID == chapterID {
+		return s.active, nil
+	}
+	return audio.AudioAsset{}, audio.ErrAudioAssetNotFound
+}
+
+func (s *integrationAudioStore) GetLatestReadyAudioAssetForNarration(_ context.Context, _, _ string) (audio.AudioAsset, error) {
+	return audio.AudioAsset{}, audio.ErrReadyAudioAssetNotFound
+}
+
+func (s *integrationAudioStore) SetActiveAudioAsset(_ context.Context, _, _ string) (audio.AudioAsset, error) {
+	return audio.AudioAsset{}, nil
+}
+
+func (s *integrationAudioStore) SetActiveAudioAssetForLatestNarration(_ context.Context, _, _ string) (audio.AudioAsset, error) {
+	return audio.AudioAsset{}, nil
+}
+
+type integrationPresigner struct{}
+
+func (integrationPresigner) PresignedGetObject(_ context.Context, key string, _ time.Duration) (string, error) {
+	return "https://cdn.example.com/" + key, nil
+}
+
+func newListenerAudioHandler(t *testing.T, chapterStatus string, storyStatus, storyVisibility string, hasActive bool) http.Handler {
+	store := newPublishFakeStore()
+	ch, err := store.CreateChapter(t.Context(), Chapter{ID: "ch-1", StoryID: "s1", Title: "Chapter 1", Status: chapterStatus})
+	if err != nil {
+		t.Fatalf("create chapter: %v", err)
+	}
+
+	gate := NewListenerEligibility(store, &fakeStoryVisibilityReader{
+		status:     storyStatus,
+		visibility: storyVisibility,
+	})
+
+	audioStore := &integrationAudioStore{
+		hasActive: hasActive,
+		active: audio.AudioAsset{
+			ID:         "asset-1",
+			ChapterID:  ch.ID,
+			Status:     "READY",
+			StorageKey: "audio/ch-1/v1.mp3",
+			IsActive:   true,
+		},
+	}
+	svc := audio.NewService(audioStore, audio.WithPresigner(integrationPresigner{}))
+	svc.SetListenerAudioGate(gate)
+	return audio.NewHandler(svc)
+}
+
+func TestListenerAudioURLHandlerWithRealEligibilityGateRejectsUnpublishedChapter(t *testing.T) {
+	handler := newListenerAudioHandler(t, "READY", "ACTIVE", "PUBLIC", true)
+
+	req := httptest.NewRequest(http.MethodGet, "/chapters/ch-1/audio-url", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for unpublished chapter, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertAudioNotAvailableCode(t, rec.Body.Bytes())
+}
+
+func TestListenerAudioURLHandlerWithRealEligibilityGateRejectsPrivateStory(t *testing.T) {
+	handler := newListenerAudioHandler(t, "PUBLISHED", "ACTIVE", "PRIVATE", true)
+
+	req := httptest.NewRequest(http.MethodGet, "/chapters/ch-1/audio-url", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for private story, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertAudioNotAvailableCode(t, rec.Body.Bytes())
+}
+
+func TestListenerAudioURLHandlerWithRealEligibilityGateRejectsInactiveStory(t *testing.T) {
+	handler := newListenerAudioHandler(t, "PUBLISHED", "DRAFT", "PUBLIC", true)
+
+	req := httptest.NewRequest(http.MethodGet, "/chapters/ch-1/audio-url", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for inactive story, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertAudioNotAvailableCode(t, rec.Body.Bytes())
+}
+
+func TestListenerAudioURLHandlerWithRealEligibilityGateReturnsPresignedURL(t *testing.T) {
+	handler := newListenerAudioHandler(t, "PUBLISHED", "ACTIVE", "PUBLIC", true)
+
+	req := httptest.NewRequest(http.MethodGet, "/chapters/ch-1/audio-url", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for eligible chapter, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["url"] != "https://cdn.example.com/audio/ch-1/v1.mp3" {
+		t.Fatalf("unexpected url: %q", body["url"])
+	}
+}
+
+func assertAudioNotAvailableCode(t *testing.T, body []byte) {
+	var payload map[string]map[string]string
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if payload["error"]["code"] != "AUDIO_NOT_AVAILABLE" {
+		t.Fatalf("expected AUDIO_NOT_AVAILABLE, got %#v", payload["error"])
+	}
+}

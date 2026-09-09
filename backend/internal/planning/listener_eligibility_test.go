@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/synaudio/synaudio/backend/internal/audio"
 )
 
 type fakeStoryVisibilityReader struct {
@@ -21,7 +23,7 @@ func TestListenerEligibilityRejectsUnpublishedChapter(t *testing.T) {
 	ch, _ := store.CreateChapter(context.Background(), Chapter{ID: "ch-1", StoryID: "s1", Status: "READY"})
 	gate := NewListenerEligibility(store, &fakeStoryVisibilityReader{status: "ACTIVE", visibility: "PUBLIC"})
 
-	if err := gate.CheckListenerAudioEligible(context.Background(), ch.ID); !errors.Is(err, ErrListenerAudioNotEligible) {
+	if err := gate.CheckListenerAudioEligible(context.Background(), ch.ID); !errors.Is(err, audio.ErrListenerAudioNotEligible) {
 		t.Fatalf("expected ErrListenerAudioNotEligible, got %v", err)
 	}
 }
@@ -31,7 +33,7 @@ func TestListenerEligibilityRejectsPrivateStory(t *testing.T) {
 	ch, _ := store.CreateChapter(context.Background(), Chapter{ID: "ch-1", StoryID: "s1", Status: "PUBLISHED"})
 	gate := NewListenerEligibility(store, &fakeStoryVisibilityReader{status: "ACTIVE", visibility: "PRIVATE"})
 
-	if err := gate.CheckListenerAudioEligible(context.Background(), ch.ID); !errors.Is(err, ErrListenerAudioNotEligible) {
+	if err := gate.CheckListenerAudioEligible(context.Background(), ch.ID); !errors.Is(err, audio.ErrListenerAudioNotEligible) {
 		t.Fatalf("expected ErrListenerAudioNotEligible, got %v", err)
 	}
 }
