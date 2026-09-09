@@ -273,6 +273,92 @@ func TestGenerateStopsOnContextCancelDuringBackoff(t *testing.T) {
 	}
 }
 
+func TestClassifyAttemptFailure2xxBodyReadResetIsTransient(t *testing.T) {
+	result := attemptResult{
+		statusCode: http.StatusOK,
+		err:        &responseReadError{cause: errors.New("connection reset by peer")},
+	}
+	class, code, retryable, retryAfter := classifyAttemptFailure(result)
+	if class != "TRANSIENT" || code != "PROVIDER_NETWORK" || !retryable || retryAfter != 0 {
+		t.Fatalf("expected TRANSIENT/PROVIDER_NETWORK retryable, got %s/%s retryable=%v retryAfter=%v", class, code, retryable, retryAfter)
+	}
+}
+
+func TestClassifyAttemptFailure2xxMalformedJSONStaysPermanent(t *testing.T) {
+	result := attemptResult{
+		statusCode: http.StatusOK,
+		err:        classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("invalid character")),
+	}
+	class, code, retryable, _ := classifyAttemptFailure(result)
+	if class != "PERMANENT" || code != "PROVIDER_MALFORMED" || retryable {
+		t.Fatalf("expected PERMANENT/PROVIDER_MALFORMED non-retryable, got %s/%s retryable=%v", class, code, retryable)
+	}
+}
+
+func TestGenerateRetries2xxBodyReadResetThenSucceeds(t *testing.T) {
+	var calls atomic.Int32
+	t.Cleanup(func() {
+		SetProviderSleepForTests(nil)
+	})
+	SetProviderSleepForTests(func(context.Context, time.Duration) error { return nil })
+
+	client := &geminiClient{
+		apiKey: "test-key",
+		model:  "gemini-test",
+		http: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if calls.Add(1) == 1 {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(errReader{err: errors.New("connection reset by peer")}),
+					Request:    req,
+				}, nil
+			}
+			return okTextResponse(req, "recovered")
+		})},
+	}
+
+	resp, err := client.generate(context.Background(), "prompt", nil)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	text, err := responseText(resp)
+	if err != nil || text != "recovered" {
+		t.Fatalf("expected recovered, got %q (%v)", text, err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("expected 2 calls after 2xx body-read reset retry, got %d", calls.Load())
+	}
+}
+
+func TestGenerateStopsOnContextCancelDuring2xxBodyRead(t *testing.T) {
+	var calls atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client := &geminiClient{
+		apiKey: "test-key",
+		model:  "gemini-test",
+		http: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			calls.Add(1)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(cancelOnReadReader{cancel: cancel}),
+				Request:    req,
+			}, nil
+		})},
+	}
+
+	_, err := client.generate(ctx, "prompt", nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("expected one call before cancel, got %d", calls.Load())
+	}
+}
+
 func TestGenerateNetworkFailureThenSucceeds(t *testing.T) {
 	var calls atomic.Int32
 	t.Cleanup(func() {
@@ -297,6 +383,23 @@ func TestGenerateNetworkFailureThenSucceeds(t *testing.T) {
 	if calls.Load() != 2 {
 		t.Fatalf("expected 2 calls, got %d", calls.Load())
 	}
+}
+
+type errReader struct {
+	err error
+}
+
+func (r errReader) Read([]byte) (int, error) {
+	return 0, r.err
+}
+
+type cancelOnReadReader struct {
+	cancel func()
+}
+
+func (r cancelOnReadReader) Read([]byte) (int, error) {
+	r.cancel()
+	return 0, context.Canceled
 }
 
 func okTextResponse(req *http.Request, text string) (*http.Response, error) {

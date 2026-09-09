@@ -37,6 +37,18 @@ type attemptResult struct {
 	err        error
 }
 
+type responseReadError struct {
+	cause error
+}
+
+func (e *responseReadError) Error() string {
+	return fmt.Sprintf("read Gemini response: %v", e.cause)
+}
+
+func (e *responseReadError) Unwrap() error {
+	return e.cause
+}
+
 func (c *geminiClient) generate(ctx context.Context, prompt string, generationConfig *geminiGenerationConfig) (geminiResponse, error) {
 	var lastClass string
 	var lastRetryAfter time.Duration
@@ -112,14 +124,18 @@ func classifyAttemptFailure(result attemptResult) (class, code string, retryable
 		return classified.Class, classified.Code, classified.Class == "TRANSIENT", 0
 	}
 
+	if errors.Is(result.err, context.Canceled) || errors.Is(result.err, context.DeadlineExceeded) {
+		return "", "", false, 0
+	}
+
+	if class, code, retryable, handled := classifyResponseReadFailure(result.err); handled {
+		return class, code, retryable, 0
+	}
+
 	if result.statusCode > 0 {
 		class, code = classifyHTTPStatus(result.statusCode)
 		retryAfter = parseRetryAfter(result.headers)
 		return class, code, class == "TRANSIENT", retryAfter
-	}
-
-	if errors.Is(result.err, context.Canceled) || errors.Is(result.err, context.DeadlineExceeded) {
-		return "", "", false, 0
 	}
 
 	var netErr net.Error
@@ -127,6 +143,26 @@ func classifyAttemptFailure(result attemptResult) (class, code string, retryable
 		return "TRANSIENT", "PROVIDER_TIMEOUT", true, 0
 	}
 	return "TRANSIENT", "PROVIDER_NETWORK", true, 0
+}
+
+func classifyResponseReadFailure(err error) (class, code string, retryable, handled bool) {
+	var readErr *responseReadError
+	if !errors.As(err, &readErr) {
+		return "", "", false, false
+	}
+
+	cause := readErr.cause
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		return "", "", false, true
+	}
+	if errors.Is(cause, io.ErrUnexpectedEOF) {
+		return "TRANSIENT", "PROVIDER_NETWORK", true, true
+	}
+	var netErr net.Error
+	if errors.As(cause, &netErr) && netErr.Timeout() {
+		return "TRANSIENT", "PROVIDER_TIMEOUT", true, true
+	}
+	return "TRANSIENT", "PROVIDER_NETWORK", true, true
 }
 
 func (c *geminiClient) doGenerateOnce(ctx context.Context, prompt string, generationConfig *geminiGenerationConfig) attemptResult {
@@ -154,7 +190,11 @@ func (c *geminiClient) doGenerateOnce(ctx context.Context, prompt string, genera
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
-		return attemptResult{statusCode: resp.StatusCode, headers: resp.Header, err: fmt.Errorf("read Gemini response: %w", err)}
+		return attemptResult{
+			statusCode: resp.StatusCode,
+			headers:    resp.Header,
+			err:        &responseReadError{cause: err},
+		}
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
