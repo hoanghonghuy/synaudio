@@ -3,6 +3,7 @@ package planning
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -69,6 +70,40 @@ func (s *integrationAudioStore) GetActiveAudioAsset(_ context.Context, chapterID
 		return s.active, nil
 	}
 	return audio.AudioAsset{}, audio.ErrAudioAssetNotFound
+}
+
+func (s *integrationAudioStore) GetListenerEligibleActiveAudio(ctx context.Context, chapterID string) (audio.AudioAsset, error) {
+	latestBefore, err := s.GetLatestNarrationRevision(ctx, chapterID)
+	if err != nil {
+		if errors.Is(err, audio.ErrNarrationNotFound) {
+			return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+		}
+		return audio.AudioAsset{}, err
+	}
+
+	asset, err := s.GetActiveAudioAsset(ctx, chapterID)
+	if err != nil {
+		if errors.Is(err, audio.ErrAudioAssetNotFound) {
+			return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+		}
+		return audio.AudioAsset{}, err
+	}
+	if asset.Status != "READY" {
+		return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+	}
+
+	latestAfter, err := s.GetLatestNarrationRevision(ctx, chapterID)
+	if err != nil {
+		if errors.Is(err, audio.ErrNarrationNotFound) {
+			return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+		}
+		return audio.AudioAsset{}, err
+	}
+	if latestAfter.ID != latestBefore.ID || asset.SourceNarrationRevisionID != latestAfter.ID {
+		return audio.AudioAsset{}, audio.ErrListenerAudioNotEligible
+	}
+
+	return asset, nil
 }
 
 func (s *integrationAudioStore) GetLatestReadyAudioAssetForNarration(_ context.Context, _, _ string) (audio.AudioAsset, error) {

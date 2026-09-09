@@ -303,6 +303,45 @@ func (q *Queries) GetLatestReadyAudioAssetForNarration(ctx context.Context, arg 
 	return i, err
 }
 
+const getListenerEligibleActiveAudio = `-- name: GetListenerEligibleActiveAudio :one
+SELECT aa.id, aa.chapter_id, aa.version_no, aa.source_narration_revision_id, aa.status, aa.storage_key,
+       aa.mime_type, aa.size_bytes, aa.duration_ms, aa.bitrate_kbps, aa.checksum, aa.is_active,
+       aa.generation_run_id, aa.created_at
+FROM audio_assets AS aa
+INNER JOIN (
+    SELECT id
+    FROM narration_revisions AS nr
+    WHERE nr.chapter_id = $1
+    ORDER BY nr.revision_no DESC
+    LIMIT 1
+) AS latest_narration ON aa.source_narration_revision_id = latest_narration.id
+WHERE aa.chapter_id = $1
+  AND aa.is_active = true
+  AND aa.status = 'READY'
+`
+
+func (q *Queries) GetListenerEligibleActiveAudio(ctx context.Context, chapterID pgtype.UUID) (AudioAsset, error) {
+	row := q.db.QueryRow(ctx, getListenerEligibleActiveAudio, chapterID)
+	var i AudioAsset
+	err := row.Scan(
+		&i.ID,
+		&i.ChapterID,
+		&i.VersionNo,
+		&i.SourceNarrationRevisionID,
+		&i.Status,
+		&i.StorageKey,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.DurationMs,
+		&i.BitrateKbps,
+		&i.Checksum,
+		&i.IsActive,
+		&i.GenerationRunID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getNarrationRevision = `-- name: GetNarrationRevision :one
 SELECT id, chapter_id, revision_no, source_content_revision_id, voice_id, script,
        status, generation_run_id, created_by, created_at
