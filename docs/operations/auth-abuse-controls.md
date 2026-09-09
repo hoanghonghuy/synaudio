@@ -26,4 +26,4 @@ The bundled frontend nginx proxy sets `X-Real-IP`, `X-Forwarded-For`, and `X-For
 
 ## Deployment dependency for #49
 
-Multi-instance production must use `AUTH_ABUSE_BACKEND=postgres` with migration `000017_auth_abuse_counters` applied, or an ingress control that enforces the same per-route budgets authoritatively. Per-replica in-memory limits are not a production-safe control.
+Multi-instance production must use `AUTH_ABUSE_BACKEND=postgres` with migration `000018_auth_abuse_counters` applied, or an ingress control that enforces the same per-route budgets authoritatively. Per-replica in-memory limits are not a production-safe control.
