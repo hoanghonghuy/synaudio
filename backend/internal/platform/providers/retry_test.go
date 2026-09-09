@@ -122,6 +122,43 @@ func TestGenerateRetries503ThenSucceeds(t *testing.T) {
 	}
 }
 
+func TestGenerateRetriesNonJSON503ThenSucceeds(t *testing.T) {
+	var calls atomic.Int32
+	t.Cleanup(func() {
+		SetProviderSleepForTests(nil)
+	})
+	SetProviderSleepForTests(func(context.Context, time.Duration) error { return nil })
+
+	const upstreamBody = "<html><body>503 Service Unavailable: upstream unavailable secret-detail</body></html>"
+	client := &geminiClient{
+		apiKey: "test-key",
+		model:  "gemini-test",
+		http: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if calls.Add(1) == 1 {
+				return &http.Response{
+					StatusCode: http.StatusServiceUnavailable,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+					Request:    req,
+				}, nil
+			}
+			return okTextResponse(req, "recovered")
+		})},
+	}
+
+	resp, err := client.generate(context.Background(), "prompt", nil)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	text, err := responseText(resp)
+	if err != nil || text != "recovered" {
+		t.Fatalf("expected recovered, got %q (%v)", text, err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("expected 2 calls after non-JSON 503 retry, got %d", calls.Load())
+	}
+}
+
 func TestGenerateDoesNotRetryPermanentAuthFailure(t *testing.T) {
 	var calls atomic.Int32
 	client := &geminiClient{

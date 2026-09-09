@@ -157,6 +157,14 @@ func (c *geminiClient) doGenerateOnce(ctx context.Context, prompt string, genera
 		return attemptResult{statusCode: resp.StatusCode, headers: resp.Header, err: fmt.Errorf("read Gemini response: %w", err)}
 	}
 
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return attemptResult{
+			statusCode: resp.StatusCode,
+			headers:    resp.Header,
+			err:        fmt.Errorf("provider HTTP %d", resp.StatusCode),
+		}
+	}
+
 	var out geminiResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return attemptResult{
@@ -166,13 +174,6 @@ func (c *geminiClient) doGenerateOnce(ctx context.Context, prompt string, genera
 		}
 	}
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return attemptResult{
-			statusCode: resp.StatusCode,
-			headers:    resp.Header,
-			err:        fmt.Errorf("provider HTTP %d", resp.StatusCode),
-		}
-	}
 	if len(out.Candidates) == 0 {
 		return attemptResult{
 			statusCode: resp.StatusCode,
