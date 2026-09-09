@@ -120,3 +120,129 @@ func TestGetListenerAudioURLLinearizesBeforeConcurrentNarrationCanStaleSelection
 		t.Fatalf("expected nar-2 after concurrent narration commit, got %q", latest.ID)
 	}
 }
+
+type coordinatedListenerEligibility struct {
+	store *fakeStore
+}
+
+func (c *coordinatedListenerEligibility) CheckListenerAudioEligible(_ context.Context, chapterID string) error {
+	if c.store.chapterStatuses[chapterID] != "PUBLISHED" {
+		return ErrListenerAudioNotEligible
+	}
+	storyID := c.store.storyByChapter[chapterID]
+	if storyID == "" {
+		return ErrListenerAudioNotEligible
+	}
+	if c.store.storyVisibility[storyID] != "PUBLIC" {
+		return ErrListenerAudioNotEligible
+	}
+	status := c.store.storyStatus[storyID]
+	if status != "ACTIVE" && status != "COMPLETED" {
+		return ErrListenerAudioNotEligible
+	}
+	return nil
+}
+
+func TestGetListenerAudioURLRejectsWhenStoryMadePrivateBeforeIssuance(t *testing.T) {
+	store := newFakeStore()
+	store.chapterStatuses = map[string]string{"c1": "PUBLISHED"}
+	store.storyByChapter = map[string]string{"c1": "s1"}
+	store.storyVisibility = map[string]string{"s1": "PUBLIC"}
+	store.storyStatus = map[string]string{"s1": "ACTIVE"}
+	store.narrations["c1"] = []NarrationRevision{
+		{ID: "nar-1", ChapterID: "c1", RevisionNo: 1, SourceContentRevisionID: "cr-1"},
+	}
+	store.assets["c1"] = []AudioAsset{
+		{
+			ID:                        "asset-1",
+			ChapterID:                 "c1",
+			VersionNo:                 1,
+			SourceNarrationRevisionID: "nar-1",
+			Status:                    "READY",
+			StorageKey:                "audio/c1/v1.mp3",
+			IsActive:                  true,
+		},
+	}
+
+	svc := newTestService(
+		store,
+		WithPresigner(fakePresigner{url: "https://cdn.example.com"}),
+		WithListenerAudioGate(&coordinatedListenerEligibility{store: store}),
+	)
+
+	store.revokeStoryEligibility("s1")
+
+	if _, err := svc.GetListenerAudioURL(context.Background(), "c1"); !errors.Is(err, ErrListenerAudioNotEligible) {
+		t.Fatalf("expected ErrListenerAudioNotEligible after story made private, got %v", err)
+	}
+}
+
+func TestGetListenerAudioURLLinearizesBeforeConcurrentEligibilityRevocation(t *testing.T) {
+	store := newFakeStore()
+	store.chapterStatuses = map[string]string{"c1": "PUBLISHED"}
+	store.storyByChapter = map[string]string{"c1": "s1"}
+	store.storyVisibility = map[string]string{"s1": "PUBLIC"}
+	store.storyStatus = map[string]string{"s1": "ACTIVE"}
+	store.narrations["c1"] = []NarrationRevision{
+		{ID: "nar-1", ChapterID: "c1", RevisionNo: 1, SourceContentRevisionID: "cr-1"},
+	}
+	store.nextNar["c1"] = 1
+	store.assets["c1"] = []AudioAsset{
+		{
+			ID:                        "asset-1",
+			ChapterID:                 "c1",
+			VersionNo:                 1,
+			SourceNarrationRevisionID: "nar-1",
+			Status:                    "READY",
+			StorageKey:                "audio/c1/v1.mp3",
+			IsActive:                  true,
+		},
+	}
+
+	var eligibilityRevoked atomic.Bool
+	revocationDone := make(chan struct{})
+
+	store.onBeforeListenerPresign = func(fs *fakeStore, asset AudioAsset) {
+		if asset.SourceNarrationRevisionID != "nar-1" {
+			t.Errorf("expected selection of nar-1 asset before presign, got %q", asset.SourceNarrationRevisionID)
+		}
+		go func() {
+			fs.revokeStoryEligibility("s1")
+			eligibilityRevoked.Store(true)
+			close(revocationDone)
+		}()
+	}
+
+	svc := newTestService(
+		store,
+		WithPresigner(fakePresigner{url: "https://cdn.example.com"}),
+		WithListenerAudioGate(&coordinatedListenerEligibility{store: store}),
+	)
+
+	url, err := svc.GetListenerAudioURL(context.Background(), "c1")
+	if err != nil {
+		t.Fatalf("get listener audio url: %v", err)
+	}
+	if url != "https://cdn.example.com/audio/c1/v1.mp3" {
+		t.Fatalf("unexpected url: %q", url)
+	}
+	if eligibilityRevoked.Load() {
+		t.Fatal("story eligibility revoked before listener URL was linearized")
+	}
+	if store.storyVisibility["s1"] != "PUBLIC" {
+		t.Fatalf("expected story to remain PUBLIC until lock release, got %q", store.storyVisibility["s1"])
+	}
+
+	select {
+	case <-revocationDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for concurrent eligibility revocation after listener lock release")
+	}
+	if store.storyVisibility["s1"] != "PRIVATE" {
+		t.Fatalf("expected story to be PRIVATE after revocation, got %q", store.storyVisibility["s1"])
+	}
+
+	if _, err := svc.GetListenerAudioURL(context.Background(), "c1"); !errors.Is(err, ErrListenerAudioNotEligible) {
+		t.Fatalf("expected ErrListenerAudioNotEligible after revocation, got %v", err)
+	}
+}

@@ -16,6 +16,11 @@ type fakeStore struct {
 	listenerMu                      sync.Mutex
 	onBeforeListenerAudioValidation func(*fakeStore)
 	onBeforeListenerPresign         func(*fakeStore, AudioAsset)
+
+	chapterStatuses map[string]string
+	storyByChapter  map[string]string
+	storyVisibility map[string]string
+	storyStatus     map[string]string
 }
 
 func newFakeStore() *fakeStore {
@@ -172,10 +177,17 @@ func (s *fakeStore) SetActiveAudioAssetForLatestNarration(ctx context.Context, c
 func (s *fakeStore) IssueListenerEligibleAudioURL(
 	ctx context.Context,
 	chapterID string,
+	check ListenerEligibilityChecker,
 	issue ListenerEligibleAudioIssuer,
 ) (string, error) {
 	s.listenerMu.Lock()
 	defer s.listenerMu.Unlock()
+
+	if check != nil {
+		if err := check(ctx, chapterID); err != nil {
+			return "", err
+		}
+	}
 
 	asset, err := s.getListenerEligibleActiveAudioLocked(ctx, chapterID)
 	if err != nil {
@@ -248,4 +260,13 @@ func (s *fakeStore) SetActiveAudioAsset(_ context.Context, chapterID, assetID st
 		}
 	}
 	return activated, nil
+}
+
+func (s *fakeStore) revokeStoryEligibility(storyID string) {
+	s.listenerMu.Lock()
+	defer s.listenerMu.Unlock()
+	if s.storyVisibility == nil {
+		s.storyVisibility = map[string]string{}
+	}
+	s.storyVisibility[storyID] = "PRIVATE"
 }

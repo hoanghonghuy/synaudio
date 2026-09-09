@@ -8,16 +8,25 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/synaudio/synaudio/backend/internal/audio"
+	"github.com/synaudio/synaudio/backend/internal/planning"
 )
 
+const lockListenerChapterStorySQL = `
+SELECT c.status, s.status, s.visibility
+FROM chapters c
+JOIN stories s ON s.id = c.story_id
+WHERE c.id = $1
+FOR UPDATE OF c, s`
+
 // IssueListenerEligibleAudioURL returns a presigned listener URL only when the
-// active READY asset is sourced from the chapter's latest narration revision.
-// Selection and URL issuance run under the same chapter-scoped narration advisory
-// lock used for version allocation and latest-narration activation so narration
-// commits cannot interleave between validation and presigning.
+// chapter/story publication state and active READY latest-narration asset are all
+// coherent. Eligibility revalidation, asset selection, and presigning run in one
+// transaction with row locks on the chapter and parent story so visibility or
+// publish-state revocation cannot interleave with URL issuance.
 func (s *AudioStore) IssueListenerEligibleAudioURL(
 	ctx context.Context,
 	chapterID string,
+	_ audio.ListenerEligibilityChecker,
 	issue audio.ListenerEligibleAudioIssuer,
 ) (string, error) {
 	if s.beginTx == nil {
@@ -29,6 +38,19 @@ func (s *AudioStore) IssueListenerEligibleAudioURL(
 		return "", err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var chapterStatus, storyStatus, storyVisibility string
+	if err := tx.QueryRow(ctx, lockListenerChapterStorySQL, toUUID(chapterID)).Scan(
+		&chapterStatus, &storyStatus, &storyVisibility,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", audio.ErrListenerAudioNotEligible
+		}
+		return "", err
+	}
+	if err := planning.EvaluateListenerEligibility(chapterStatus, storyStatus, storyVisibility); err != nil {
+		return "", err
+	}
 
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "narration-version:"+chapterID); err != nil {
 		return "", fmt.Errorf("lock chapter listener audio: %w", err)

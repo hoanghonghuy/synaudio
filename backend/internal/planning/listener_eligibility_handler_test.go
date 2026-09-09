@@ -75,8 +75,15 @@ func (s *integrationAudioStore) GetActiveAudioAsset(_ context.Context, chapterID
 func (s *integrationAudioStore) IssueListenerEligibleAudioURL(
 	ctx context.Context,
 	chapterID string,
+	check audio.ListenerEligibilityChecker,
 	issue audio.ListenerEligibleAudioIssuer,
 ) (string, error) {
+	if check != nil {
+		if err := check(ctx, chapterID); err != nil {
+			return "", err
+		}
+	}
+
 	latestBefore, err := s.GetLatestNarrationRevision(ctx, chapterID)
 	if err != nil {
 		if errors.Is(err, audio.ErrNarrationNotFound) {

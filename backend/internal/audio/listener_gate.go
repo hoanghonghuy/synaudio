@@ -29,12 +29,5 @@ func (s *Service) SetListenerAudioGate(g ListenerAudioGate) {
 // GetListenerAudioURL returns a presigned download URL only for listener-eligible
 // published chapters with an active durable audio asset.
 func (s *Service) GetListenerAudioURL(ctx context.Context, chapterID string) (string, error) {
-	if s.listenerGate == nil {
-		return "", ErrListenerAudioGateRequired
-	}
-	if err := s.listenerGate.CheckListenerAudioEligible(ctx, chapterID); err != nil {
-		return "", err
-	}
-
 	return s.issueValidatedListenerAudioURL(ctx, chapterID)
 }

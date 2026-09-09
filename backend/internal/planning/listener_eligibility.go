@@ -21,6 +21,20 @@ func NewListenerEligibility(chapters Store, stories StoryVisibilityReader) *List
 	return &ListenerEligibility{chapters: chapters, stories: stories}
 }
 
+// EvaluateListenerEligibility reports whether chapter/story state permits listener audio.
+func EvaluateListenerEligibility(chapterStatus, storyStatus, storyVisibility string) error {
+	if chapterStatus != "PUBLISHED" {
+		return audio.ErrListenerAudioNotEligible
+	}
+	if storyVisibility != "PUBLIC" {
+		return audio.ErrListenerAudioNotEligible
+	}
+	if storyStatus != "ACTIVE" && storyStatus != "COMPLETED" {
+		return audio.ErrListenerAudioNotEligible
+	}
+	return nil
+}
+
 // CheckListenerAudioEligible returns nil only when the chapter is published and
 // its parent story is listener-visible.
 func (l *ListenerEligibility) CheckListenerAudioEligible(ctx context.Context, chapterID string) error {
@@ -32,20 +46,10 @@ func (l *ListenerEligibility) CheckListenerAudioEligible(ctx context.Context, ch
 	if err != nil {
 		return err
 	}
-	if ch.Status != "PUBLISHED" {
-		return audio.ErrListenerAudioNotEligible
-	}
 
 	status, visibility, err := l.stories.GetStoryVisibility(ctx, ch.StoryID)
 	if err != nil {
 		return err
 	}
-	if visibility != "PUBLIC" {
-		return audio.ErrListenerAudioNotEligible
-	}
-	if status != "ACTIVE" && status != "COMPLETED" {
-		return audio.ErrListenerAudioNotEligible
-	}
-
-	return nil
+	return EvaluateListenerEligibility(ch.Status, status, visibility)
 }
