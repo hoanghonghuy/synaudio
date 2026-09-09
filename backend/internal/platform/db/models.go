@@ -87,6 +87,14 @@ type AuditEvent struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type AuthAbuseCounter struct {
+	Scope       string             `json:"scope"`
+	KeyHash     string             `json:"key_hash"`
+	WindowStart pgtype.Timestamptz `json:"window_start"`
+	Count       int32              `json:"count"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CanonBranch struct {
 	ID              pgtype.UUID        `json:"id"`
 	StoryID         pgtype.UUID        `json:"story_id"`

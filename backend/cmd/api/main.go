@@ -204,6 +204,43 @@ func main() {
 		dependencyChecks["ffmpeg"] = ffmpegProcessor.Validate
 	}
 
+	authAbuseCfg, err := config.LoadAuthAbuse(cfg.AppEnv)
+	if err != nil {
+		log.Error("auth abuse config failed", "error", err)
+		os.Exit(1)
+	}
+	if err := config.AuthAbuseProductionRequiresSharedState(cfg.AppEnv, authAbuseCfg.Backend); err != nil {
+		log.Error("auth abuse config failed", "error", err)
+		os.Exit(1)
+	}
+	trustedProxyCIDRs, err := config.LoadTrustedProxyCIDRs()
+	if err != nil {
+		log.Error("trusted proxy config failed", "error", err)
+		os.Exit(1)
+	}
+	if err := config.ValidateTrustedProxyCIDRs(trustedProxyCIDRs); err != nil {
+		log.Error("trusted proxy config failed", "error", err)
+		os.Exit(1)
+	}
+	trustedProxy, err := httpapi.ParseTrustedProxyConfig(trustedProxyCIDRs)
+	if err != nil {
+		log.Error("trusted proxy config failed", "error", err)
+		os.Exit(1)
+	}
+
+	var authAbuseLimiter httpapi.AbuseLimiter
+	switch authAbuseCfg.Backend {
+	case config.AuthAbuseBackendMemory:
+		authAbuseLimiter = httpapi.NewMemoryAbuseLimiter()
+	case config.AuthAbuseBackendPostgres:
+		authAbuseLimiter = httpapi.NewPostgresAbuseLimiter(queries)
+	default:
+		log.Error("unsupported auth abuse backend", "backend", authAbuseCfg.Backend)
+		os.Exit(1)
+	}
+
+	metricRegistry := metrics.NewRegistry()
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		ReadyCheck: func() error {
 			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -220,6 +257,13 @@ func main() {
 		},
 		DependencyChecks:         dependencyChecks,
 		Logger:                   log,
+		TrustedProxy:             trustedProxy,
+		AuthAbuse: &httpapi.AuthAbuse{
+			Policies: httpapi.DefaultAuthAbusePolicies(),
+			Limiter:  authAbuseLimiter,
+			Metrics:  metricRegistry,
+			Logger:   log,
+		},
 		AdminCheck:               authService.ResolveAdmin,
 		AdminActor:               authService.ResolveUserID,
 		AuditRecord:              auditService.RecordReliable,
@@ -236,7 +280,6 @@ func main() {
 		RetconHandler:            retconHandler,
 	})
 
-	metricRegistry := metrics.NewRegistry()
 	metricsServer, err := metrics.NewPrivateServer(os.Getenv("API_METRICS_ADDR"), metricRegistry.Handler())
 	if err != nil {
 		log.Error("metrics config invalid", "error", err)
