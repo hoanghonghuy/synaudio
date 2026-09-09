@@ -28,3 +28,18 @@ export function canStartChapterGeneration({
     && !hasGenerationRunProvenance,
   )
 }
+
+export function canCreateNarration({
+  approvedRevision,
+  selectionLoading,
+  actionInProgress,
+  voiceID,
+}) {
+  return Boolean(
+    approvedRevision?.ID
+    && approvedRevision.ContentText?.trim()
+    && voiceID
+    && !selectionLoading
+    && !actionInProgress,
+  )
+}

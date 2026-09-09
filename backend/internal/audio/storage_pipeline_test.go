@@ -71,7 +71,7 @@ func (s *storageAwareStore) CreateAudioAsset(ctx context.Context, a AudioAsset) 
 func TestSynthesizeSegmentPersistsAudioBeforeSuccess(t *testing.T) {
 	store := newFakeStore()
 	objects := newFakeObjectStorage()
-	svc := NewService(store, WithTTS(NewMockTTS()), WithObjectStorage(objects))
+	svc := newTestService(store, WithTTS(NewMockTTS()), WithObjectStorage(objects))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello world.", "u1")
 	segments, _ := svc.CreateTTSSegments(context.Background(), nar.ID)
@@ -89,7 +89,7 @@ func TestSynthesizeSegmentStorageFailureDoesNotMarkSuccess(t *testing.T) {
 	store := newFakeStore()
 	objects := newFakeObjectStorage()
 	objects.putErr = errors.New("storage unavailable")
-	svc := NewService(store, WithTTS(NewMockTTS()), WithObjectStorage(objects))
+	svc := newTestService(store, WithTTS(NewMockTTS()), WithObjectStorage(objects))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello world.", "u1")
 	segments, _ := svc.CreateTTSSegments(context.Background(), nar.ID)
@@ -109,7 +109,7 @@ func TestSynthesizeSegmentStorageFailureDoesNotMarkSuccess(t *testing.T) {
 func TestSynthesizeNarrationWithoutProcessorFailsClosed(t *testing.T) {
 	objects := newFakeObjectStorage()
 	store := newFakeStore()
-	svc := NewService(store, WithTTS(NewMockTTS()), WithObjectStorage(objects))
+	svc := newTestService(store, WithTTS(NewMockTTS()), WithObjectStorage(objects))
 
 	nar, _ := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "voice-1", "Hello.", "u1")
 	_, err := svc.SynthesizeNarration(context.Background(), nar.ID)
@@ -128,7 +128,7 @@ func TestSynthesizeNarrationUsesStagedBytesAndPersistsFinalBeforeReady(t *testin
 	objects := newFakeObjectStorage()
 	store := &storageAwareStore{fakeStore: newFakeStore(), storage: objects}
 	processor := &recordingProcessor{output: []byte("FINAL-AUDIO")}
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(processor),
@@ -156,7 +156,7 @@ func TestSynthesizeNarrationProcessorFailurePreventsReadyAsset(t *testing.T) {
 	objects := newFakeObjectStorage()
 	store := newFakeStore()
 	processor := &recordingProcessor{err: errors.New("ffmpeg execution failed")}
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(processor),
@@ -180,7 +180,7 @@ func TestSynthesizeNarrationFinalStorageFailurePreventsReadyAsset(t *testing.T) 
 	objects := newFakeObjectStorage()
 	store := newFakeStore()
 	processor := &recordingProcessor{output: []byte("FINAL-AUDIO")}
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(processor),
@@ -193,7 +193,7 @@ func TestSynthesizeNarrationFinalStorageFailurePreventsReadyAsset(t *testing.T) 
 
 	// Use a storage implementation that fails only for final chapter keys.
 	conditional := &conditionalFailStorage{base: objects}
-	svc = NewService(store,
+	svc = newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(conditional),
 		WithAudioProcessor(processor),

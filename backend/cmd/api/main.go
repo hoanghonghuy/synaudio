@@ -163,6 +163,7 @@ func main() {
 		audio.WithObjectStorage(objStorage),
 		audio.WithPresigner(objStorage),
 		audio.WithAudioProcessor(audioProcessor),
+		audio.WithApprovedContentAuthority(generationService),
 	)
 	audioHandler := audio.NewHandler(audioService)
 

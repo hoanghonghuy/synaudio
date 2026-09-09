@@ -91,7 +91,7 @@ func (s *cancellationFileStorage) UploadFile(ctx context.Context, key, path stri
 func TestSynthesizeNarrationFileBoundaryRequired(t *testing.T) {
 	store := newFakeStore()
 	objects := &byteOnlyStorage{base: newFakeObjectStorage()}
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(NewMockAudioProcessor()),
@@ -120,7 +120,7 @@ func TestSynthesizeNarrationCancellationLeavesNoReadyOrFinalObject(t *testing.T)
 	base := newFakeObjectStorage()
 	objects := &cancellationFileStorage{fakeObjectStorage: base, cancel: cancel}
 	store := newFakeStore()
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(NewMockAudioProcessor()),
@@ -144,7 +144,7 @@ func TestNarrationTempDirectoryIsRemovedAfterSuccess(t *testing.T) {
 	objects := newFakeObjectStorage()
 	store := newFakeStore()
 	processor := &pathRecordingProcessor{MockAudioProcessor: NewMockAudioProcessor()}
-	svc := NewService(store,
+	svc := newTestService(store,
 		WithTTS(NewMockTTS()),
 		WithObjectStorage(objects),
 		WithAudioProcessor(processor),

@@ -7,7 +7,7 @@ import (
 
 func TestCreateNarrationRevisionAssignsSequentialRevision(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	r1, err := svc.CreateNarrationRevision(context.Background(), "c1", "content-rev-1", "voice-1", "script text", "u1")
 	if err != nil {
@@ -28,7 +28,7 @@ func TestCreateNarrationRevisionAssignsSequentialRevision(t *testing.T) {
 
 func TestCreateNarrationRevisionRejectsEmptyScript(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	if _, err := svc.CreateNarrationRevision(context.Background(), "c1", "cr1", "v1", "   ", "u1"); err == nil {
 		t.Fatal("expected error for empty script")
@@ -37,7 +37,7 @@ func TestCreateNarrationRevisionRejectsEmptyScript(t *testing.T) {
 
 func TestCreateAudioAssetAssignsSequentialVersion(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	a1, err := svc.CreateAudioAsset(context.Background(), "c1", "nar-1", "stories/s1/chapters/c1/audio/v1/chapter.mp3", "audio/mpeg", 1024, 180000, 64)
 	if err != nil {
@@ -58,7 +58,7 @@ func TestCreateAudioAssetAssignsSequentialVersion(t *testing.T) {
 
 func TestActivateAudioAssetPromotesVersion(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	a1, _ := svc.CreateAudioAsset(context.Background(), "c1", "nar-1", "key1", "audio/mpeg", 1024, 180000, 64)
 	a2, _ := svc.CreateAudioAsset(context.Background(), "c1", "nar-2", "key2", "audio/mpeg", 1024, 180000, 64)
@@ -80,7 +80,7 @@ func TestActivateAudioAssetPromotesVersion(t *testing.T) {
 
 func TestGetActiveAudioAssetReturnsActive(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store)
+	svc := newTestService(store)
 
 	a1, _ := svc.CreateAudioAsset(context.Background(), "c1", "nar-1", "key1", "audio/mpeg", 1024, 180000, 64)
 	_, _ = svc.ActivateAudioAsset(context.Background(), "c1", a1.ID)
