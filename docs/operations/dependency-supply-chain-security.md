@@ -35,6 +35,8 @@ Identical source at the same commit should produce the same gate outcome until d
 
 ## npm policy (`npm audit`)
 
+The gate is **fail-closed** for scanner and transport failures. It captures `npm audit` stdout, stderr, and exit code separately, validates the JSON shape (`auditReportVersion`, `vulnerabilities`, no top-level `error`), and fails when output is empty, malformed, or not an authoritative audit result. Only exit codes `0` (clean scan) and `1` (vulnerabilities reported in valid JSON) are accepted scanner outcomes; all other exit codes fail the gate.
+
 Production dependency graph only (`--omit=dev`):
 
 | Severity | Gate behavior |
