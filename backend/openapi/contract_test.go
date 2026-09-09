@@ -31,6 +31,17 @@ var httpMethods = map[string]struct{}{
 	"get": {}, "post": {}, "put": {}, "delete": {}, "patch": {},
 }
 
+func TestRegenerateFrontendContract(t *testing.T) {
+	if os.Getenv("REGEN_OPENAPI_FRONTEND") == "" {
+		t.Skip("set REGEN_OPENAPI_FRONTEND=1 to regenerate frontend/src/api/openapi.generated.ts")
+	}
+	doc := loadDocument(t)
+	wantTS := generatedTypeScript(doc)
+	if err := os.WriteFile("../../frontend/src/api/openapi.generated.ts", []byte(wantTS), 0o644); err != nil {
+		t.Fatalf("write generated frontend contract: %v", err)
+	}
+}
+
 func TestOpenAPIContract(t *testing.T) {
 	doc := loadDocument(t)
 	runtime := runtimeRoutes(t)
@@ -105,8 +116,11 @@ func runtimeRoutes(t *testing.T) map[string]struct{} {
 		{path: "../internal/platform/httpapi/router.go"},
 		{path: "../internal/identity/handler.go", prefix: "/api/v1/auth"},
 		{path: "../internal/story/handler.go", prefix: "/api/v1"},
+		{path: "../internal/story/readiness_handler.go", prefix: "/api/v1"},
 		{path: "../internal/planning/handler.go", prefix: "/api/v1"},
+		{path: "../internal/planning/workspace_handler.go", prefix: "/api/v1"},
 		{path: "../internal/generation/handler.go", prefix: "/api/v1"},
+		{path: "../internal/generation/latest_run_handler.go", prefix: "/api/v1"},
 		{path: "../internal/audio/handler.go", prefix: "/api/v1"},
 		{path: "../internal/listener/handler.go", prefix: "/api/v1"},
 		{path: "../internal/retcon/handler.go", prefix: "/api/v1"},
