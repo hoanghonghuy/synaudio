@@ -293,3 +293,18 @@ export interface AuditEvent {
 export interface AuditListResponse {
   items: AuditEvent[]
 }
+
+export type UserAccountStatus = 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED'
+
+export interface AdminUserSummary {
+  id: string
+  email: string
+  display_name: string
+  status: UserAccountStatus
+  email_verified: boolean
+  roles: string[]
+}
+
+export interface AdminUserListResponse {
+  users: AdminUserSummary[]
+}
