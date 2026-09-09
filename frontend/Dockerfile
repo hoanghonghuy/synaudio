@@ -1,27 +1,21 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:20-alpine3.21 AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 RUN npm ci
 
-# Copy source code
 COPY . .
 
-# Build the app
 RUN npm run build
 
-# Runtime stage - serve with nginx
-FROM nginx:alpine
+# Runtime stage — unprivileged nginx on port 8080 (non-root).
+FROM nginxinc/nginx-unprivileged:1.27.4-alpine3.21
 
-# Copy built files to nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]

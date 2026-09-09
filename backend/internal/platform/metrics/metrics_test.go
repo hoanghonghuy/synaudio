@@ -47,6 +47,17 @@ func TestRegistryPrometheusOutputUsesBoundedLabels(t *testing.T) {
 	}
 }
 
+func TestRegistryHeartbeatAgeFailsClosedBeforeFirstHeartbeat(t *testing.T) {
+	r := NewRegistry()
+	if age := r.HeartbeatAge(time.Unix(100, 0)); age <= 60*time.Second {
+		t.Fatalf("expected pre-heartbeat age to exceed readiness threshold, got %v", age)
+	}
+	r.WorkerHeartbeat(time.Unix(95, 0))
+	if age := r.HeartbeatAge(time.Unix(100, 0)); age != 5*time.Second {
+		t.Fatalf("heartbeat age = %v, want 5s", age)
+	}
+}
+
 func TestRegistryBacklogGaugeReplacesPreviousSnapshot(t *testing.T) {
 	r := NewRegistry()
 	r.SetBacklog("audit_outbox", 5, 90*time.Second, 2)
