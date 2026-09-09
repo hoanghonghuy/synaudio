@@ -718,6 +718,48 @@ h3 {
   gap: 0.75rem;
 }
 
+.reauth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(12, 14, 18, 0.62);
+}
+
+.reauth-dialog {
+  width: min(100%, 28rem);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.24);
+}
+
+.reauth-mode-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.reauth-mode-toggle button {
+  flex: 1 1 8rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.reauth-mode-toggle button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.story-table tr.selected {
+  background: var(--accent-soft);
+}
+
 .admin-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 0.85fr);

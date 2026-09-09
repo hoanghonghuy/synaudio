@@ -3,6 +3,7 @@ import HomePage from '../features/catalog/HomePage.vue'
 import StoryDetail from '../features/catalog/StoryDetail.vue'
 import AdminShell from '../features/admin/AdminShell.vue'
 import AuditPage from '../features/admin/AuditPage.vue'
+import AdminSecurityPage from '../features/admin/AdminSecurityPage.vue'
 import StoryReader from '../features/reader/StoryReader.vue'
 import ListenerLibraryPage from '../features/library/LibraryPage.vue'
 import StoryControlCenter from '../features/admin/StoryControlCenter.vue'
@@ -41,6 +42,12 @@ export const router = createRouter({
       path: '/admin/audit',
       name: 'admin-audit',
       component: AuditPage,
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/admin/security',
+      name: 'admin-security',
+      component: AdminSecurityPage,
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
