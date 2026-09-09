@@ -86,16 +86,26 @@ func (s *ListenerStore) GetProgress(ctx context.Context, userID, chapterID strin
 	}, nil
 }
 
-func (s *ListenerStore) SaveProgress(ctx context.Context, p listener.ListeningProgress) (listener.ListeningProgress, error) {
+func (s *ListenerStore) SaveProgress(ctx context.Context, p listener.ListeningProgress, expectedVersion int64) (listener.ListeningProgress, error) {
 	row, err := s.q.SaveProgress(ctx, db.SaveProgressParams{
 		UserID:                toUUID(p.UserID),
 		ChapterID:             toUUID(p.ChapterID),
 		PositionMs:            p.PositionMs,
 		LastAudioAssetID:      toUUID(p.LastAudioAssetID),
 		LastPlaybackSessionID: toUUID(p.LastPlaybackSessionID),
-		Version:               p.Version,
+		ExpectedVersion: expectedVersion,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			current, getErr := s.GetProgress(ctx, p.UserID, p.ChapterID)
+			if getErr != nil {
+				if errors.Is(getErr, listener.ErrProgressNotFound) {
+					return listener.ListeningProgress{}, listener.ErrProgressNotFound
+				}
+				return listener.ListeningProgress{}, getErr
+			}
+			return listener.ListeningProgress{}, &listener.ProgressVersionConflict{Current: current}
+		}
 		return listener.ListeningProgress{}, err
 	}
 	return listener.ListeningProgress{

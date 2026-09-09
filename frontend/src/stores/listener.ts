@@ -7,6 +7,7 @@ import {
   saveProgress,
 } from '../api/client'
 import type { Favorite, ListeningProgress } from '../api/types'
+import { isProgressVersionConflict } from '../api/http-error.ts'
 import { mergeGuestProgressIfAbsent } from './guest-progress-merge.ts'
 
 const GUEST_FAVORITES_KEY = 'synaudio.guest.favorites'
@@ -126,12 +127,21 @@ export const useListenerStore = defineStore('listener', {
         }
         return
       }
-      const saved = await saveProgress(chapterID, {
-        position_ms: positionMs,
-        audio_asset_id: audioAssetID,
-        playback_session_id: '',
-      })
-      this.progress[chapterID] = saved
+      const expectedVersion = this.progress[chapterID]?.Version ?? 0
+      try {
+        const saved = await saveProgress(chapterID, {
+          position_ms: positionMs,
+          audio_asset_id: audioAssetID,
+          playback_session_id: '',
+          expected_version: expectedVersion,
+        })
+        this.progress[chapterID] = saved
+      } catch (error) {
+        if (isProgressVersionConflict(error)) {
+          this.progress[chapterID] = error.progress as ListeningProgress
+        }
+        throw error
+      }
     },
 
     // Guest records do not carry an authoritative server-comparable timestamp.

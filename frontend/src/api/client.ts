@@ -238,9 +238,9 @@ function mayRefresh(path: string): boolean {
 }
 
 async function parseFailure(res: Response): Promise<ApiRequestError> {
-  let body: ApiError | null = null
+  let body: (ApiError & { progress?: ListeningProgress }) | null = null
   try {
-    body = (await res.json()) as ApiError
+    body = (await res.json()) as ApiError & { progress?: ListeningProgress }
   } catch {
     // Ignore non-JSON error bodies while retaining the HTTP status.
   }
@@ -248,6 +248,7 @@ async function parseFailure(res: Response): Promise<ApiRequestError> {
     res.status,
     body?.error?.message ?? `Request failed (${res.status})`,
     body?.error?.code,
+    body?.progress,
   )
 }
 
@@ -591,7 +592,7 @@ export function addFavorite(storyID: string): Promise<{ status: string }> { retu
 export function removeFavorite(storyID: string): Promise<{ status: string }> { return request<{ status: string }>(`/me/favorites/${storyID}`, { method: 'DELETE' }) }
 export function getProgress(chapterID: string): Promise<ListeningProgress> { return request<ListeningProgress>(`/me/progress/${chapterID}`) }
 
-export function saveProgress(chapterID: string, input: { position_ms: number; audio_asset_id: string; playback_session_id: string }): Promise<ListeningProgress> {
+export function saveProgress(chapterID: string, input: { position_ms: number; audio_asset_id: string; playback_session_id: string; expected_version: number }): Promise<ListeningProgress> {
   return request<ListeningProgress>(`/me/progress/${chapterID}`, { method: 'PUT', body: JSON.stringify(input) })
 }
 
