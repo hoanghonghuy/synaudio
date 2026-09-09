@@ -1,3 +1,7 @@
+export function isChapterSelectionBlockingAction(action: string): boolean
+
+export function canSelectChapter(input: { action: string }): boolean
+
 export function createLatestSelectionGuard(): {
   begin(key: string): () => boolean
 }
@@ -19,4 +23,21 @@ export function canCreateNarration(input: {
   selectionLoading: boolean
   actionInProgress: boolean
   voiceID: string
+}): boolean
+
+export function canSynthesizeNarration(input: {
+  hasApprovedContent: boolean
+  hasNarration: boolean
+  narrationBelongsToChapter: boolean
+  selectionLoading: boolean
+  actionInProgress: boolean
+}): boolean
+
+export function canActivateAudio(input: {
+  hasReadyAsset: boolean
+  readyAssetBelongsToChapter: boolean
+  readyAssetIsInactive: boolean
+  readyAssetMatchesLatestNarration: boolean
+  selectionLoading: boolean
+  actionInProgress: boolean
 }): boolean

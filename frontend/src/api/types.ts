@@ -105,6 +105,17 @@ export interface ChapterContent {
   content_text: string
 }
 
+export interface NarrationRevision {
+  ID: string
+  ChapterID: string
+  RevisionNo: number
+  SourceContentRevisionID: string
+  VoiceID: string
+  Script: string
+  Status: string
+  CreatedBy: string
+}
+
 export interface AudioAsset {
   ID: string
   ChapterID: string

@@ -20,6 +20,14 @@ SELECT id, chapter_id, revision_no, source_content_revision_id, voice_id, script
 FROM narration_revisions
 WHERE id = $1;
 
+-- name: GetLatestNarrationRevision :one
+SELECT id, chapter_id, revision_no, source_content_revision_id, voice_id, script,
+       status, generation_run_id, created_by, created_at
+FROM narration_revisions
+WHERE chapter_id = $1
+ORDER BY revision_no DESC
+LIMIT 1;
+
 -- ============================================================
 -- TTS Segments
 -- ============================================================
@@ -80,6 +88,18 @@ SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage
 FROM audio_assets
 WHERE chapter_id = $1 AND is_active = true;
 
+-- name: GetLatestReadyAudioAssetForNarration :one
+SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage_key,
+       mime_type, size_bytes, duration_ms, bitrate_kbps, checksum, is_active,
+       generation_run_id, created_at
+FROM audio_assets
+WHERE chapter_id = $1
+  AND source_narration_revision_id = $2
+  AND status = 'READY'
+  AND is_active = false
+ORDER BY version_no DESC
+LIMIT 1;
+
 -- name: SetActiveAudioAsset :many
 WITH eligible_target AS (
     SELECT aa.id
@@ -88,6 +108,31 @@ WITH eligible_target AS (
       AND aa.id = $2
       AND aa.status = 'READY'
     FOR UPDATE
+)
+UPDATE audio_assets AS aa
+SET is_active = (aa.id = $2)
+WHERE aa.chapter_id = $1
+  AND EXISTS (SELECT 1 FROM eligible_target)
+RETURNING aa.id, aa.chapter_id, aa.version_no, aa.source_narration_revision_id, aa.status, aa.storage_key,
+          aa.mime_type, aa.size_bytes, aa.duration_ms, aa.bitrate_kbps, aa.checksum, aa.is_active,
+          aa.generation_run_id, aa.created_at;
+
+-- name: SetActiveAudioAssetForLatestNarration :many
+WITH latest_narration AS (
+    SELECT nr.id
+    FROM narration_revisions AS nr
+    WHERE nr.chapter_id = $1
+    ORDER BY nr.revision_no DESC
+    LIMIT 1
+),
+eligible_target AS (
+    SELECT aa.id
+    FROM audio_assets AS aa
+    INNER JOIN latest_narration AS ln ON aa.source_narration_revision_id = ln.id
+    WHERE aa.chapter_id = $1
+      AND aa.id = $2
+      AND aa.status = 'READY'
+    FOR UPDATE OF aa
 )
 UPDATE audio_assets AS aa
 SET is_active = (aa.id = $2)

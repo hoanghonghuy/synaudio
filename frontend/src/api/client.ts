@@ -5,6 +5,7 @@ import type {
   AuthUser,
   ArcCompletionResult,
   AttentionListResponse,
+  AudioAsset,
   AudioURLResponse,
   Chapter,
   ChapterContent,
@@ -25,7 +26,7 @@ import type {
   ThreadInactivityResponse,
   UsageListResponse,
 } from './types'
-import { ApiRequestError } from './http-error'
+import { ApiRequestError, isExplicitNotFound } from './http-error'
 
 const BASE = '/api/v1'
 
@@ -510,6 +511,41 @@ export function runContentReview(chapterID: string, reviewType: 'CONTINUITY' | '
 
 export function getChapterContent(chapterID: string): Promise<ChapterContent> { return request<ChapterContent>(`/chapters/${chapterID}/content`) }
 export function getAudioURL(chapterID: string): Promise<AudioURLResponse> { return request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`) }
+
+export async function getLatestNarrationRevision(chapterID: string): Promise<NarrationRevision | null> {
+  try {
+    return await request<NarrationRevision>(`/admin/chapters/${chapterID}/narration/latest`)
+  } catch (error) {
+    if (isExplicitNotFound(error)) return null
+    throw error
+  }
+}
+
+export async function getActiveAudioAsset(chapterID: string): Promise<AudioAsset | null> {
+  try {
+    return await request<AudioAsset>(`/admin/chapters/${chapterID}/audio`)
+  } catch (error) {
+    if (isExplicitNotFound(error)) return null
+    throw error
+  }
+}
+
+export async function getLatestReadyAudioAsset(chapterID: string, narrationID: string): Promise<AudioAsset | null> {
+  try {
+    return await request<AudioAsset>(`/admin/chapters/${chapterID}/narration/${narrationID}/audio/latest-ready`)
+  } catch (error) {
+    if (isExplicitNotFound(error)) return null
+    throw error
+  }
+}
+
+export function synthesizeNarration(chapterID: string, narrationID: string): Promise<AudioAsset> {
+  return request<AudioAsset>(`/admin/chapters/${chapterID}/narration/${narrationID}/synthesize`, { method: 'POST' })
+}
+
+export function activateAudioAsset(chapterID: string, assetID: string): Promise<AudioAsset> {
+  return request<AudioAsset>(`/admin/chapters/${chapterID}/audio/${assetID}/activate`, { method: 'POST' })
+}
 export function getListenerLibrary(): Promise<ListenerLibrary> { return request<ListenerLibrary>('/me/library') }
 export function listFavorites(): Promise<FavoriteListResponse> { return request<FavoriteListResponse>('/me/favorites') }
 export function addFavorite(storyID: string): Promise<{ status: string }> { return request<{ status: string }>(`/me/favorites/${storyID}`, { method: 'PUT' }) }

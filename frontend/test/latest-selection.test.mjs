@@ -2,11 +2,22 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  canActivateAudio,
   canCreateNarration,
+  canSelectChapter,
   canStartChapterGeneration,
+  canSynthesizeNarration,
   createLatestSelectionGuard,
   generationRunFromContentResponse,
+  isChapterSelectionBlockingAction,
 } from '../src/features/admin/latestSelection.mjs'
+
+function trySelectChapter(state, chapterID) {
+  if (!canSelectChapter({ action: state.action })) {
+    return state
+  }
+  return { ...state, activeChapterID: chapterID }
+}
 
 test('only latest chapter selection may commit', () => {
   const guard = createLatestSelectionGuard()
@@ -96,4 +107,131 @@ test('narration creation requires authoritative approved revision and voice', ()
     actionInProgress: false,
     voiceID: 'voice-1',
   }), false)
+})
+
+test('synthesize is blocked while authoritative chapter state is loading', () => {
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: true,
+    hasNarration: true,
+    narrationBelongsToChapter: true,
+    selectionLoading: true,
+    actionInProgress: false,
+  }), false)
+})
+
+test('synthesize is blocked without approved content or narration', () => {
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: false,
+    hasNarration: true,
+    narrationBelongsToChapter: true,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: true,
+    hasNarration: false,
+    narrationBelongsToChapter: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('synthesize is blocked when narration does not belong to selected chapter', () => {
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: true,
+    hasNarration: true,
+    narrationBelongsToChapter: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('synthesize is allowed only with approved narration bound to the selected chapter', () => {
+  assert.equal(canSynthesizeNarration({
+    hasApprovedContent: true,
+    hasNarration: true,
+    narrationBelongsToChapter: true,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), true)
+})
+
+test('activate is blocked while authoritative chapter state is loading', () => {
+  assert.equal(canActivateAudio({
+    hasReadyAsset: true,
+    readyAssetBelongsToChapter: true,
+    readyAssetIsInactive: true,
+    readyAssetMatchesLatestNarration: true,
+    selectionLoading: true,
+    actionInProgress: false,
+  }), false)
+})
+
+test('activate is blocked without an inactive ready asset for the selected chapter', () => {
+  assert.equal(canActivateAudio({
+    hasReadyAsset: false,
+    readyAssetBelongsToChapter: false,
+    readyAssetIsInactive: false,
+    readyAssetMatchesLatestNarration: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+  assert.equal(canActivateAudio({
+    hasReadyAsset: true,
+    readyAssetBelongsToChapter: true,
+    readyAssetIsInactive: false,
+    readyAssetMatchesLatestNarration: true,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('activate is blocked when ready asset is stale relative to latest narration', () => {
+  assert.equal(canActivateAudio({
+    hasReadyAsset: true,
+    readyAssetBelongsToChapter: true,
+    readyAssetIsInactive: true,
+    readyAssetMatchesLatestNarration: false,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('activate is allowed only for an inactive ready asset owned by the selected chapter and latest narration', () => {
+  assert.equal(canActivateAudio({
+    hasReadyAsset: true,
+    readyAssetBelongsToChapter: true,
+    readyAssetIsInactive: true,
+    readyAssetMatchesLatestNarration: true,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), true)
+})
+
+test('chapter selection is blocked while synthesize or activate is in flight', () => {
+  assert.equal(isChapterSelectionBlockingAction('synthesize'), true)
+  assert.equal(isChapterSelectionBlockingAction('activate'), true)
+  assert.equal(canSelectChapter({ action: 'synthesize' }), false)
+  assert.equal(canSelectChapter({ action: 'activate' }), false)
+  assert.equal(canSelectChapter({ action: '' }), true)
+  assert.equal(canSelectChapter({ action: 'refresh-generation' }), true)
+})
+
+test('in-flight synthesize blocks chapter switch so mutation target cannot be abandoned', () => {
+  let state = { activeChapterID: 'chapter-a', action: 'synthesize' }
+  state = trySelectChapter(state, 'chapter-b')
+  assert.equal(state.activeChapterID, 'chapter-a')
+  assert.equal(state.action, 'synthesize')
+})
+
+test('in-flight activate blocks chapter switch so mutation target cannot be abandoned', () => {
+  let state = { activeChapterID: 'chapter-a', action: 'activate' }
+  state = trySelectChapter(state, 'chapter-b')
+  assert.equal(state.activeChapterID, 'chapter-a')
+  assert.equal(state.action, 'activate')
+})
+
+test('chapter selection is blocked while other durable chapter mutations are in flight', () => {
+  assert.equal(canSelectChapter({ action: 'create-narration' }), false)
+  assert.equal(canSelectChapter({ action: 'start-generation' }), false)
 })

@@ -236,6 +236,73 @@ func (q *Queries) GetAudioAsset(ctx context.Context, id pgtype.UUID) (AudioAsset
 	return i, err
 }
 
+const getLatestNarrationRevision = `-- name: GetLatestNarrationRevision :one
+SELECT id, chapter_id, revision_no, source_content_revision_id, voice_id, script,
+       status, generation_run_id, created_by, created_at
+FROM narration_revisions
+WHERE chapter_id = $1
+ORDER BY revision_no DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestNarrationRevision(ctx context.Context, chapterID pgtype.UUID) (NarrationRevision, error) {
+	row := q.db.QueryRow(ctx, getLatestNarrationRevision, chapterID)
+	var i NarrationRevision
+	err := row.Scan(
+		&i.ID,
+		&i.ChapterID,
+		&i.RevisionNo,
+		&i.SourceContentRevisionID,
+		&i.VoiceID,
+		&i.Script,
+		&i.Status,
+		&i.GenerationRunID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLatestReadyAudioAssetForNarration = `-- name: GetLatestReadyAudioAssetForNarration :one
+SELECT id, chapter_id, version_no, source_narration_revision_id, status, storage_key,
+       mime_type, size_bytes, duration_ms, bitrate_kbps, checksum, is_active,
+       generation_run_id, created_at
+FROM audio_assets
+WHERE chapter_id = $1
+  AND source_narration_revision_id = $2
+  AND status = 'READY'
+  AND is_active = false
+ORDER BY version_no DESC
+LIMIT 1
+`
+
+type GetLatestReadyAudioAssetForNarrationParams struct {
+	ChapterID                 pgtype.UUID `json:"chapter_id"`
+	SourceNarrationRevisionID pgtype.UUID `json:"source_narration_revision_id"`
+}
+
+func (q *Queries) GetLatestReadyAudioAssetForNarration(ctx context.Context, arg GetLatestReadyAudioAssetForNarrationParams) (AudioAsset, error) {
+	row := q.db.QueryRow(ctx, getLatestReadyAudioAssetForNarration, arg.ChapterID, arg.SourceNarrationRevisionID)
+	var i AudioAsset
+	err := row.Scan(
+		&i.ID,
+		&i.ChapterID,
+		&i.VersionNo,
+		&i.SourceNarrationRevisionID,
+		&i.Status,
+		&i.StorageKey,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.DurationMs,
+		&i.BitrateKbps,
+		&i.Checksum,
+		&i.IsActive,
+		&i.GenerationRunID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getNarrationRevision = `-- name: GetNarrationRevision :one
 SELECT id, chapter_id, revision_no, source_content_revision_id, voice_id, script,
        status, generation_run_id, created_by, created_at
@@ -348,6 +415,72 @@ type SetActiveAudioAssetParams struct {
 
 func (q *Queries) SetActiveAudioAsset(ctx context.Context, arg SetActiveAudioAssetParams) ([]AudioAsset, error) {
 	rows, err := q.db.Query(ctx, setActiveAudioAsset, arg.ChapterID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AudioAsset{}
+	for rows.Next() {
+		var i AudioAsset
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChapterID,
+			&i.VersionNo,
+			&i.SourceNarrationRevisionID,
+			&i.Status,
+			&i.StorageKey,
+			&i.MimeType,
+			&i.SizeBytes,
+			&i.DurationMs,
+			&i.BitrateKbps,
+			&i.Checksum,
+			&i.IsActive,
+			&i.GenerationRunID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setActiveAudioAssetForLatestNarration = `-- name: SetActiveAudioAssetForLatestNarration :many
+WITH latest_narration AS (
+    SELECT nr.id
+    FROM narration_revisions AS nr
+    WHERE nr.chapter_id = $1
+    ORDER BY nr.revision_no DESC
+    LIMIT 1
+),
+eligible_target AS (
+    SELECT aa.id
+    FROM audio_assets AS aa
+    INNER JOIN latest_narration AS ln ON aa.source_narration_revision_id = ln.id
+    WHERE aa.chapter_id = $1
+      AND aa.id = $2
+      AND aa.status = 'READY'
+    FOR UPDATE OF aa
+)
+UPDATE audio_assets AS aa
+SET is_active = (aa.id = $2)
+WHERE aa.chapter_id = $1
+  AND EXISTS (SELECT 1 FROM eligible_target)
+RETURNING aa.id, aa.chapter_id, aa.version_no, aa.source_narration_revision_id, aa.status, aa.storage_key,
+          aa.mime_type, aa.size_bytes, aa.duration_ms, aa.bitrate_kbps, aa.checksum, aa.is_active,
+          aa.generation_run_id, aa.created_at
+`
+
+type SetActiveAudioAssetForLatestNarrationParams struct {
+	ChapterID pgtype.UUID `json:"chapter_id"`
+	ID        pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetActiveAudioAssetForLatestNarration(ctx context.Context, arg SetActiveAudioAssetForLatestNarrationParams) ([]AudioAsset, error) {
+	rows, err := q.db.Query(ctx, setActiveAudioAssetForLatestNarration, arg.ChapterID, arg.ID)
 	if err != nil {
 		return nil, err
 	}
