@@ -2806,6 +2806,30 @@ paths:
                 "403":
                     $ref: '#/components/responses/Forbidden'
             security: []
+    /api/v1/auth/re-auth:
+        post:
+            operationId: postApiV1AuthReAuth
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReAuthRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StatusResponse'
+                    description: Privileged MFA assurance granted
+                "400":
+                    $ref: '#/components/responses/BadRequest'
+                "401":
+                    $ref: '#/components/responses/Unauthenticated'
+                "403":
+                    $ref: '#/components/responses/Forbidden'
+            security:
+                - bearerAuth: []
     /api/v1/auth/refresh:
         post:
             operationId: postApiV1AuthRefresh
@@ -4624,6 +4648,13 @@ components:
                     type: array
             required:
                 - chapters
+            type: object
+        ReAuthRequest:
+            properties:
+                code:
+                    type: string
+                recovery_code:
+                    type: string
             type: object
         ReadinessResponse:
             properties:

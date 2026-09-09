@@ -90,6 +90,11 @@ components:
       required: [code]
       properties:
         code: { type: string }
+    ReAuthRequest:
+      type: object
+      properties:
+        code: { type: string }
+        recovery_code: { type: string }
     UserResponse:
       type: object
       required: [id, email, status]

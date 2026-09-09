@@ -113,6 +113,7 @@ export const API_OPERATIONS = [
   { method: "POST", path: "/api/v1/auth/mfa/totp/setup", operationId: "postApiV1AuthMfaTotpSetup" },
   { method: "POST", path: "/api/v1/auth/password/forgot", operationId: "postApiV1AuthPasswordForgot" },
   { method: "POST", path: "/api/v1/auth/password/reset", operationId: "postApiV1AuthPasswordReset" },
+  { method: "POST", path: "/api/v1/auth/re-auth", operationId: "postApiV1AuthReAuth" },
   { method: "POST", path: "/api/v1/auth/refresh", operationId: "postApiV1AuthRefresh" },
   { method: "POST", path: "/api/v1/auth/register", operationId: "postApiV1AuthRegister" },
   { method: "GET", path: "/api/v1/auth/sessions", operationId: "getApiV1AuthSessions" },
@@ -826,6 +827,11 @@ export interface PublishedChapterContentResponse {
 
 export interface PublishedChapterListResponse {
   chapters: ChapterPascal[]
+}
+
+export interface ReAuthRequest {
+  code?: string
+  recovery_code?: string
 }
 
 export interface ReadinessResponse {

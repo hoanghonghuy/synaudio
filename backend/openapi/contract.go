@@ -39,6 +39,7 @@ var OperationBindings = map[string]OperationBinding{
 	"postApiV1AuthMfaTotpSetup":          {Response: "MFASetupResponse", Description: "TOTP enrollment secret"},
 	"postApiV1AuthMfaTotpConfirm":        {Request: "MFAConfirmRequest", Response: "MFAConfirmResponse", Description: "TOTP confirmed with recovery codes"},
 	"postApiV1AuthMfaTotpDisable":        {Response: "StatusResponse", Description: "TOTP disabled"},
+	"postApiV1AuthReAuth":                {Request: "ReAuthRequest", Response: "StatusResponse", Description: "Privileged MFA assurance granted"},
 	"postApiV1AuthAccountDeletionRequest":  {Response: "StatusResponse", Description: "Account deletion scheduled"},
 	"postApiV1AuthAccountDeletionCancel":   {Response: "StatusResponse", Description: "Account deletion cancelled"},
 	// Public catalog
