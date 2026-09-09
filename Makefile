@@ -1,4 +1,4 @@
-.PHONY: up down logs migrate-up migrate-down sqlc sqlc-check sqlc-check-regression test backend-test frontend-install frontend-dev api worker tidy
+.PHONY: up down logs migrate-up migrate-down sqlc sqlc-check sqlc-check-regression restore-isolation-regression test backend-test frontend-install frontend-dev api worker tidy
 
 up:
 	docker compose up -d postgres minio minio-init
@@ -23,6 +23,9 @@ sqlc-check: sqlc
 
 sqlc-check-regression:
 	bash ./scripts/test-sqlc-drift-gate.sh
+
+restore-isolation-regression:
+	bash ./scripts/test-restore-isolation-gate.sh
 
 backend-test:
 	cd backend && go test ./...
