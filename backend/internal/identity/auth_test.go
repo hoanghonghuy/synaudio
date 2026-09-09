@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/synaudio/synaudio/backend/internal/identity"
 )
@@ -50,6 +51,9 @@ type fakeStore struct {
 	mfaMethods         map[string]*identity.MFAMethod
 	userRoles          map[string][]string
 	rolePermissions    map[string][]string
+	recoveryHashes     map[string]bool
+	assuredSessions    map[string]time.Time
+	recentSessions     map[string]time.Time
 	nextID             int
 }
 
@@ -236,13 +240,7 @@ func (s *fakeStore) RevokeRole(_ context.Context, userID, role string) error {
 }
 
 func (s *fakeStore) CountActiveAdmins(_ context.Context) (int, error) {
-	count := 0
-	for _, roles := range s.userRoles {
-		if contains(roles, identity.RoleAdmin) {
-			count++
-		}
-	}
-	return count, nil
+	return countMfaCapableActiveAdmins(s), nil
 }
 
 func (s *fakeStore) DeactivateUser(_ context.Context, userID string) error {

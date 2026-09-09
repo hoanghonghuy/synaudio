@@ -26,9 +26,10 @@ func TestAdminRoutesRequireAuthentication(t *testing.T) {
 
 func TestAdminRoutesRejectNonAdminUsers(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Dependencies{
-		AdminCheck: func(context.Context, *http.Request) (bool, error) {
+		AdminPermissionCheck: func(context.Context, *http.Request, string) (bool, error) {
 			return false, nil
 		},
+		AdminActor:   func(context.Context, *http.Request) (string, error) { return "actor", nil },
 		StoryHandler: adminTestHandler(),
 	})
 
@@ -43,9 +44,10 @@ func TestAdminRoutesRejectNonAdminUsers(t *testing.T) {
 
 func TestAdminRoutesAllowAdminUsers(t *testing.T) {
 	handler := httpapi.NewRouter(httpapi.Dependencies{
-		AdminCheck: func(context.Context, *http.Request) (bool, error) {
+		AdminPermissionCheck: func(context.Context, *http.Request, string) (bool, error) {
 			return true, nil
 		},
+		AdminActor:   func(context.Context, *http.Request) (string, error) { return "actor", nil },
 		StoryHandler: adminTestHandler(),
 	})
 

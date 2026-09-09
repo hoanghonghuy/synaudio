@@ -23,6 +23,7 @@ type Registry struct {
 
 	apiRequests map[string]uint64
 	apiDuration map[string]float64
+	authThrottled map[string]uint64
 
 	workerHeartbeat    int64
 	workerLoopRuns     map[string]uint64
@@ -36,6 +37,7 @@ func NewRegistry() *Registry {
 	return &Registry{
 		apiRequests:        make(map[string]uint64),
 		apiDuration:        make(map[string]float64),
+		authThrottled:      make(map[string]uint64),
 		workerLoopRuns:     make(map[string]uint64),
 		workerLoopItems:    make(map[string]uint64),
 		generationJobs:     make(map[string]uint64),
@@ -78,6 +80,16 @@ func (r *Registry) HTTPMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (r *Registry) ObserveAuthThrottled(route, dimension string) {
+	route = boundedAuthRoute(route)
+	dimension = boundedAuthDimension(dimension)
+	key := route + "\x00" + dimension
+
+	r.mu.Lock()
+	r.authThrottled[key]++
+	r.mu.Unlock()
+}
+
 func (r *Registry) ObserveAPI(method, route string, status int, duration time.Duration) {
 	method = boundedMethod(method)
 	route = boundedRoute(route)
@@ -94,6 +106,18 @@ func (r *Registry) WorkerHeartbeat(at time.Time) {
 	r.mu.Lock()
 	r.workerHeartbeat = at.Unix()
 	r.mu.Unlock()
+}
+
+// HeartbeatAge returns how long ago the worker loop last refreshed its heartbeat.
+// When no heartbeat has been recorded yet, it returns a duration larger than any
+// production readiness threshold so startup probes fail closed until the loop runs.
+func (r *Registry) HeartbeatAge(now time.Time) time.Duration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.workerHeartbeat == 0 {
+		return 24 * time.Hour
+	}
+	return now.Sub(time.Unix(r.workerHeartbeat, 0))
 }
 
 func (r *Registry) ObserveWorkerLoop(loop string, err error) {
@@ -176,6 +200,13 @@ func (r *Registry) writePrometheus(w http.ResponseWriter) {
 		_, _ = fmt.Fprintf(w, "synaudio_api_request_duration_seconds_sum{method=%q,route=%q,status_class=%q} %g\n", parts[0], parts[1], parts[2], r.apiDuration[key])
 	}
 
+	_, _ = fmt.Fprintln(w, "# HELP synaudio_auth_throttled_total Auth abuse throttles by bounded route and dimension.")
+	_, _ = fmt.Fprintln(w, "# TYPE synaudio_auth_throttled_total counter")
+	for _, key := range sortedKeys(r.authThrottled) {
+		parts := strings.Split(key, "\x00")
+		_, _ = fmt.Fprintf(w, "synaudio_auth_throttled_total{route=%q,dimension=%q} %d\n", parts[0], parts[1], r.authThrottled[key])
+	}
+
 	_, _ = fmt.Fprintln(w, "# HELP synaudio_worker_heartbeat_unixtime Last worker heartbeat Unix timestamp.")
 	_, _ = fmt.Fprintln(w, "# TYPE synaudio_worker_heartbeat_unixtime gauge")
 	_, _ = fmt.Fprintf(w, "synaudio_worker_heartbeat_unixtime %d\n", r.workerHeartbeat)
@@ -236,6 +267,26 @@ func boundedRoute(v string) string {
 		return "unmatched"
 	}
 	return v
+}
+
+func boundedAuthRoute(v string) string {
+	switch v {
+	case "POST /login", "POST /register", "POST /refresh", "POST /email/verify", "POST /email/resend",
+		"POST /password/forgot", "POST /password/reset", "POST /mfa/totp/setup", "POST /mfa/totp/confirm",
+		"POST /mfa/totp/disable", "POST /mfa/challenge", "POST /mfa/verify", "POST /re-auth":
+		return v
+	default:
+		return "other"
+	}
+}
+
+func boundedAuthDimension(v string) string {
+	switch v {
+	case "client", "account", "session":
+		return v
+	default:
+		return "other"
+	}
 }
 
 func boundedLoop(v string) string {

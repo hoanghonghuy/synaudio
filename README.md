@@ -18,6 +18,8 @@ docker-compose.yml
 
 ## Quick start
 
+**Local development only.** For production rollout, use [`docs/operations/production-deployment.md`](docs/operations/production-deployment.md) and [`deploy/`](deploy/). Root `docker-compose.yml` is not a production deployment authority.
+
 1. Copy environment template:
 
 ```bash
@@ -75,8 +77,21 @@ Use `.env.example` as the canonical runtime environment template.
 
 ## Health endpoints
 
+**API (public listener)**
+
 - `GET /health` — process liveness, no dependency calls.
 - `GET /ready` — readiness across configured critical dependencies. Current API composition includes database and object-storage checks, plus FFmpeg when the production FFmpeg processor is enabled; any failing dependency returns a non-ready response with per-dependency status.
+
+**Worker (private probe on `WORKER_PROBE_ADDR`, default `127.0.0.1:8081`)**
+
+- `GET /health` — worker process liveness.
+- `GET /ready` — PostgreSQL connectivity and main-loop heartbeat freshness (≤60s). Does **not** cover API readiness and does not poll live AI/TTS providers. See [`docs/operations/production-deployment.md`](docs/operations/production-deployment.md).
+
+## Production deployment
+
+Canonical release/runbook: [`docs/operations/production-deployment.md`](docs/operations/production-deployment.md)
+
+Provider-agnostic examples: [`deploy/`](deploy/)
 
 ## Spec precedence
 

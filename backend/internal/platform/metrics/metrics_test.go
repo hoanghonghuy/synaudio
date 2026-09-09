@@ -19,6 +19,8 @@ func TestRegistryPrometheusOutputUsesBoundedLabels(t *testing.T) {
 	r.SetBacklog("generation", 3, 42*time.Second, 0)
 	r.SetBacklog("user-controlled-queue", 4, time.Minute, 2)
 	r.WorkerHeartbeat(time.Unix(123, 0))
+	r.ObserveAuthThrottled("POST /login", "client")
+	r.ObserveAuthThrottled("user-controlled-route", "raw-email")
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	res := httptest.NewRecorder()
@@ -36,6 +38,8 @@ func TestRegistryPrometheusOutputUsesBoundedLabels(t *testing.T) {
 		`synaudio_backlog_oldest_age_seconds{queue="generation"} 42`,
 		`synaudio_backlog_dead_letter{queue="generation"} 0`,
 		`synaudio_backlog_depth{queue="other"} 4`,
+		`synaudio_auth_throttled_total{route="POST /login",dimension="client"} 1`,
+		`synaudio_auth_throttled_total{route="other",dimension="other"} 1`,
 	}
 	for _, want := range checks {
 		if !strings.Contains(body, want) {
@@ -44,6 +48,17 @@ func TestRegistryPrometheusOutputUsesBoundedLabels(t *testing.T) {
 	}
 	if strings.Contains(body, "secret-user-id") || strings.Contains(body, "provider error with content") || strings.Contains(body, "user-controlled-queue") {
 		t.Fatalf("metrics output leaked unbounded label content: %s", body)
+	}
+}
+
+func TestRegistryHeartbeatAgeFailsClosedBeforeFirstHeartbeat(t *testing.T) {
+	r := NewRegistry()
+	if age := r.HeartbeatAge(time.Unix(100, 0)); age <= 60*time.Second {
+		t.Fatalf("expected pre-heartbeat age to exceed readiness threshold, got %v", age)
+	}
+	r.WorkerHeartbeat(time.Unix(95, 0))
+	if age := r.HeartbeatAge(time.Unix(100, 0)); age != 5*time.Second {
+		t.Fatalf("heartbeat age = %v, want 5s", age)
 	}
 }
 
