@@ -71,9 +71,17 @@ func TestSmokeChapterAudioListenPipeline(t *testing.T) {
 	assetID := asset["ID"].(string)
 	env.postJSON(t, router, http.MethodPost, "/admin/chapters/"+chapterID+"/audio/"+assetID+"/activate", nil)
 
-	if _, err := env.planStore.UpdateChapterStatus(context.Background(), chapterID, "READY"); err != nil {
-		t.Fatalf("set READY: %v", err)
+	readiness := env.getJSON(t, router, "/admin/chapters/"+chapterID+"/publish-readiness")
+	if readiness["ready"] != true {
+		t.Fatalf("expected publish-readiness ready=true after activation, got %#v", readiness)
 	}
+
+	publishBeforeReady := env.postRecorder(t, router, http.MethodPost, "/admin/chapters/"+chapterID+"/publish", nil)
+	if publishBeforeReady.Code != http.StatusConflict {
+		t.Fatalf("publish must fail before mark-ready, got %d: %s", publishBeforeReady.Code, publishBeforeReady.Body.String())
+	}
+
+	env.postJSON(t, router, http.MethodPost, "/admin/chapters/"+chapterID+"/ready", nil)
 
 	unpublished := env.getRecorder(t, router, "/chapters/"+chapterID+"/audio-url")
 	if unpublished.Code != http.StatusNotFound {
@@ -188,6 +196,20 @@ func (e *smokePipelineEnv) getJSON(t *testing.T, router http.Handler, path strin
 
 func (e *smokePipelineEnv) getRecorder(t *testing.T, router http.Handler, path string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func (e *smokePipelineEnv) postRecorder(t *testing.T, router http.Handler, method, path string, body any) *httptest.ResponseRecorder {
+	var payload []byte
+	if body != nil {
+		payload, _ = json.Marshal(body)
+	}
+	req := httptest.NewRequest(method, path, bytes.NewReader(payload))
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
