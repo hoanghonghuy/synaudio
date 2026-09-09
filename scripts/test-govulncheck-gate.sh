@@ -17,7 +17,7 @@ cp "$BACKEND_DIR/go.sum" "$TMP_DIR/go.sum"
 
 (
   cd "$BACKEND_DIR"
-  go get github.com/go-chi/chi/v5@v5.2.2
+  go get github.com/jackc/pgx/v5@v5.7.5
 )
 
 set +e
@@ -27,7 +27,7 @@ set -e
 
 if [[ $status -eq 0 ]]; then
   cat /tmp/synaudio-govulncheck-probe.log >&2
-  echo "govulncheck gate unexpectedly passed with intentionally vulnerable chi version" >&2
+  echo "govulncheck gate unexpectedly passed with intentionally vulnerable pgx version" >&2
   exit 1
 fi
 
