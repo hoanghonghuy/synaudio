@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -134,58 +133,24 @@ type geminiResponse struct {
 	} `json:"error,omitempty"`
 }
 
-func (c *geminiClient) generate(ctx context.Context, prompt string, generationConfig *geminiGenerationConfig) (geminiResponse, error) {
-	payload, err := json.Marshal(geminiRequest{
-		Contents:         []geminiContent{{Parts: []geminiPart{{Text: prompt}}}},
-		GenerationConfig: generationConfig,
-	})
-	if err != nil {
-		return geminiResponse{}, fmt.Errorf("encode Gemini request: %w", err)
+func candidateParts(resp geminiResponse) ([]geminiPart, error) {
+	if len(resp.Candidates) == 0 {
+		return nil, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("provider returned no candidates"))
 	}
-
-	endpoint := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", c.model)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return geminiResponse{}, fmt.Errorf("create Gemini request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", c.apiKey)
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return geminiResponse{}, fmt.Errorf("Gemini request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return geminiResponse{}, fmt.Errorf("read Gemini response: %w", err)
-	}
-
-	var out geminiResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return geminiResponse{}, fmt.Errorf("decode Gemini response: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		message := strings.TrimSpace(string(body))
-		if out.Error != nil && strings.TrimSpace(out.Error.Message) != "" {
-			message = out.Error.Message
-		}
-		return geminiResponse{}, fmt.Errorf("Gemini returned HTTP %d: %s", resp.StatusCode, message)
-	}
-	if len(out.Candidates) == 0 {
-		return geminiResponse{}, errors.New("Gemini returned no candidates")
-	}
-	return out, nil
+	return resp.Candidates[0].Content.Parts, nil
 }
 
 func responseText(resp geminiResponse) (string, error) {
-	for _, part := range resp.Candidates[0].Content.Parts {
+	parts, err := candidateParts(resp)
+	if err != nil {
+		return "", err
+	}
+	for _, part := range parts {
 		if strings.TrimSpace(part.Text) != "" {
 			return strings.TrimSpace(part.Text), nil
 		}
 	}
-	return "", errors.New("Gemini returned no text")
+	return "", classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("provider returned no text"))
 }
 
 type geminiAI struct {
@@ -224,10 +189,10 @@ Use only MAJOR or MINOR for character importance.`, in.Premise)
 		Characters []planning.CharacterProposal `json:"characters"`
 	}
 	if err := json.Unmarshal([]byte(text), &proposal); err != nil {
-		return planning.FoundationProposal{}, fmt.Errorf("decode Gemini foundation JSON: %w", err)
+		return planning.FoundationProposal{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", err)
 	}
 	if proposal.Bible == nil || proposal.Ending == nil || len(proposal.Arcs) == 0 {
-		return planning.FoundationProposal{}, errors.New("Gemini foundation response is incomplete")
+		return planning.FoundationProposal{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("provider foundation response is incomplete"))
 	}
 	return planning.FoundationProposal{
 		Bible:      proposal.Bible,
@@ -257,7 +222,7 @@ Content:
 		Facts []planning.ExtractedFact `json:"facts"`
 	}
 	if err := json.Unmarshal([]byte(text), &extraction); err != nil {
-		return planning.MemoryExtraction{}, fmt.Errorf("decode Gemini memory JSON: %w", err)
+		return planning.MemoryExtraction{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", err)
 	}
 	return planning.MemoryExtraction{Facts: extraction.Facts}, nil
 }
@@ -274,7 +239,7 @@ func (g *geminiTTS) Synthesize(ctx context.Context, in audio.TTSInput) (audio.TT
 	// resolves Gemini's provider voice through GEMINI_TTS_VOICE.
 	voice := strings.TrimSpace(g.voice)
 	if voice == "" {
-		return audio.TTSOutput{}, errors.New("Gemini provider voice is not configured")
+		return audio.TTSOutput{}, classifiedProviderError("PERMANENT", "PROVIDER_CONFIG", errors.New("Gemini provider voice is not configured"))
 	}
 
 	resp, err := g.client.generate(ctx, in.Text, &geminiGenerationConfig{
@@ -287,16 +252,20 @@ func (g *geminiTTS) Synthesize(ctx context.Context, in audio.TTSInput) (audio.TT
 		return audio.TTSOutput{}, err
 	}
 
-	for _, part := range resp.Candidates[0].Content.Parts {
+	parts, err := candidateParts(resp)
+	if err != nil {
+		return audio.TTSOutput{}, err
+	}
+	for _, part := range parts {
 		if part.InlineData == nil || part.InlineData.Data == "" {
 			continue
 		}
 		pcm, err := base64.StdEncoding.DecodeString(part.InlineData.Data)
 		if err != nil {
-			return audio.TTSOutput{}, fmt.Errorf("decode Gemini audio: %w", err)
+			return audio.TTSOutput{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", err)
 		}
 		if len(pcm) == 0 {
-			return audio.TTSOutput{}, errors.New("Gemini returned empty audio")
+			return audio.TTSOutput{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("provider returned empty audio"))
 		}
 		return audio.TTSOutput{
 			AudioData:  wrapPCM16Mono24kWAV(pcm),
@@ -306,7 +275,7 @@ func (g *geminiTTS) Synthesize(ctx context.Context, in audio.TTSInput) (audio.TT
 			Format:     "wav",
 		}, nil
 	}
-	return audio.TTSOutput{}, errors.New("Gemini returned no audio")
+	return audio.TTSOutput{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("provider returned no audio"))
 }
 
 func wrapPCM16Mono24kWAV(pcm []byte) []byte {

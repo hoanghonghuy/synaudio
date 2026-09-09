@@ -77,6 +77,7 @@ func main() {
 	}
 
 	metricRegistry := platformmetrics.NewRegistry()
+	providers.WireMetrics(metricRegistry)
 	metricRegistry.WorkerHeartbeat(time.Now())
 	startWorkerMetrics(ctx, metricRegistry, log)
 	startWorkerProbe(ctx, pool, metricRegistry, acceptingWork, log)
