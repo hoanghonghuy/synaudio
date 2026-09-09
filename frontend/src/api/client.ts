@@ -578,6 +578,10 @@ export function getPublishReadiness(chapterID: string): Promise<PublishReadiness
   return request<PublishReadiness>(`/admin/chapters/${chapterID}/publish-readiness`)
 }
 
+export function markChapterReady(chapterID: string): Promise<Chapter> {
+  return request<Chapter>(`/admin/chapters/${chapterID}/ready`, { method: 'POST' })
+}
+
 export function publishChapter(chapterID: string): Promise<Chapter> {
   return request<Chapter>(`/admin/chapters/${chapterID}/publish`, { method: 'POST' })
 }

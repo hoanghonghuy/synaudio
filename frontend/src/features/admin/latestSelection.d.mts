@@ -56,6 +56,13 @@ export function canActivateAudio(input: {
   actionInProgress: boolean
 }): boolean
 
+export function canMarkChapterReady(input: {
+  chapterStatus?: string
+  publishReadiness: { ready?: boolean } | null
+  selectionLoading: boolean
+  actionInProgress: boolean
+}): boolean
+
 export function canPublishChapter(input: {
   chapterStatus?: string
   publishReadiness: { ready?: boolean } | null

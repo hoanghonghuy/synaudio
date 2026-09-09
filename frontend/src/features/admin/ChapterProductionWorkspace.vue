@@ -14,6 +14,7 @@ import {
   listAdminChapters,
   listChapterReviews,
   listContentRevisions,
+  markChapterReady,
   publishChapter,
   startChapterGeneration,
   synthesizeNarration,
@@ -24,6 +25,7 @@ import type { AudioAsset, Chapter, ChapterReview, ContentRevision, NarrationRevi
 import {
   canActivateAudio,
   canCreateNarration,
+  canMarkChapterReady,
   canPublishChapter,
   canRetryGenerationJob,
   canSelectChapter,
@@ -120,6 +122,13 @@ const generationJobStatus = computed(() => {
   return latestRevision.value ? `Output revision #${latestRevision.value.RevisionNo}` : 'Chưa có durable run/output'
 })
 
+const mayMarkReady = computed(() => canMarkChapterReady({
+  chapterStatus: activeChapter.value?.Status,
+  publishReadiness: publishReadiness.value,
+  selectionLoading: selectionLoading.value,
+  actionInProgress: Boolean(action.value),
+}))
+
 const mayPublish = computed(() => canPublishChapter({
   chapterStatus: activeChapter.value?.Status,
   publishReadiness: publishReadiness.value,
@@ -164,8 +173,14 @@ const publishMissingLabels: Record<string, string> = {
 const publishStatus = computed(() => {
   if (selectionLoading.value) return 'Đang tải…'
   if (activeChapter.value?.Status === 'PUBLISHED') return `PUBLISHED · ${activeChapter.value.ID}`
-  if (activeChapter.value?.Status !== 'READY') return `BLOCKED — chapter phải ở READY trước khi publish (hiện tại: ${activeChapter.value?.Status || '—'})`
   if (!publishReadiness.value) return 'WAITING — chưa có publish readiness authoritative'
+  if (activeChapter.value?.Status !== 'READY') {
+    if (publishReadiness.value.ready) {
+      return `READY gates passed — chapter ${activeChapter.value?.Status || '—'} có thể Mark Ready trước publish`
+    }
+    const missing = publishReadiness.value.missing.map((item) => publishMissingLabels[item] ?? item.replaceAll('_', ' '))
+    return `BLOCKED — thiếu: ${missing.join(', ')}`
+  }
   if (publishReadiness.value.ready) return 'READY — backend xác nhận đủ điều kiện publish'
   const missing = publishReadiness.value.missing.map((item) => publishMissingLabels[item] ?? item.replaceAll('_', ' '))
   return `BLOCKED — thiếu: ${missing.join(', ')}`
@@ -359,6 +374,26 @@ async function runActivate() {
   }
 }
 
+async function runMarkReady() {
+  const chapter = activeChapter.value
+  if (!chapter || !mayMarkReady.value) return
+  const requestChapterID = chapter.ID
+  action.value = 'mark-ready'
+  error.value = ''
+  try {
+    const ready = await markChapterReady(requestChapterID)
+    if (activeChapter.value?.ID !== requestChapterID) return
+    activeChapter.value = ready
+    chapters.value = chapters.value.map((item) => (item.ID === ready.ID ? ready : item))
+  } catch (e) {
+    if (activeChapter.value?.ID === requestChapterID) {
+      error.value = e instanceof Error ? e.message : 'Không thể mark chapter ready.'
+    }
+  } finally {
+    if (activeChapter.value?.ID === requestChapterID) action.value = ''
+  }
+}
+
 async function runPublish() {
   const chapter = activeChapter.value
   if (!chapter || !mayPublish.value) return
@@ -455,6 +490,9 @@ onMounted(load)
           </button>
           <button type="button" :disabled="!mayActivate" @click="runActivate">
             {{ action === 'activate' ? 'Đang activate…' : 'Activate Audio' }}
+          </button>
+          <button type="button" :disabled="!mayMarkReady" @click="runMarkReady">
+            {{ action === 'mark-ready' ? 'Đang mark ready…' : 'Mark Chapter Ready' }}
           </button>
           <button type="button" :disabled="!mayPublish" @click="runPublish">
             {{ action === 'publish' ? 'Đang publish…' : 'Publish Chapter' }}

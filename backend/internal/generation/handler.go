@@ -225,21 +225,7 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobs, err := h.svc.store.ListJobsByRun(r.Context(), runID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
-		return
-	}
-
-	jobViews := make([]JobView, 0, len(jobs))
-	for _, job := range jobs {
-		jobViews = append(jobViews, ObserveJob(job))
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"run":  run,
-		"jobs": jobViews,
-	})
+	writeJSON(w, http.StatusOK, run)
 }
 
 func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {
