@@ -17,15 +17,17 @@ const (
 )
 
 var (
-	ErrEmailTaken         = errors.New("email already taken")
-	ErrUserNotFound       = errors.New("user not found")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrAccountSuspended   = errors.New("account suspended")
-	ErrInvalidToken       = errors.New("invalid token")
-	ErrLastAdmin          = errors.New("cannot remove last active admin")
-	ErrForbidden          = errors.New("forbidden")
-	ErrUnauthenticated    = errors.New("authentication required")
-	ErrSessionNotFound    = errors.New("session not found")
+	ErrEmailTaken                  = errors.New("email already taken")
+	ErrUserNotFound                = errors.New("user not found")
+	ErrInvalidCredentials          = errors.New("invalid credentials")
+	ErrAccountSuspended            = errors.New("account suspended")
+	ErrInvalidToken                = errors.New("invalid token")
+	ErrLastAdmin                   = errors.New("cannot remove last active admin")
+	ErrForbidden                   = errors.New("forbidden")
+	ErrUnauthenticated             = errors.New("authentication required")
+	ErrSessionNotFound             = errors.New("session not found")
+	ErrMFARequired                 = errors.New("mfa required")
+	ErrEmailVerificationRequired   = errors.New("email verification required")
 )
 
 const (

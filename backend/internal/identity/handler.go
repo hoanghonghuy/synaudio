@@ -39,6 +39,7 @@ func NewAuthHandler(svc *AuthService) http.Handler {
 	r.Post("/mfa/totp/setup", h.mfaSetup)
 	r.Post("/mfa/totp/confirm", h.mfaConfirm)
 	r.Post("/mfa/totp/disable", h.mfaDisable)
+	r.Post("/re-auth", h.reAuth)
 	r.Post("/account/deletion/request", h.requestDeletion)
 	r.Post("/account/deletion/cancel", h.cancelDeletion)
 	return r
@@ -470,6 +471,41 @@ func (h *AuthHandler) mfaConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"recovery_codes": codes})
+}
+
+type reAuthRequest struct {
+	Code         string `json:"code"`
+	RecoveryCode string `json:"recovery_code"`
+}
+
+func (h *AuthHandler) reAuth(w http.ResponseWriter, r *http.Request) {
+	principal, _, err := h.authenticatedUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+
+	var req reAuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.svc.VerifyPrivilegedMFAChallenge(r.Context(), principal, req.Code, req.RecoveryCode); err != nil {
+		switch {
+		case errors.Is(err, ErrMFARequired):
+			writeError(w, http.StatusForbidden, "MFA_REQUIRED", "mfa verification required")
+		case errors.Is(err, ErrInvalidToken):
+			writeError(w, http.StatusBadRequest, "INVALID_TOKEN", "invalid or expired code")
+		case errors.Is(err, ErrUnauthenticated):
+			writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		default:
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *AuthHandler) mfaDisable(w http.ResponseWriter, r *http.Request) {
