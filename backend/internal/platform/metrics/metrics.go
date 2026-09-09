@@ -96,6 +96,18 @@ func (r *Registry) WorkerHeartbeat(at time.Time) {
 	r.mu.Unlock()
 }
 
+// HeartbeatAge returns how long ago the worker loop last refreshed its heartbeat.
+// When no heartbeat has been recorded yet, it returns a duration larger than any
+// production readiness threshold so startup probes fail closed until the loop runs.
+func (r *Registry) HeartbeatAge(now time.Time) time.Duration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.workerHeartbeat == 0 {
+		return 24 * time.Hour
+	}
+	return now.Sub(time.Unix(r.workerHeartbeat, 0))
+}
+
 func (r *Registry) ObserveWorkerLoop(loop string, err error) {
 	outcome := "success"
 	if err != nil {
