@@ -72,6 +72,18 @@ expect_success() {
   fi
 }
 
+# Omitted or mistyped APP_ENV must not bypass URL-based destructive restore gates.
+expect_fail "RECOVERY_TARGET=isolated" \
+  DATABASE_URL="$PRODUCTION_URL"
+
+expect_fail "RECOVERY_TARGET=isolated" \
+  APP_ENV=development \
+  DATABASE_URL="$PRODUCTION_URL"
+
+expect_fail "RECOVERY_TARGET=isolated" \
+  APP_ENV=develoment \
+  DATABASE_URL="$PRODUCTION_URL"
+
 # Caller flags alone cannot authorize a live production target.
 expect_fail "ISOLATED_RECOVERY_DATABASE_URL" \
   APP_ENV=production \
@@ -104,5 +116,17 @@ expect_success \
   PRODUCTION_DATABASE_URL="$PRODUCTION_URL" \
   RECOVERY_TARGET=isolated \
   ALLOW_DESTRUCTIVE_RESTORE=YES_I_UNDERSTAND
+
+# Isolated URL restore succeeds without APP_ENV=production when fully acknowledged.
+expect_success \
+  DATABASE_URL="$ISOLATED_URL" \
+  ISOLATED_RECOVERY_DATABASE_URL="$ISOLATED_URL" \
+  PRODUCTION_DATABASE_URL="$PRODUCTION_URL" \
+  RECOVERY_TARGET=isolated \
+  ALLOW_DESTRUCTIVE_RESTORE=YES_I_UNDERSTAND
+
+# Bounded local dev path: POSTGRES_PASSWORD + libpq vars, no DATABASE_URL.
+expect_success \
+  POSTGRES_PASSWORD=localdev
 
 echo "restore isolation gate regression passed"

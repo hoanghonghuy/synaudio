@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 # Restore a Synaudio PostgreSQL dump.
 #
-# Development drill (requires POSTGRES_PASSWORD or DATABASE_URL):
+# Bounded local development (POSTGRES_PASSWORD + libpq vars; no DATABASE_URL):
 #   POSTGRES_PASSWORD=... ./scripts/restore.sh <dump_file>
-#   DATABASE_URL=... ./scripts/restore.sh <dump_file>
 #
-# Production/destructive restore requires all of:
-#   APP_ENV=production
+# URL-based/destructive restore requires all of (regardless of APP_ENV):
 #   DATABASE_URL=<explicit recovery target; must equal ISOLATED_RECOVERY_DATABASE_URL>
 #   ISOLATED_RECOVERY_DATABASE_URL=<designated isolated recovery target>
 #   RECOVERY_TARGET=isolated
@@ -15,8 +13,9 @@
 # Optional fail-closed boundary when live production is configured:
 #   PRODUCTION_DATABASE_URL=<live production target; must not equal ISOLATED_RECOVERY_DATABASE_URL>
 #
-# Normal drills should restore into an isolated recovery environment. Promotion
-# of recovered data is a separate operator decision described in the DR runbook.
+# APP_ENV=production without DATABASE_URL is rejected. A supplied DATABASE_URL
+# never authorizes destructive restore by itself; isolation + acknowledgement
+# are always required for URL-based restore paths.
 
 set -euo pipefail
 
@@ -32,13 +31,10 @@ fi
 
 APP_ENV="${APP_ENV:-development}"
 RESTORE_CONN_MODE=""
-if [[ "${APP_ENV}" == "production" ]]; then
-  if [[ -z "${DATABASE_URL:-}" ]]; then
-    echo "Error: production restore requires explicit DATABASE_URL" >&2
-    exit 1
-  fi
+
+if [[ -n "${DATABASE_URL:-}" ]]; then
   if [[ "${RECOVERY_TARGET:-}" != "isolated" ]]; then
-    echo "Error: production restore is permitted only with RECOVERY_TARGET=isolated" >&2
+    echo "Error: DATABASE_URL restore is permitted only with RECOVERY_TARGET=isolated" >&2
     exit 1
   fi
   if [[ "${ALLOW_DESTRUCTIVE_RESTORE:-}" != "YES_I_UNDERSTAND" ]]; then
@@ -46,7 +42,7 @@ if [[ "${APP_ENV}" == "production" ]]; then
     exit 1
   fi
   if [[ -z "${ISOLATED_RECOVERY_DATABASE_URL:-}" ]]; then
-    echo "Error: production restore requires ISOLATED_RECOVERY_DATABASE_URL" >&2
+    echo "Error: DATABASE_URL restore requires ISOLATED_RECOVERY_DATABASE_URL" >&2
     exit 1
   fi
   if [[ -n "${PRODUCTION_DATABASE_URL:-}" ]] \
@@ -60,22 +56,20 @@ if [[ "${APP_ENV}" == "production" ]]; then
   fi
   DB_URL="${DATABASE_URL}"
   RESTORE_CONN_MODE="connstring"
+elif [[ "${APP_ENV}" == "production" ]]; then
+  echo "Error: production restore requires explicit DATABASE_URL" >&2
+  exit 1
 else
-  if [[ -n "${DATABASE_URL:-}" ]]; then
-    DB_URL="${DATABASE_URL}"
-    RESTORE_CONN_MODE="connstring"
-  else
-    DEV_HOST="${POSTGRES_HOST:-localhost}"
-    DEV_PORT="${POSTGRES_PORT:-5432}"
-    DEV_DB="${POSTGRES_DB:-synaudio}"
-    DEV_USER="${POSTGRES_USER:-synaudio}"
-    if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
-      echo "Error: development restore requires POSTGRES_PASSWORD or DATABASE_URL" >&2
-      exit 1
-    fi
-    export PGPASSWORD="${POSTGRES_PASSWORD}"
-    RESTORE_CONN_MODE="libpq"
+  DEV_HOST="${POSTGRES_HOST:-localhost}"
+  DEV_PORT="${POSTGRES_PORT:-5432}"
+  DEV_DB="${POSTGRES_DB:-synaudio}"
+  DEV_USER="${POSTGRES_USER:-synaudio}"
+  if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
+    echo "Error: local development restore requires POSTGRES_PASSWORD (DATABASE_URL triggers isolated restore gates)" >&2
+    exit 1
   fi
+  export PGPASSWORD="${POSTGRES_PASSWORD}"
+  RESTORE_CONN_MODE="libpq"
 fi
 
 echo "Restoring from: ${DUMP_FILE}"
