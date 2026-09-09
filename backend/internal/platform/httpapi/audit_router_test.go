@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/synaudio/synaudio/backend/internal/audit"
+	"github.com/synaudio/synaudio/backend/internal/identity"
 )
 
 func TestRouterAuditsRepresentativeCriticalAdminMutations(t *testing.T) {
@@ -106,6 +107,31 @@ func TestRouterAuditsAuthSecurityMutationWithoutRequestBodyInspection(t *testing
 	}
 	if got.Action != "AUTH_LOGOUT" || got.ActorUserID != actorID || got.Result != audit.ResultSucceeded {
 		t.Fatalf("unexpected auth audit event: %#v", got)
+	}
+}
+
+func TestRouterAuditsDeniedAuthHighRiskMutation(t *testing.T) {
+	src := chi.NewRouter()
+	src.Post("/mfa/totp/disable", okJSONHandler)
+	actorID := "11111111-1111-1111-1111-111111111111"
+	var got audit.Event
+	router := NewRouter(Dependencies{
+		AuthRecentAuthCheck: func(context.Context, *http.Request) error { return identity.ErrForbidden },
+		AdminActor:          func(context.Context, *http.Request) (string, error) { return actorID, nil },
+		AuditRecord: func(_ context.Context, event audit.Event) (audit.Event, error) {
+			got = event
+			return event, nil
+		},
+		AuthHandler: src,
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/mfa/totp/disable", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got.Action != "MFA_DISABLED" || got.Result != audit.ResultDenied || got.ActorUserID != actorID {
+		t.Fatalf("unexpected denied auth audit event: %#v", got)
 	}
 }
 

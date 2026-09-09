@@ -24,6 +24,7 @@ type Dependencies struct {
 	AdminCheck               func(context.Context, *http.Request) (bool, error)
 	AdminPermissionCheck     func(context.Context, *http.Request, string) (bool, error)
 	AdminRecentAuthCheck     func(context.Context, *http.Request) error
+	AuthRecentAuthCheck      func(context.Context, *http.Request) error
 	AdminActor               func(context.Context, *http.Request) (string, error)
 	AuditRecord              audit.RecordFunc
 	AuditBoundary            audit.TransactionBoundary
@@ -92,7 +93,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	if deps.AuthHandler != nil {
-		authHandler := audit.WrapAuthTransactional(deps.AuthHandler, deps.AuditRecord, deps.AdminActor, deps.AuditBoundary)
+		authRouter := chi.NewRouter()
+		mountAuthRoutes(authRouter, deps.AuthHandler, deps.AuthRecentAuthCheck)
+		authHandler := audit.WrapAuthTransactional(authRouter, deps.AuditRecord, deps.AdminActor, deps.AuditBoundary)
 		r.Mount("/api/v1/auth", authHandler)
 	}
 
@@ -146,7 +149,7 @@ func mountRoutes(
 				handler = requireAdmin(adminCheck, adminActor)(handler)
 			}
 			if policy.RecentAuth {
-				handler = requireRecentAdminAuth(adminRecentAuthCheck)(handler)
+				handler = requireRecentAuth(adminRecentAuthCheck)(handler)
 			}
 		}
 		// Audit wraps authorization too, so denied security-sensitive mutations
@@ -245,7 +248,28 @@ func requireAdminPermission(
 	}
 }
 
-func requireRecentAdminAuth(check func(context.Context, *http.Request) error) func(http.Handler) http.Handler {
+// mountAuthRoutes re-registers auth handler routes so high-risk security
+// mutations can enforce the same recent-auth boundary used by /admin routes.
+func mountAuthRoutes(
+	dst chi.Router,
+	src http.Handler,
+	sessionRecentAuthCheck func(context.Context, *http.Request) error,
+) {
+	routes, ok := src.(chi.Routes)
+	if !ok {
+		dst.Mount("/", src)
+		return
+	}
+	_ = chi.Walk(routes, func(method, route string, handler http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if authSecurityPolicyFor(method, route).RecentAuth {
+			handler = requireRecentAuth(sessionRecentAuthCheck)(handler)
+		}
+		dst.Method(method, route, handler)
+		return nil
+	})
+}
+
+func requireRecentAuth(check func(context.Context, *http.Request) error) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if check == nil {
@@ -253,7 +277,11 @@ func requireRecentAdminAuth(check func(context.Context, *http.Request) error) fu
 				return
 			}
 			if err := check(r.Context(), r); err != nil {
-				writeError(w, http.StatusForbidden, "RECENT_AUTH_REQUIRED", "recent authentication required")
+				if errors.Is(err, identity.ErrForbidden) {
+					writeError(w, http.StatusForbidden, "RECENT_AUTH_REQUIRED", "recent authentication required")
+					return
+				}
+				writePrivilegedError(w, err)
 				return
 			}
 			next.ServeHTTP(w, r)

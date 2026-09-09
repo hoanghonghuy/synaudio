@@ -226,6 +226,7 @@ func main() {
 		AdminCheck:               authService.ResolveAdmin,
 		AdminPermissionCheck:     authService.ResolveAdminPermission,
 		AdminRecentAuthCheck:     authService.RequireRecentAuth,
+		AuthRecentAuthCheck:      authService.RequireSessionRecentAuth,
 		AdminActor:               authService.ResolveUserID,
 		AdminSecurityHandler:     adminSecurityHandler,
 		AuditRecord:              auditService.RecordReliable,

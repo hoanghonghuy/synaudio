@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/synaudio/synaudio/backend/internal/identity"
 )
 
 func TestAdminRouteUsesOperationSpecificPermission(t *testing.T) {
@@ -91,7 +93,7 @@ func TestHighRiskAdminRouteRejectsStaleRecentAuth(t *testing.T) {
 
 	router := NewRouter(Dependencies{
 		AdminPermissionCheck: func(context.Context, *http.Request, string) (bool, error) { return true, nil },
-		AdminRecentAuthCheck: func(context.Context, *http.Request) error { return errors.New("stale") },
+		AdminRecentAuthCheck: func(context.Context, *http.Request) error { return identity.ErrForbidden },
 		AdminActor:           func(context.Context, *http.Request) (string, error) { return "actor", nil },
 		RetconHandler:        src,
 	})
