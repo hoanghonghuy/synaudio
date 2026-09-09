@@ -10,6 +10,20 @@ export function generationRunFromContentResponse<T>(response: {
   generation_run?: T | null
 }): T | null
 
+export function generationJobFromContentResponse<T>(response: {
+  generation_job?: T | null
+}): T | null
+
+export function canRetryGenerationJob(input: {
+  generationJob: { Retryable?: boolean; Observation?: string } | null
+  selectionLoading: boolean
+  actionInProgress: boolean
+}): boolean
+
+export function formatGenerationJobStatus(
+  generationJob: { Observation?: string; Status?: string; AttemptCount?: number; MaxAttempts?: number; LastErrorClass?: string; LastErrorCode?: string } | null,
+): string | null
+
 export function canStartChapterGeneration(input: {
   hasPlanRevision: boolean
   selectionLoading: boolean
@@ -38,6 +52,13 @@ export function canActivateAudio(input: {
   readyAssetBelongsToChapter: boolean
   readyAssetIsInactive: boolean
   readyAssetMatchesLatestNarration: boolean
+  selectionLoading: boolean
+  actionInProgress: boolean
+}): boolean
+
+export function canMarkChapterReady(input: {
+  chapterStatus?: string
+  publishReadiness: { ready?: boolean } | null
   selectionLoading: boolean
   actionInProgress: boolean
 }): boolean

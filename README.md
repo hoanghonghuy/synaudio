@@ -38,7 +38,15 @@ The API/worker expect the schema to be migrated before startup. The compose `bac
 cd backend && go test ./...
 ```
 
-4. Run API / Worker:
+4. Run the repository-owned Chapter → Audio → Listen smoke proof (#97):
+
+```bash
+make smoke
+```
+
+This deterministic smoke uses in-memory stores and mock AI/TTS providers. It traverses real HTTP handlers and domain services (generation, approval, narration, synthesize, activate, publish, listener audio URL) without manual database edits.
+
+5. Run API / Worker:
 
 ```bash
 cd backend
@@ -46,7 +54,7 @@ go run ./cmd/api
 go run ./cmd/worker
 ```
 
-5. Run frontend:
+6. Run frontend:
 
 ```bash
 cd frontend

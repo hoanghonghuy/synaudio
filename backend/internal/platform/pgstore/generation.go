@@ -158,6 +158,39 @@ func (s *GenerationStore) CreateGenerationJob(ctx context.Context, j generation.
 	return toGenerationJob(row), nil
 }
 
+func (s *GenerationStore) GetGenerationJob(ctx context.Context, jobID string) (generation.GenerationJob, error) {
+	row, err := s.q.GetGenerationJob(ctx, toUUID(jobID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return generation.GenerationJob{}, generation.ErrGenerationJobNotFound
+		}
+		return generation.GenerationJob{}, err
+	}
+	return toGenerationJob(row), nil
+}
+
+func (s *GenerationStore) GetLatestWriterJobForChapter(ctx context.Context, chapterID string) (generation.GenerationJob, error) {
+	row, err := s.q.GetLatestWriterJobForChapter(ctx, toUUID(chapterID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return generation.GenerationJob{}, generation.ErrGenerationJobNotFound
+		}
+		return generation.GenerationJob{}, err
+	}
+	return toGenerationJob(row), nil
+}
+
+func (s *GenerationStore) RequeueGenerationJob(ctx context.Context, jobID string) (generation.GenerationJob, error) {
+	row, err := s.q.RequeueGenerationJob(ctx, toUUID(jobID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return generation.GenerationJob{}, generation.ErrGenerationJobNotFound
+		}
+		return generation.GenerationJob{}, err
+	}
+	return toGenerationJob(row), nil
+}
+
 func (s *GenerationStore) ListJobsByRun(ctx context.Context, runID string) ([]generation.GenerationJob, error) {
 	rows, err := s.q.ListJobsByRun(ctx, toUUID(runID))
 	if err != nil {

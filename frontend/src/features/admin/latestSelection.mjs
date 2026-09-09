@@ -1,8 +1,10 @@
 const CHAPTER_SELECTION_BLOCKING_ACTIONS = new Set([
   'start-generation',
+  'retry-generation',
   'create-narration',
   'synthesize',
   'activate',
+  'mark-ready',
   'publish',
 ])
 
@@ -27,6 +29,44 @@ export function createLatestSelectionGuard() {
 
 export function generationRunFromContentResponse(response) {
   return response?.generation_run ?? null
+}
+
+export function generationJobFromContentResponse(response) {
+  return response?.generation_job ?? null
+}
+
+export function canRetryGenerationJob({
+  generationJob,
+  selectionLoading,
+  actionInProgress,
+}) {
+  return Boolean(
+    generationJob?.Retryable === true
+    && generationJob?.Observation === 'retryable'
+    && !selectionLoading
+    && !actionInProgress,
+  )
+}
+
+export function formatGenerationJobStatus(generationJob) {
+  if (!generationJob) return null
+  const attempt = `${generationJob.AttemptCount}/${generationJob.MaxAttempts}`
+  switch (generationJob.Observation) {
+    case 'queued':
+      return `QUEUED · attempt ${attempt}`
+    case 'running':
+      return `RUNNING · attempt ${attempt}`
+    case 'succeeded':
+      return `SUCCEEDED · attempt ${attempt}`
+    case 'retryable':
+      return `RETRYABLE · ${generationJob.LastErrorClass || 'TRANSIENT'} · attempt ${attempt}`
+    case 'exhausted':
+      return `EXHAUSTED · ${generationJob.LastErrorCode || generationJob.LastErrorClass || 'MAX_ATTEMPTS'} · attempt ${attempt}`
+    case 'failed':
+      return `FAILED · ${generationJob.LastErrorClass || 'PERMANENT'} · attempt ${attempt}`
+    default:
+      return `${generationJob.Status} · attempt ${attempt}`
+  }
 }
 
 export function canStartChapterGeneration({
@@ -89,6 +129,22 @@ export function canActivateAudio({
     && readyAssetBelongsToChapter
     && readyAssetIsInactive
     && readyAssetMatchesLatestNarration
+    && !selectionLoading
+    && !actionInProgress,
+  )
+}
+
+export function canMarkChapterReady({
+  chapterStatus,
+  publishReadiness,
+  selectionLoading,
+  actionInProgress,
+}) {
+  return Boolean(
+    chapterStatus
+    && chapterStatus !== 'READY'
+    && chapterStatus !== 'PUBLISHED'
+    && publishReadiness?.ready === true
     && !selectionLoading
     && !actionInProgress,
   )

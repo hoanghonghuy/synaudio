@@ -4,11 +4,15 @@ import test from 'node:test'
 import {
   canActivateAudio,
   canCreateNarration,
+  canMarkChapterReady,
   canPublishChapter,
+  canRetryGenerationJob,
   canSelectChapter,
   canStartChapterGeneration,
   canSynthesizeNarration,
   createLatestSelectionGuard,
+  formatGenerationJobStatus,
+  generationJobFromContentResponse,
   generationRunFromContentResponse,
   isChapterSelectionBlockingAction,
 } from '../src/features/admin/latestSelection.mjs'
@@ -237,6 +241,48 @@ test('chapter selection is blocked while other durable chapter mutations are in 
   assert.equal(canSelectChapter({ action: 'start-generation' }), false)
 })
 
+test('mark ready is allowed only when publish gates pass and chapter is not already READY/PUBLISHED', () => {
+  assert.equal(canMarkChapterReady({
+    chapterStatus: 'DRAFT',
+    publishReadiness: { ready: true },
+    selectionLoading: false,
+    actionInProgress: false,
+  }), true)
+
+  assert.equal(canMarkChapterReady({
+    chapterStatus: 'READY',
+    publishReadiness: { ready: true },
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+
+  assert.equal(canMarkChapterReady({
+    chapterStatus: 'PUBLISHED',
+    publishReadiness: { ready: true },
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+
+  assert.equal(canMarkChapterReady({
+    chapterStatus: 'DRAFT',
+    publishReadiness: { ready: false },
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+
+  assert.equal(canMarkChapterReady({
+    chapterStatus: 'DRAFT',
+    publishReadiness: { ready: true },
+    selectionLoading: true,
+    actionInProgress: false,
+  }), false)
+})
+
+test('chapter selection is blocked while mark-ready is in flight', () => {
+  assert.equal(isChapterSelectionBlockingAction('mark-ready'), true)
+  assert.equal(canSelectChapter({ action: 'mark-ready' }), false)
+})
+
 test('publish is blocked without backend readiness or while chapter state is loading', () => {
   assert.equal(canPublishChapter({
     chapterStatus: 'READY',
@@ -270,4 +316,44 @@ test('publish is blocked without backend readiness or while chapter state is loa
 test('chapter selection is blocked while publish is in flight', () => {
   assert.equal(isChapterSelectionBlockingAction('publish'), true)
   assert.equal(canSelectChapter({ action: 'publish' }), false)
+})
+
+test('generation job projection restores authoritative job state after refresh', () => {
+  const job = { ID: 'job-1', Observation: 'retryable', Retryable: true, AttemptCount: 1, MaxAttempts: 3 }
+  assert.deepEqual(generationJobFromContentResponse({ generation_job: job }), job)
+  assert.equal(generationJobFromContentResponse({ generation_job: null }), null)
+})
+
+test('retry is allowed only when backend marks job retryable', () => {
+  const retryable = { Observation: 'retryable', Retryable: true }
+  assert.equal(canRetryGenerationJob({
+    generationJob: retryable,
+    selectionLoading: false,
+    actionInProgress: false,
+  }), true)
+  assert.equal(canRetryGenerationJob({
+    generationJob: { Observation: 'exhausted', Retryable: false },
+    selectionLoading: false,
+    actionInProgress: false,
+  }), false)
+})
+
+test('retry blocks chapter selection while in flight', () => {
+  assert.equal(isChapterSelectionBlockingAction('retry-generation'), true)
+  assert.equal(canSelectChapter({ action: 'retry-generation' }), false)
+})
+
+test('generation job status formats exhausted and retryable honestly', () => {
+  assert.match(formatGenerationJobStatus({
+    Observation: 'exhausted',
+    AttemptCount: 3,
+    MaxAttempts: 3,
+    LastErrorCode: 'MAX_ATTEMPTS_EXHAUSTED',
+  }), /EXHAUSTED/)
+  assert.match(formatGenerationJobStatus({
+    Observation: 'retryable',
+    AttemptCount: 1,
+    MaxAttempts: 3,
+    LastErrorClass: 'TRANSIENT',
+  }), /RETRYABLE/)
 })

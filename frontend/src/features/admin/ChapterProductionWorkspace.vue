@@ -5,7 +5,8 @@ import {
   activateAudioAsset,
   createNarrationRevision,
   getActiveAudioAsset,
-  getGenerationRun,
+  retryGenerationJob,
+  type GenerationJobView,
   getLatestNarrationRevision,
   getLatestReadyAudioAsset,
   getPublishReadiness,
@@ -13,6 +14,7 @@ import {
   listAdminChapters,
   listChapterReviews,
   listContentRevisions,
+  markChapterReady,
   publishChapter,
   startChapterGeneration,
   synthesizeNarration,
@@ -23,11 +25,15 @@ import type { AudioAsset, Chapter, ChapterReview, ContentRevision, NarrationRevi
 import {
   canActivateAudio,
   canCreateNarration,
+  canMarkChapterReady,
   canPublishChapter,
+  canRetryGenerationJob,
   canSelectChapter,
   canStartChapterGeneration,
   canSynthesizeNarration,
   createLatestSelectionGuard,
+  formatGenerationJobStatus,
+  generationJobFromContentResponse,
   generationRunFromContentResponse,
 } from './latestSelection.mjs'
 
@@ -38,6 +44,7 @@ const activeChapter = ref<Chapter | null>(null)
 const revisions = ref<ContentRevision[]>([])
 const reviews = ref<ChapterReview[]>([])
 const generationRun = ref<GenerationRun | null>(null)
+const generationJob = ref<GenerationJobView | null>(null)
 const latestNarration = ref<NarrationRevision | null>(null)
 const activeAudio = ref<AudioAsset | null>(null)
 const latestReadyAudio = ref<AudioAsset | null>(null)
@@ -100,6 +107,28 @@ const mayActivate = computed(() => canActivateAudio({
   actionInProgress: Boolean(action.value),
 }))
 
+const mayRetryGeneration = computed(() => canRetryGenerationJob({
+  generationJob: generationJob.value,
+  selectionLoading: selectionLoading.value,
+  actionInProgress: Boolean(action.value),
+}))
+
+const generationJobStatus = computed(() => {
+  if (selectionLoading.value) return 'Đang tải…'
+  const formatted = formatGenerationJobStatus(generationJob.value)
+  if (formatted) return formatted
+  if (generationRun.value) return `${generationRun.value.Status} · ${generationRun.value.ID} (chưa có job projection)`
+  if (latestRevision.value?.GenerationRunID) return `WAITING — durable run ${latestRevision.value.GenerationRunID} chưa có job projection`
+  return latestRevision.value ? `Output revision #${latestRevision.value.RevisionNo}` : 'Chưa có durable run/output'
+})
+
+const mayMarkReady = computed(() => canMarkChapterReady({
+  chapterStatus: activeChapter.value?.Status,
+  publishReadiness: publishReadiness.value,
+  selectionLoading: selectionLoading.value,
+  actionInProgress: Boolean(action.value),
+}))
+
 const mayPublish = computed(() => canPublishChapter({
   chapterStatus: activeChapter.value?.Status,
   publishReadiness: publishReadiness.value,
@@ -144,8 +173,14 @@ const publishMissingLabels: Record<string, string> = {
 const publishStatus = computed(() => {
   if (selectionLoading.value) return 'Đang tải…'
   if (activeChapter.value?.Status === 'PUBLISHED') return `PUBLISHED · ${activeChapter.value.ID}`
-  if (activeChapter.value?.Status !== 'READY') return `BLOCKED — chapter phải ở READY trước khi publish (hiện tại: ${activeChapter.value?.Status || '—'})`
   if (!publishReadiness.value) return 'WAITING — chưa có publish readiness authoritative'
+  if (activeChapter.value?.Status !== 'READY') {
+    if (publishReadiness.value.ready) {
+      return `READY gates passed — chapter ${activeChapter.value?.Status || '—'} có thể Mark Ready trước publish`
+    }
+    const missing = publishReadiness.value.missing.map((item) => publishMissingLabels[item] ?? item.replaceAll('_', ' '))
+    return `BLOCKED — thiếu: ${missing.join(', ')}`
+  }
   if (publishReadiness.value.ready) return 'READY — backend xác nhận đủ điều kiện publish'
   const missing = publishReadiness.value.missing.map((item) => publishMissingLabels[item] ?? item.replaceAll('_', ' '))
   return `BLOCKED — thiếu: ${missing.join(', ')}`
@@ -167,6 +202,7 @@ async function selectChapter(chapter: Chapter) {
   revisions.value = []
   reviews.value = []
   generationRun.value = null
+  generationJob.value = null
   latestNarration.value = null
   activeAudio.value = null
   latestReadyAudio.value = null
@@ -184,10 +220,12 @@ async function selectChapter(chapter: Chapter) {
 
     const authoritativeContentState = revisionResponse as typeof revisionResponse & {
       generation_run?: GenerationRun | null
+      generation_job?: GenerationJobView | null
     }
     revisions.value = revisionResponse.revisions
     reviews.value = reviewResponse.reviews
     generationRun.value = generationRunFromContentResponse(authoritativeContentState)
+    generationJob.value = generationJobFromContentResponse(authoritativeContentState)
     latestNarration.value = audioState.narration
     activeAudio.value = audioState.active
     latestReadyAudio.value = audioState.ready
@@ -197,6 +235,7 @@ async function selectChapter(chapter: Chapter) {
     revisions.value = []
     reviews.value = []
     generationRun.value = null
+    generationJob.value = null
     latestNarration.value = null
     activeAudio.value = null
     latestReadyAudio.value = null
@@ -224,17 +263,43 @@ async function startGeneration() {
 
 async function refreshGeneration() {
   const chapter = activeChapter.value
-  const run = generationRun.value
-  if (!chapter || !run || action.value || selectionLoading.value) return
+  if (!chapter || action.value || selectionLoading.value) return
   action.value = 'refresh-generation'
   error.value = ''
   try {
-    const refreshed = await getGenerationRun(run.ID)
-    if (activeChapter.value?.ID === chapter.ID) generationRun.value = refreshed
+    const revisionResponse = await listContentRevisions(chapter.ID)
+    if (activeChapter.value?.ID !== chapter.ID) return
+    const authoritativeContentState = revisionResponse as typeof revisionResponse & {
+      generation_run?: GenerationRun | null
+      generation_job?: GenerationJobView | null
+    }
+    generationRun.value = generationRunFromContentResponse(authoritativeContentState)
+    generationJob.value = generationJobFromContentResponse(authoritativeContentState)
   } catch (e) {
-    if (activeChapter.value?.ID === chapter.ID) error.value = e instanceof Error ? e.message : 'Không thể refresh Generation Run.'
+    if (activeChapter.value?.ID === chapter.ID) error.value = e instanceof Error ? e.message : 'Không thể refresh generation state.'
   } finally {
     action.value = ''
+  }
+}
+
+async function runRetryGeneration() {
+  const chapter = activeChapter.value
+  const job = generationJob.value
+  if (!chapter || !job || !mayRetryGeneration.value) return
+  const requestChapterID = chapter.ID
+  const requestJobID = job.ID
+  action.value = 'retry-generation'
+  error.value = ''
+  try {
+    const retried = await retryGenerationJob(requestJobID)
+    if (activeChapter.value?.ID !== requestChapterID || generationJob.value?.ID !== requestJobID) return
+    generationJob.value = retried
+  } catch (e) {
+    if (activeChapter.value?.ID === requestChapterID && generationJob.value?.ID === requestJobID) {
+      error.value = e instanceof Error ? e.message : 'Không thể retry generation job.'
+    }
+  } finally {
+    if (activeChapter.value?.ID === requestChapterID) action.value = ''
   }
 }
 
@@ -309,6 +374,26 @@ async function runActivate() {
   }
 }
 
+async function runMarkReady() {
+  const chapter = activeChapter.value
+  if (!chapter || !mayMarkReady.value) return
+  const requestChapterID = chapter.ID
+  action.value = 'mark-ready'
+  error.value = ''
+  try {
+    const ready = await markChapterReady(requestChapterID)
+    if (activeChapter.value?.ID !== requestChapterID) return
+    activeChapter.value = ready
+    chapters.value = chapters.value.map((item) => (item.ID === ready.ID ? ready : item))
+  } catch (e) {
+    if (activeChapter.value?.ID === requestChapterID) {
+      error.value = e instanceof Error ? e.message : 'Không thể mark chapter ready.'
+    }
+  } finally {
+    if (activeChapter.value?.ID === requestChapterID) action.value = ''
+  }
+}
+
 async function runPublish() {
   const chapter = activeChapter.value
   if (!chapter || !mayPublish.value) return
@@ -380,7 +465,7 @@ onMounted(load)
         <p v-if="selectionLoading" role="status">Đang tải trạng thái authoritative của chương…</p>
         <dl>
           <div><dt>Plan</dt><dd>{{ activeChapter.CurrentPlanRevisionID || 'BLOCKED — chưa có plan revision hiện hành' }}</dd></div>
-          <div><dt>Generation</dt><dd>{{ generationRun ? `${generationRun.Status} · ${generationRun.ID}` : latestRevision?.GenerationRunID ? `WAITING — durable run ${latestRevision.GenerationRunID} chưa được projection trả về; tạo run mới bị chặn` : latestRevision ? `Output revision #${latestRevision.RevisionNo}` : selectionLoading ? 'Đang tải…' : 'Chưa có durable run/output' }}</dd></div>
+          <div><dt>Generation job</dt><dd>{{ generationJobStatus }}</dd></div>
           <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo} · ${approvedRevision.ID}` : selectionLoading ? 'Đang tải…' : 'WAITING — chưa có approved revision' }}</dd></div>
           <div><dt>Narration</dt><dd>{{ narrationStatus }}</dd></div>
           <div><dt>Audio</dt><dd>{{ audioStatus }}</dd></div>
@@ -391,8 +476,11 @@ onMounted(load)
           <button v-if="!generationRun" type="button" :disabled="!mayStartGeneration" @click="startGeneration">
             {{ action === 'start-generation' ? 'Đang bắt đầu…' : 'Start Generation' }}
           </button>
-          <button v-else type="button" :disabled="Boolean(action) || selectionLoading" @click="refreshGeneration">
-            {{ action === 'refresh-generation' ? 'Đang refresh…' : 'Refresh Run' }}
+          <button v-if="generationRun || generationJob" type="button" :disabled="Boolean(action) || selectionLoading" @click="refreshGeneration">
+            {{ action === 'refresh-generation' ? 'Đang refresh…' : 'Refresh Generation State' }}
+          </button>
+          <button v-if="mayRetryGeneration" type="button" :disabled="!mayRetryGeneration" @click="runRetryGeneration">
+            {{ action === 'retry-generation' ? 'Đang retry…' : 'Retry Generation Job' }}
           </button>
           <button type="button" :disabled="!mayCreateNarration" @click="startNarration">
             {{ action === 'create-narration' ? 'Đang tạo narration…' : 'Create Narration' }}
@@ -402,6 +490,9 @@ onMounted(load)
           </button>
           <button type="button" :disabled="!mayActivate" @click="runActivate">
             {{ action === 'activate' ? 'Đang activate…' : 'Activate Audio' }}
+          </button>
+          <button type="button" :disabled="!mayMarkReady" @click="runMarkReady">
+            {{ action === 'mark-ready' ? 'Đang mark ready…' : 'Mark Chapter Ready' }}
           </button>
           <button type="button" :disabled="!mayPublish" @click="runPublish">
             {{ action === 'publish' ? 'Đang publish…' : 'Publish Chapter' }}

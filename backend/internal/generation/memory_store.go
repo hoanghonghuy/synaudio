@@ -2,6 +2,7 @@ package generation
 
 import (
 	"context"
+	"errors"
 )
 
 type fakeStore struct {
@@ -15,6 +16,51 @@ type fakeStore struct {
 	reviews            map[string][]ChapterReview
 	writerInputs       map[string]WriterJobInput
 	currentWriterPlans map[string]WriterJobInput
+}
+
+// NewMemoryStore returns an in-memory Store for unit tests and repository smoke proofs.
+func NewMemoryStore() Store {
+	return newFakeStore()
+}
+
+// BindWriterPlan seeds the current chapter plan used when establishing WRITER jobs.
+func BindWriterPlan(store Store, chapterID string, input WriterJobInput) error {
+	fs, ok := store.(*fakeStore)
+	if !ok {
+		return errors.New("store does not support writer plan binding")
+	}
+	fs.currentWriterPlans[chapterID] = input
+	return nil
+}
+
+func (s *fakeStore) EstablishWriterBatch(_ context.Context, run GenerationRun, jobs []WriterBatchJob) (GenerationRun, error) {
+	stagedJobs := make([]GenerationJob, 0, len(jobs))
+	for _, item := range jobs {
+		input, ok := s.currentWriterPlans[item.ChapterID]
+		if !ok {
+			input = WriterJobInput{
+				ChapterID:          item.ChapterID,
+				PlanRevisionID:     "plan-" + item.ChapterID,
+				Plan:               map[string]any{"chapter_id": item.ChapterID},
+				BaseCanonVersionID: "canon-" + item.ChapterID,
+			}
+		}
+		if input.PlanRevisionID == "" || input.Plan == nil {
+			return GenerationRun{}, ErrWriterPlanNotBound
+		}
+		input.JobID = item.Job.ID
+		input.ChapterID = item.ChapterID
+		planCopy := make(map[string]any, len(input.Plan))
+		for key, value := range input.Plan {
+			planCopy[key] = value
+		}
+		input.Plan = planCopy
+		s.writerInputs[item.Job.ID] = input
+		stagedJobs = append(stagedJobs, item.Job)
+	}
+	s.runs[run.StoryID] = append(s.runs[run.StoryID], run)
+	s.jobs[run.ID] = append(s.jobs[run.ID], stagedJobs...)
+	return run, nil
 }
 
 func newFakeStore() *fakeStore {
@@ -73,6 +119,35 @@ func (s *fakeStore) UpdateContentRevisionStatus(_ context.Context, revisionID, s
 func (s *fakeStore) CreateContentApproval(_ context.Context, a ContentApproval) (ContentApproval, error) {
 	s.approvals[a.ChapterID] = append(s.approvals[a.ChapterID], a)
 	return a, nil
+}
+
+func (s *fakeStore) ApproveContentRevision(_ context.Context, a ContentApproval) (ContentApproval, error) {
+	for chapterID, revisions := range s.revisions {
+		for i, revision := range revisions {
+			if revision.ID != a.ContentRevisionID {
+				continue
+			}
+			if chapterID != a.ChapterID || revision.ChapterID != a.ChapterID {
+				return ContentApproval{}, errors.Join(ErrContentRevisionNotFound, ErrContentRevisionChapterMismatch)
+			}
+			if revision.Status != "CANDIDATE" && revision.Status != "APPROVED" {
+				return ContentApproval{}, errors.Join(ErrContentRevisionNotFound, ErrContentRevisionNotApprovable)
+			}
+			for _, existing := range s.approvals[a.ChapterID] {
+				if existing.ContentRevisionID == a.ContentRevisionID {
+					revision.Status = "APPROVED"
+					s.revisions[chapterID][i] = revision
+					return existing, nil
+				}
+			}
+
+			revision.Status = "APPROVED"
+			s.revisions[chapterID][i] = revision
+			s.approvals[a.ChapterID] = append(s.approvals[a.ChapterID], a)
+			return a, nil
+		}
+	}
+	return ContentApproval{}, ErrContentRevisionNotFound
 }
 
 func (s *fakeStore) CreateGenerationRun(_ context.Context, r GenerationRun) (GenerationRun, error) {
@@ -244,6 +319,58 @@ func (s *fakeStore) CancelJob(_ context.Context, jobID string) (GenerationJob, e
 				s.jobs[runID][i] = j
 				return j, nil
 			}
+		}
+	}
+	return GenerationJob{}, ErrGenerationJobNotFound
+}
+
+func (s *fakeStore) GetGenerationJob(_ context.Context, jobID string) (GenerationJob, error) {
+	for _, jobs := range s.jobs {
+		for _, j := range jobs {
+			if j.ID == jobID {
+				return j, nil
+			}
+		}
+	}
+	return GenerationJob{}, ErrGenerationJobNotFound
+}
+
+func (s *fakeStore) GetLatestWriterJobForChapter(_ context.Context, chapterID string) (GenerationJob, error) {
+	var latest *GenerationJob
+	for _, jobs := range s.jobs {
+		for _, j := range jobs {
+			if j.JobType != "WRITER" {
+				continue
+			}
+			input, ok := s.writerInputs[j.ID]
+			if !ok || input.ChapterID != chapterID {
+				continue
+			}
+			if latest == nil || j.ID > latest.ID {
+				copy := j
+				latest = &copy
+			}
+		}
+	}
+	if latest == nil {
+		return GenerationJob{}, ErrGenerationJobNotFound
+	}
+	return *latest, nil
+}
+
+func (s *fakeStore) RequeueGenerationJob(_ context.Context, jobID string) (GenerationJob, error) {
+	for runID, jobs := range s.jobs {
+		for i, j := range jobs {
+			if j.ID != jobID {
+				continue
+			}
+			if !adminRetryPermitted(j) {
+				return GenerationJob{}, ErrGenerationJobNotFound
+			}
+			j.Status = "PENDING"
+			j.LockedBy = ""
+			s.jobs[runID][i] = j
+			return j, nil
 		}
 	}
 	return GenerationJob{}, ErrGenerationJobNotFound

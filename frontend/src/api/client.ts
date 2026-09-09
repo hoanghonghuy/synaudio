@@ -198,6 +198,20 @@ export type GenerationRun = {
   IdempotencyKey: string
 }
 
+export type GenerationJobView = {
+  ID: string
+  RunID: string
+  JobType: string
+  Status: string
+  AttemptCount: number
+  MaxAttempts: number
+  LastErrorClass: string
+  LastErrorCode: string
+  Observation: 'queued' | 'running' | 'succeeded' | 'failed' | 'retryable' | 'exhausted'
+  Retryable: boolean
+  AttemptsExhausted: boolean
+}
+
 let accessToken: string | null = null
 let refreshInFlight: Promise<string | null> | null = null
 
@@ -483,6 +497,14 @@ export function getGenerationRun(runID: string): Promise<GenerationRun> {
   return request<GenerationRun>(`/admin/runs/${runID}`)
 }
 
+export function getGenerationJob(jobID: string): Promise<GenerationJobView> {
+  return request<GenerationJobView>(`/admin/generation-jobs/${jobID}`)
+}
+
+export function retryGenerationJob(jobID: string): Promise<GenerationJobView> {
+  return request<GenerationJobView>(`/admin/generation-jobs/${jobID}/retry`, { method: 'POST' })
+}
+
 export function createNarrationRevision(
   chapterID: string,
   input: { source_content_revision_id: string; voice_id: string; script: string },
@@ -554,6 +576,10 @@ export function activateAudioAsset(chapterID: string, assetID: string): Promise<
 
 export function getPublishReadiness(chapterID: string): Promise<PublishReadiness> {
   return request<PublishReadiness>(`/admin/chapters/${chapterID}/publish-readiness`)
+}
+
+export function markChapterReady(chapterID: string): Promise<Chapter> {
+  return request<Chapter>(`/admin/chapters/${chapterID}/ready`, { method: 'POST' })
 }
 
 export function publishChapter(chapterID: string): Promise<Chapter> {

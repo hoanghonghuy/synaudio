@@ -166,3 +166,74 @@ func TestPublishChapterRejectsWhenPublishCheckerMissing(t *testing.T) {
 		t.Fatalf("expected ErrPublishAuthorityRequired, got %v", err)
 	}
 }
+
+func TestMarkChapterReadyTransitionsWhenGatesPass(t *testing.T) {
+	store := newPublishFakeStore()
+	svc := NewService(store, WithPublishChecker(&fakePublishChecker{}))
+
+	ch, _ := svc.CreateChapter(context.Background(), "s1", "Chapter 1", "u1")
+	if ch.Status != "DRAFT" {
+		t.Fatalf("expected DRAFT, got %q", ch.Status)
+	}
+
+	ready, err := svc.MarkChapterReady(context.Background(), ch.ID)
+	if err != nil {
+		t.Fatalf("mark ready: %v", err)
+	}
+	if ready.Status != "READY" {
+		t.Fatalf("expected READY, got %q", ready.Status)
+	}
+}
+
+func TestMarkChapterReadyRejectsWhenGatesMissing(t *testing.T) {
+	store := newPublishFakeStore()
+	svc := NewService(store, WithPublishChecker(&fakePublishChecker{missing: []string{"active_audio"}}))
+
+	ch, _ := svc.CreateChapter(context.Background(), "s1", "Chapter 1", "u1")
+
+	if _, err := svc.MarkChapterReady(context.Background(), ch.ID); !errors.Is(err, ErrPublishNotReady) {
+		t.Fatalf("expected ErrPublishNotReady, got %v", err)
+	}
+	if store.statuses[ch.ID] == "READY" {
+		t.Fatal("chapter must not transition to READY when gates fail")
+	}
+}
+
+func TestMarkChapterReadyIsIdempotentWhenAlreadyReady(t *testing.T) {
+	store := newPublishFakeStore()
+	svc := NewService(store, WithPublishChecker(&fakePublishChecker{}))
+
+	ch, _ := svc.CreateChapter(context.Background(), "s1", "Chapter 1", "u1")
+	_, _ = store.UpdateChapterStatus(context.Background(), ch.ID, "READY")
+
+	ready, err := svc.MarkChapterReady(context.Background(), ch.ID)
+	if err != nil {
+		t.Fatalf("mark ready: %v", err)
+	}
+	if ready.Status != "READY" {
+		t.Fatalf("expected READY, got %q", ready.Status)
+	}
+}
+
+func TestMarkChapterReadyRejectsPublishedChapter(t *testing.T) {
+	store := newPublishFakeStore()
+	svc := NewService(store, WithPublishChecker(&fakePublishChecker{}))
+
+	ch, _ := svc.CreateChapter(context.Background(), "s1", "Chapter 1", "u1")
+	_, _ = store.UpdateChapterStatus(context.Background(), ch.ID, "PUBLISHED")
+
+	if _, err := svc.MarkChapterReady(context.Background(), ch.ID); !errors.Is(err, ErrChapterNotMarkable) {
+		t.Fatalf("expected ErrChapterNotMarkable, got %v", err)
+	}
+}
+
+func TestPublishChapterRejectsDraftWithoutMarkReady(t *testing.T) {
+	store := newPublishFakeStore()
+	svc := NewService(store, WithPublishChecker(&fakePublishChecker{}))
+
+	ch, _ := svc.CreateChapter(context.Background(), "s1", "Chapter 1", "u1")
+
+	if _, err := svc.PublishChapter(context.Background(), ch.ID); !errors.Is(err, ErrPublishNotReady) {
+		t.Fatalf("expected ErrPublishNotReady without mark-ready, got %v", err)
+	}
+}

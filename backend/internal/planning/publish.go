@@ -6,9 +6,10 @@ import (
 )
 
 var (
-	ErrPublishNotReady           = errors.New("chapter not ready to publish")
-	ErrPublishAuthorityRequired  = errors.New("publish authority not configured")
-	ErrNotPublished              = errors.New("chapter not published")
+	ErrPublishNotReady          = errors.New("chapter not ready to publish")
+	ErrPublishAuthorityRequired = errors.New("publish authority not configured")
+	ErrNotPublished             = errors.New("chapter not published")
+	ErrChapterNotMarkable       = errors.New("chapter cannot be marked ready")
 )
 
 // PublishChecker reports missing dependencies blocking chapter publish.
@@ -24,6 +25,36 @@ type ChapterPublishValidator func(context.Context) ([]string, error)
 // version allocation on the same chapter-scoped advisory lock.
 type atomicPublishStore interface {
 	PublishChapterAtomically(ctx context.Context, chapterID string, validate ChapterPublishValidator) (Chapter, error)
+}
+
+// MarkChapterReady transitions a chapter into READY when authoritative publish
+// prerequisites are satisfied. READY means publishable right now.
+func (s *Service) MarkChapterReady(ctx context.Context, chapterID string) (Chapter, error) {
+	if s.publishChecker == nil {
+		return Chapter{}, ErrPublishAuthorityRequired
+	}
+
+	ch, err := s.store.GetChapter(ctx, chapterID)
+	if err != nil {
+		return Chapter{}, err
+	}
+
+	switch ch.Status {
+	case "READY":
+		return ch, nil
+	case "PUBLISHED", "ARCHIVED":
+		return Chapter{}, ErrChapterNotMarkable
+	}
+
+	missing, err := s.publishChecker.CheckPublishReady(ctx, chapterID)
+	if err != nil {
+		return Chapter{}, err
+	}
+	if len(missing) > 0 {
+		return Chapter{}, ErrPublishNotReady
+	}
+
+	return s.store.UpdateChapterStatus(ctx, chapterID, "READY")
 }
 
 // PublishChapter transitions a READY chapter to PUBLISHED.

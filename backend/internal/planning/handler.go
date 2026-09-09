@@ -41,6 +41,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Post("/admin/canon-branches/{branchID}/commit", h.commitCanon)
 	r.Post("/admin/stories/{storyID}/canon-repair", h.repairCanonData)
 	r.Get("/admin/chapters/{chapterID}/publish-readiness", h.getPublishReadiness)
+	r.Post("/admin/chapters/{chapterID}/ready", h.markChapterReady)
 	r.Post("/admin/chapters/{chapterID}/publish", h.publishChapter)
 	r.Post("/admin/chapters/{chapterID}/unpublish", h.unpublishChapter)
 	r.Get("/admin/stories/{storyID}/creative-decisions", h.listCreativeDecisions)
@@ -568,6 +569,29 @@ func (h *Handler) getPublishReadiness(w http.ResponseWriter, r *http.Request) {
 		"ready":   result.Ready,
 		"missing": result.Missing,
 	})
+}
+
+func (h *Handler) markChapterReady(w http.ResponseWriter, r *http.Request) {
+	chapterID := chi.URLParam(r, "chapterID")
+
+	ch, err := h.svc.MarkChapterReady(r.Context(), chapterID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrChapterNotFound):
+			writeError(w, http.StatusNotFound, "CHAPTER_NOT_FOUND", "chapter not found")
+		case errors.Is(err, ErrPublishNotReady):
+			writeError(w, http.StatusConflict, "CHAPTER_NOT_READY", "chapter not ready to publish")
+		case errors.Is(err, ErrChapterNotMarkable):
+			writeError(w, http.StatusConflict, "CHAPTER_NOT_MARKABLE", "chapter cannot be marked ready")
+		case errors.Is(err, ErrPublishAuthorityRequired):
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		default:
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ch)
 }
 
 func (h *Handler) publishChapter(w http.ResponseWriter, r *http.Request) {

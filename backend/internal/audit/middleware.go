@@ -196,6 +196,7 @@ var semanticRoutes = map[string]routeDescriptor{
 	"POST /admin/canon-branches/{branchID}/commit":               {"CANON_COMMITTED", "CANON_BRANCH", "branchID"},
 	"POST /admin/canon-versions/{versionID}/promote":             {"CANON_VERSION_PROMOTED", "CANON_VERSION", "versionID"},
 	"POST /admin/stories/{storyID}/canon-repair":                {"CANON_REPAIRED", "STORY", "storyID"},
+	"POST /admin/chapters/{chapterID}/ready":                    {"CHAPTER_READY", "CHAPTER", "chapterID"},
 	"POST /admin/chapters/{chapterID}/publish":                  {"CHAPTER_PUBLISHED", "CHAPTER", "chapterID"},
 	"POST /admin/chapters/{chapterID}/unpublish":                {"CHAPTER_UNPUBLISHED", "CHAPTER", "chapterID"},
 	"POST /admin/stories/{storyID}/creative-decisions":          {"CREATIVE_DECISION_PROPOSED", "CREATIVE_DECISION", ""},
