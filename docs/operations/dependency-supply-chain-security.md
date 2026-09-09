@@ -72,7 +72,7 @@ Do not add `write` permissions to ordinary PR verification solely to run scanner
 
 ## Vulnerability exception process
 
-Exceptions are recorded in [`vulnerability-exceptions.yaml`](./vulnerability-exceptions.yaml). **No silent allowlists** in scripts or undocumented `npm audit` ignore files.
+Exceptions are recorded in [`vulnerability-exceptions.yaml`](./vulnerability-exceptions.yaml). **No silent allowlists** in scripts or undocumented `npm audit` ignore files. The gate scripts parse this file structurally via `scripts/lib/vulnerability-exceptions.mjs`: every entry must include all required fields, `expires_on` is enforced against the current UTC date, and npm exceptions suppress a finding only when `ecosystem`, `package`, installed `version`, and advisory `id` all match.
 
 Every exception must include:
 
