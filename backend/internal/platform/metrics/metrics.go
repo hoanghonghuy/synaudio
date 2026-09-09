@@ -272,8 +272,8 @@ func boundedRoute(v string) string {
 func boundedAuthRoute(v string) string {
 	switch v {
 	case "POST /login", "POST /register", "POST /refresh", "POST /email/verify", "POST /email/resend",
-		"POST /password/forgot", "POST /password/reset", "POST /mfa/totp/confirm", "POST /mfa/totp/disable",
-		"POST /mfa/challenge", "POST /mfa/verify", "POST /re-auth":
+		"POST /password/forgot", "POST /password/reset", "POST /mfa/totp/setup", "POST /mfa/totp/confirm",
+		"POST /mfa/totp/disable", "POST /mfa/challenge", "POST /mfa/verify", "POST /re-auth":
 		return v
 	default:
 		return "other"

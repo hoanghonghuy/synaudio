@@ -410,6 +410,41 @@ func TestAuthAbuseReAuthSessionDimensionBlocksDistributedAttempts(t *testing.T) 
 	}
 }
 
+func TestAuthAbuseBlocksRepeatedMFASetupAttempts(t *testing.T) {
+	policies := httpapi.DefaultAuthAbusePolicies()
+	for i := range policies["POST /mfa/totp/setup"].Limits {
+		if policies["POST /mfa/totp/setup"].Limits[i].Dimension == httpapi.AbuseDimensionClient {
+			policies["POST /mfa/totp/setup"].Limits[i].Limit = 2
+		}
+	}
+
+	limiter := httpapi.NewMemoryAbuseLimiter()
+	mw := httpapi.NewAuthAbuseMiddleware(policies, limiter, nil, nil)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil)
+		req.RemoteAddr = "192.0.2.70:1234"
+		req.Header.Set("Authorization", "Bearer "+bearerTokenWithSession("sess-mfa-setup"))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d: expected downstream 200, got %d", i, rec.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/mfa/totp/setup", nil)
+	req.RemoteAddr = "192.0.2.70:1234"
+	req.Header.Set("Authorization", "Bearer "+bearerTokenWithSession("sess-mfa-setup"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 from client dimension, got %d", rec.Code)
+	}
+}
+
 func TestAuthAbuseObserveMetricsOnThrottle(t *testing.T) {
 	policies := httpapi.DefaultAuthAbusePolicies()
 	policies["POST /login"].Limits[0].Limit = 1

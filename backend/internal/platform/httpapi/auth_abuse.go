@@ -100,6 +100,12 @@ func DefaultAuthAbusePolicies() AuthAbusePolicies {
 				{Dimension: AbuseDimensionAccount, Limit: 5, Window: 15 * time.Minute},
 			},
 		},
+		"POST /mfa/totp/setup": {
+			Limits: []AbuseLimit{
+				{Dimension: AbuseDimensionClient, Limit: 10, Window: 15 * time.Minute},
+				{Dimension: AbuseDimensionSession, Limit: 10, Window: 15 * time.Minute},
+			},
+		},
 		"POST /mfa/totp/confirm": {
 			Limits: []AbuseLimit{
 				{Dimension: AbuseDimensionClient, Limit: 10, Window: 15 * time.Minute},

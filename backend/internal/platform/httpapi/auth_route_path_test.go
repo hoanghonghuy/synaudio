@@ -11,8 +11,10 @@ func TestAuthRoutePathNormalizesMountedPaths(t *testing.T) {
 		"/login":                "/login",
 		"/api/v1/auth/login":    "/login",
 		"/api/v1/auth/login/":   "/login",
-		"/email/resend":         "/email/resend",
-		"/api/v1/auth/email/resend": "/email/resend",
+		"/email/resend":                  "/email/resend",
+		"/api/v1/auth/email/resend":      "/email/resend",
+		"/api/v1/auth/mfa/totp/setup":    "/mfa/totp/setup",
+		"/api/v1/auth/re-auth":           "/re-auth",
 	}
 	for input, want := range cases {
 		if got := httpapi.AuthRoutePath(input); got != want {
