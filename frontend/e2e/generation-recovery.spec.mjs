@@ -51,7 +51,6 @@ async function mockAPI(page, { exhausted = false } = {}) {
       retryCalls += 1
       return json({ ...retryableProjection().generation_job, Status: 'PENDING', Observation: 'queued', Retryable: false })
     }
-    if (path === '/test/retry-calls') return json({ retryCalls })
     return notFound()
   })
   return () => retryCalls
@@ -61,21 +60,31 @@ async function expectNoHorizontalOverflow(page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
 }
 
+async function focusWithTab(page, locator) {
+  await page.locator('body').click({ position: { x: 1, y: 1 } })
+  for (let step = 0; step < 24; step += 1) {
+    await page.keyboard.press('Tab')
+    if (await locator.evaluate((element) => document.activeElement === element)) return
+  }
+  throw new Error('Retry Generation was not reachable with keyboard Tab traversal')
+}
+
 for (const viewport of viewports) {
   test(`authoritative generation retry is responsive and keyboard reachable on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     const retryCalls = await mockAPI(page)
     await page.goto('/admin/stories/story-1/production')
 
-    await expect(page.getByText('RETRYABLE · TRANSIENT · attempt 1/3')).toBeVisible()
+    const generationRegion = page.getByRole('region', { name: 'Generation' })
+    await expect(generationRegion.getByText('RETRYABLE · TRANSIENT · attempt 1/3')).toBeVisible()
     const retry = page.getByRole('button', { name: 'Retry Generation' })
     await expect(retry).toBeVisible()
-    await retry.focus()
+    await focusWithTab(page, retry)
     await expect(retry).toBeFocused()
     await expectNoHorizontalOverflow(page)
 
     await retry.click()
-    await expect(page.getByText('QUEUED · attempt 1/3')).toBeVisible()
+    await expect(generationRegion.getByText('QUEUED · attempt 1/3')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Retry Generation' })).toHaveCount(0)
     expect(retryCalls()).toBe(1)
   })
@@ -84,7 +93,8 @@ for (const viewport of viewports) {
 test('exhausted generation fails closed and never exposes Retry Generation', async ({ page }) => {
   await mockAPI(page, { exhausted: true })
   await page.goto('/admin/stories/story-1/production')
-  await expect(page.getByText('EXHAUSTED · MAX_ATTEMPTS_EXHAUSTED · attempt 3/3')).toBeVisible()
+  const generationRegion = page.getByRole('region', { name: 'Generation' })
+  await expect(generationRegion.getByText('EXHAUSTED · MAX_ATTEMPTS_EXHAUSTED · attempt 3/3')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Retry Generation' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Refresh Generation' })).toBeVisible()
 })
