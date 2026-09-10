@@ -24,6 +24,10 @@ export function createAudioPreviewState() {
       },
       succeed(url) {
         if (!this.mayCommit()) return snapshot()
+        if (typeof url !== 'string' || url.trim() === '') {
+          state = { status: 'error', chapterID, assetID, url: '', error: 'Preview audio URL không hợp lệ.' }
+          return snapshot()
+        }
         state = { status: 'ready', chapterID, assetID, url, error: '' }
         return snapshot()
       },
