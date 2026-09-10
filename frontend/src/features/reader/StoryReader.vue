@@ -9,6 +9,11 @@ import {
 } from '../../api/client'
 import { useListenerStore } from '../../stores/listener'
 import type { Chapter, ChapterContent } from '../../api/types'
+import {
+  createLatestChapterSelectionGuard,
+  formatPlaybackTime,
+  normalizePlaybackRate,
+} from './readerSession.mjs'
 
 const route = useRoute()
 const storyID = computed(() => route.params.storyID as string)
@@ -18,18 +23,49 @@ const chapters = ref<Chapter[]>([])
 const activeChapter = ref<Chapter | null>(null)
 const content = ref<ChapterContent | null>(null)
 const audioURL = ref('')
+const audioChapterID = ref('')
 const loading = ref(false)
 const contentLoading = ref(false)
 const audioLoading = ref(false)
 const error = ref('')
 const contentError = ref('')
 const audioError = ref('')
-const mediaState = ref<'idle' | 'ready' | 'playing' | 'paused' | 'buffering' | 'error'>('idle')
 
 const audioEl = ref<HTMLAudioElement | null>(null)
+const isPlaying = ref(false)
+const isBuffering = ref(false)
+const currentTime = ref(0)
+const duration = ref(0)
+const playbackRate = ref(1)
+const progressState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+const chapterSelection = createLatestChapterSelectionGuard()
 const progressWriteIntervalMs = 15_000
+const playbackRates = [0.75, 1, 1.25, 1.5, 1.75, 2]
 let lastProgressWriteAt = 0
 let progressWrite: Promise<void> = Promise.resolve()
+let progressStateTimer: number | undefined
+let activeSelectionMayCommit: () => boolean = () => false
+
+const playbackPercent = computed(() => duration.value > 0 ? Math.min(100, (currentTime.value / duration.value) * 100) : 0)
+const progressLabel = computed(() => {
+  if (progressState.value === 'saving') return 'Đang lưu tiến độ…'
+  if (progressState.value === 'saved') return 'Đã lưu tiến độ'
+  if (progressState.value === 'error') return 'Chưa lưu được tiến độ'
+  return ''
+})
+
+function ownsCurrentAudio() {
+  return Boolean(activeChapter.value && audioChapterID.value === activeChapter.value.ID)
+}
+
+function resetPlayerState() {
+  isPlaying.value = false
+  isBuffering.value = false
+  currentTime.value = 0
+  duration.value = 0
+  progressState.value = 'idle'
+  audioChapterID.value = ''
+}
 
 async function loadChapters() {
   loading.value = true
@@ -49,69 +85,62 @@ async function loadChapters() {
   }
 }
 
-async function loadAudio(chapterID: string) {
-  audioLoading.value = true
-  audioError.value = ''
-  mediaState.value = 'idle'
-  try {
-    const result = await getAudioURL(chapterID)
-    if (activeChapter.value?.ID !== chapterID) return
-    audioURL.value = result.url
-    mediaState.value = 'ready'
-  } catch (e) {
-    if (activeChapter.value?.ID !== chapterID) return
-    audioURL.value = ''
-    audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
-    mediaState.value = 'error'
-  } finally {
-    if (activeChapter.value?.ID === chapterID) audioLoading.value = false
-  }
-}
-
-async function retryAudio() {
-  const chapter = activeChapter.value
-  if (!chapter) return
-  await loadAudio(chapter.ID)
-}
-
 async function selectChapter(chapter: Chapter) {
   persistCurrentPosition(true)
+  const mayCommit = chapterSelection.begin(chapter.ID)
+  activeSelectionMayCommit = mayCommit
   activeChapter.value = chapter
   lastProgressWriteAt = 0
   content.value = null
   audioURL.value = ''
   contentError.value = ''
   audioError.value = ''
-  mediaState.value = 'idle'
   contentLoading.value = true
+  audioLoading.value = true
+  resetPlayerState()
 
   const contentRequest = getChapterContent(chapter.ID)
     .then((result) => {
-      if (activeChapter.value?.ID === chapter.ID) content.value = result
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
+      content.value = result
     })
     .catch((e) => {
-      if (activeChapter.value?.ID === chapter.ID) {
-        contentError.value = e instanceof Error ? e.message : 'Không thể tải nội dung chương.'
-      }
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
+      contentError.value = e instanceof Error ? e.message : 'Không thể tải nội dung chương.'
     })
     .finally(() => {
-      if (activeChapter.value?.ID === chapter.ID) contentLoading.value = false
+      if (mayCommit() && activeChapter.value?.ID === chapter.ID) contentLoading.value = false
     })
 
-  const audioRequest = loadAudio(chapter.ID)
+  const audioRequest = getAudioURL(chapter.ID)
+    .then((result) => {
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
+      audioChapterID.value = chapter.ID
+      audioURL.value = result.url
+      audioError.value = ''
+    })
+    .catch((e) => {
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
+      audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
+    })
+    .finally(() => {
+      if (mayCommit() && activeChapter.value?.ID === chapter.ID) audioLoading.value = false
+    })
 
   await Promise.all([contentRequest, audioRequest])
+  if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
 
-  if (activeChapter.value?.ID !== chapter.ID) return
   try {
     await listener.loadProgress(chapter.ID)
-    if (activeChapter.value?.ID !== chapter.ID) return
+    if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     const saved = listener.progress[chapter.ID]
     if (saved && saved.PositionMs > 0) {
       await nextTick()
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID || audioChapterID.value !== chapter.ID) return
       const el = audioEl.value
-      if (el && activeChapter.value?.ID === chapter.ID) {
+      if (el) {
         el.currentTime = saved.PositionMs / 1000
+        currentTime.value = el.currentTime
       }
     }
   } catch {
@@ -120,63 +149,140 @@ async function selectChapter(chapter: Chapter) {
   }
 }
 
+async function retryAudio() {
+  const chapter = activeChapter.value
+  if (!chapter || audioLoading.value) return
+  const requestChapterID = chapter.ID
+  const mayCommit = activeSelectionMayCommit
+  audioLoading.value = true
+  audioError.value = ''
+  try {
+    const result = await getAudioURL(requestChapterID)
+    if (!mayCommit() || activeChapter.value?.ID !== requestChapterID) return
+    audioChapterID.value = requestChapterID
+    audioURL.value = result.url
+    await nextTick()
+    if (mayCommit() && activeChapter.value?.ID === requestChapterID && audioChapterID.value === requestChapterID) audioEl.value?.load()
+  } catch (e) {
+    if (mayCommit() && activeChapter.value?.ID === requestChapterID) {
+      audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
+    }
+  } finally {
+    if (mayCommit() && activeChapter.value?.ID === requestChapterID) audioLoading.value = false
+  }
+}
+
+function markProgressState(state: 'idle' | 'saving' | 'saved' | 'error') {
+  progressState.value = state
+  if (progressStateTimer) window.clearTimeout(progressStateTimer)
+  if (state === 'saved') {
+    progressStateTimer = window.setTimeout(() => {
+      progressState.value = 'idle'
+    }, 2400)
+  }
+}
+
 function persistCurrentPosition(force = false) {
   const el = audioEl.value
   const chapter = activeChapter.value
-  if (!el || !chapter) return
+  if (!el || !chapter || audioChapterID.value !== chapter.ID) return
 
+  const chapterID = chapter.ID
   const now = Date.now()
   if (!force && now - lastProgressWriteAt < progressWriteIntervalMs) return
   const positionMs = Math.max(0, Math.floor(el.currentTime * 1000))
   lastProgressWriteAt = now
+  markProgressState('saving')
 
   progressWrite = progressWrite
     .catch(() => undefined)
-    .then(() => listener.saveProgress(chapter.ID, positionMs, ''))
-    .then(() => undefined)
-    .catch(() => undefined)
+    .then(() => listener.saveProgress(chapterID, positionMs, ''))
+    .then(() => {
+      if (activeChapter.value?.ID === chapterID && audioChapterID.value === chapterID) markProgressState('saved')
+    })
+    .catch(() => {
+      if (activeChapter.value?.ID === chapterID && audioChapterID.value === chapterID) markProgressState('error')
+    })
+}
+
+async function togglePlayback() {
+  const el = audioEl.value
+  if (!el || !audioURL.value || !ownsCurrentAudio()) return
+  audioError.value = ''
+  try {
+    if (el.paused) {
+      await el.play()
+    } else {
+      el.pause()
+    }
+  } catch (e) {
+    audioError.value = e instanceof Error ? e.message : 'Không thể bắt đầu phát audio.'
+    isPlaying.value = false
+  }
+}
+
+function seekTo(value: number) {
+  const el = audioEl.value
+  if (!el || !ownsCurrentAudio() || !Number.isFinite(value)) return
+  const next = Math.max(0, Math.min(value, duration.value || value))
+  el.currentTime = next
+  currentTime.value = next
+  persistCurrentPosition(true)
+}
+
+function seekBy(deltaSeconds: number) {
+  seekTo(currentTime.value + deltaSeconds)
+}
+
+function changePlaybackRate(value: unknown) {
+  const rate = normalizePlaybackRate(value)
+  playbackRate.value = rate
+  if (audioEl.value && ownsCurrentAudio()) audioEl.value.playbackRate = rate
+}
+
+function onLoadedMetadata() {
+  const el = audioEl.value
+  if (!el || !ownsCurrentAudio()) return
+  duration.value = Number.isFinite(el.duration) ? el.duration : 0
+  currentTime.value = el.currentTime
+  el.playbackRate = playbackRate.value
 }
 
 function onTimeUpdate() {
+  const el = audioEl.value
+  if (!el || !ownsCurrentAudio()) return
+  currentTime.value = el.currentTime
   persistCurrentPosition(false)
 }
 
 function onPauseOrSeek() {
+  const el = audioEl.value
+  if (!el || !ownsCurrentAudio()) return
+  currentTime.value = el.currentTime
   persistCurrentPosition(true)
 }
 
-function onPlay() {
-  mediaState.value = 'playing'
-}
-
-function onPlaying() {
-  mediaState.value = 'playing'
-}
-
-function onPause() {
-  mediaState.value = 'paused'
-  onPauseOrSeek()
-}
-
-function onWaiting() {
-  mediaState.value = 'buffering'
-}
-
-function onMediaError() {
-  mediaState.value = 'error'
+function onAudioError() {
+  if (!ownsCurrentAudio()) return
+  isPlaying.value = false
+  isBuffering.value = false
+  audioError.value = 'Không thể phát audio lúc này. Hãy thử tải lại audio.'
 }
 
 async function onEnded() {
-  mediaState.value = 'paused'
-  persistCurrentPosition(true)
   const chapter = activeChapter.value
-  if (!chapter || listener.isGuest) return
+  if (!chapter || audioChapterID.value !== chapter.ID) return
+  const chapterID = chapter.ID
+  isPlaying.value = false
+  persistCurrentPosition(true)
+  if (listener.isGuest) return
   try {
     // Completion must be ordered after the final position write; otherwise a
     // brand-new progress row could race the completion mutation and return 404.
     await progressWrite
-    const completed = await completeProgress(chapter.ID)
-    listener.progress[chapter.ID] = completed
+    if (activeChapter.value?.ID !== chapterID || audioChapterID.value !== chapterID) return
+    const completed = await completeProgress(chapterID)
+    if (activeChapter.value?.ID === chapterID && audioChapterID.value === chapterID) listener.progress[chapterID] = completed
   } catch {
     // The final persisted position is still useful if completion marking is
     // temporarily unavailable; the next interaction can retry naturally.
@@ -199,6 +305,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   persistCurrentPosition(true)
+  if (progressStateTimer) window.clearTimeout(progressStateTimer)
   window.removeEventListener('pagehide', onPageHide)
 })
 </script>
@@ -233,7 +340,13 @@ onBeforeUnmount(() => {
     <template v-else>
       <div class="reader-layout">
         <nav class="chapter-nav" aria-labelledby="chapter-nav-heading">
-          <h2 id="chapter-nav-heading">Các chương</h2>
+          <div class="chapter-nav-heading">
+            <div>
+              <p class="eyebrow">Thư viện</p>
+              <h2 id="chapter-nav-heading">Các chương</h2>
+            </div>
+            <span class="chapter-count">{{ chapters.length }}</span>
+          </div>
           <div class="chapter-nav-list">
             <button
               v-for="c in chapters"
@@ -244,51 +357,88 @@ onBeforeUnmount(() => {
               :aria-current="activeChapter?.ID === c.ID ? 'page' : undefined"
               @click="selectChapter(c)"
             >
-              <span>{{ c.ChapterNumber }}.</span>
-              <span>{{ c.Title }}</span>
-              <span v-if="activeChapter?.ID === c.ID" class="chapter-current">Đang đọc</span>
+              <span class="chapter-number">Chương {{ c.ChapterNumber }}</span>
+              <strong>{{ c.Title }}</strong>
+              <span v-if="activeChapter?.ID === c.ID" class="chapter-current">Đang nghe</span>
             </button>
           </div>
         </nav>
 
         <div v-if="activeChapter" class="reader-body">
-          <p v-if="contentLoading || audioLoading" class="muted" role="status" aria-live="polite">
+          <p v-if="contentLoading || audioLoading" class="muted loading-line" role="status" aria-live="polite">
             {{ contentLoading ? 'Đang tải nội dung' : '' }}{{ contentLoading && audioLoading ? ' · ' : '' }}{{ audioLoading ? 'Đang chuẩn bị audio' : '' }}...
           </p>
 
-          <div class="audio-section">
-            <h2>Nghe chương này</h2>
+          <section class="audio-section" aria-labelledby="audio-heading">
+            <div class="audio-heading-row">
+              <div>
+                <p class="eyebrow">Audiobook player</p>
+                <h2 id="audio-heading">Nghe chương này</h2>
+              </div>
+              <span v-if="progressLabel" class="save-state" role="status" aria-live="polite">{{ progressLabel }}</span>
+            </div>
+
             <audio
               v-if="audioURL"
               ref="audioEl"
-              class="player"
+              class="native-audio"
               :src="audioURL"
-              controls
               preload="metadata"
-              @play="onPlay"
-              @playing="onPlaying"
-              @waiting="onWaiting"
-              @error="onMediaError"
+              @loadedmetadata="onLoadedMetadata"
               @timeupdate="onTimeUpdate"
-              @pause="onPause"
-              @seeked="onPauseOrSeek"
+              @play="isPlaying = ownsCurrentAudio()"
+              @playing="isBuffering = false"
+              @pause="isPlaying = false; onPauseOrSeek()"
+              @seeking="isBuffering = ownsCurrentAudio()"
+              @seeked="isBuffering = false; onPauseOrSeek()"
+              @waiting="isBuffering = ownsCurrentAudio()"
+              @canplay="isBuffering = false"
+              @error="onAudioError"
               @ended="onEnded"
             />
-            <p v-if="mediaState === 'buffering'" class="muted" role="status" aria-live="polite">
-              Audio đang tải thêm dữ liệu...
-            </p>
-            <p v-else-if="mediaState === 'playing'" class="muted" role="status" aria-live="polite">
-              Đang phát audio.
-            </p>
-            <p v-else-if="mediaState === 'paused'" class="muted" role="status" aria-live="polite">
-              Audio đang tạm dừng.
-            </p>
-            <div v-else-if="mediaState === 'error' && audioURL" class="status-state audio-state" role="alert">
-              <strong>Audio gặp lỗi khi phát.</strong>
-              <p>Bạn vẫn có thể đọc nội dung chương này hoặc thử tải lại audio.</p>
-              <button class="secondary-link" type="button" @click="retryAudio">Thử tải lại audio</button>
+
+            <div v-if="audioURL" class="player-shell" :aria-busy="isBuffering">
+              <div class="player-primary">
+                <button class="skip-button" type="button" aria-label="Lùi 15 giây" @click="seekBy(-15)">−15s</button>
+                <button class="play-button" type="button" :aria-label="isPlaying ? 'Tạm dừng' : 'Phát audio'" @click="togglePlayback">
+                  {{ isPlaying ? '❚❚' : '▶' }}
+                </button>
+                <button class="skip-button" type="button" aria-label="Tua tới 30 giây" @click="seekBy(30)">+30s</button>
+                <div class="now-playing">
+                  <strong>{{ activeChapter.Title }}</strong>
+                  <span>{{ isBuffering ? 'Đang tải audio…' : isPlaying ? 'Đang phát' : 'Sẵn sàng nghe' }}</span>
+                </div>
+              </div>
+
+              <div class="timeline-row">
+                <span>{{ formatPlaybackTime(currentTime) }}</span>
+                <input
+                  class="timeline"
+                  type="range"
+                  min="0"
+                  :max="Math.max(duration, 0)"
+                  step="1"
+                  :value="currentTime"
+                  :aria-label="`Tiến độ audio ${Math.round(playbackPercent)}%`"
+                  @input="seekTo(Number(($event.target as HTMLInputElement).value))"
+                >
+                <span>{{ formatPlaybackTime(duration) }}</span>
+              </div>
+
+              <div class="player-secondary">
+                <label class="rate-control">
+                  <span>Tốc độ</span>
+                  <select :value="playbackRate" aria-label="Tốc độ phát" @change="changePlaybackRate(($event.target as HTMLSelectElement).value)">
+                    <option v-for="rate in playbackRates" :key="rate" :value="rate">{{ rate }}×</option>
+                  </select>
+                </label>
+                <span class="player-progress-text">{{ Math.round(playbackPercent) }}% chương</span>
+              </div>
             </div>
-          </div>
+
+            <div v-else-if="audioLoading" class="player-placeholder" role="status">Đang chuẩn bị audio…</div>
+          </section>
+
           <div
             v-if="listener.progress[activeChapter.ID]?.RelistenStatus && listener.progress[activeChapter.ID]?.RelistenStatus !== 'NO_RELISTEN_NEEDED'"
             class="relisten-notice"
@@ -299,18 +449,21 @@ onBeforeUnmount(() => {
             </strong>
             <span>Tiến độ nghe trước đây vẫn được giữ nguyên.</span>
           </div>
-          <div v-if="audioError" class="status-state audio-state" role="status">
+
+          <div v-if="audioError" class="status-state audio-state" role="alert">
             <strong>Audio tạm thời chưa sẵn sàng.</strong>
             <p>{{ audioError }}</p>
-            <span class="muted">Bạn vẫn có thể đọc nội dung chương này.</span>
-            <button class="secondary-link" type="button" @click="retryAudio">Thử tải lại audio</button>
+            <div class="error-actions">
+              <button type="button" @click="retryAudio">Thử tải lại audio</button>
+              <span class="muted">Bạn vẫn có thể đọc nội dung chương này.</span>
+            </div>
           </div>
 
           <div v-if="contentError" class="status-state error" role="alert">
             <strong>Không thể tải nội dung chương.</strong>
             <p>{{ contentError }}</p>
           </div>
-          <article v-else-if="content" class="prose">
+          <article v-else-if="content" class="prose" aria-label="Nội dung chương">
             <p v-for="(para, i) in content.content_text.split(/\n+/)" :key="i">{{ para }}</p>
           </article>
         </div>
@@ -318,3 +471,77 @@ onBeforeUnmount(() => {
     </template>
   </section>
 </template>
+
+<style scoped>
+.reader { max-width: var(--content-max); margin: 0 auto; }
+.reader-head, .chapter-nav-heading, .audio-heading-row, .player-primary, .player-secondary { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.reader-head { margin: 18px 0 24px; align-items: flex-start; }
+.reader-head h1 { margin: 4px 0 0; overflow-wrap: anywhere; }
+.eyebrow { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .68; }
+.reader-layout { display: grid; grid-template-columns: minmax(230px, 290px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.chapter-nav { position: sticky; top: 20px; border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px; max-height: calc(100vh - 40px); overflow: hidden; background: var(--surface); }
+.chapter-nav-heading h2 { margin: 3px 0 0; }
+.chapter-count { min-width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 700; }
+.chapter-nav-list { display: grid; gap: 8px; margin-top: 14px; max-height: calc(100vh - 130px); overflow: auto; padding-right: 4px; }
+.chapter-tab { min-height: 56px; width: 100%; display: grid; gap: 4px; text-align: left; padding: 11px 12px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; color: inherit; cursor: pointer; }
+.chapter-tab:hover { background: var(--surface-soft); }
+.chapter-tab.active { border-color: var(--accent); background: var(--accent-soft); }
+.chapter-number, .chapter-current { font-size: 12px; color: var(--muted); }
+.chapter-current { font-weight: 800; color: var(--accent-strong); }
+.reader-body { min-width: 0; display: grid; gap: 18px; }
+.loading-line { min-height: 24px; }
+.audio-section { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px; display: grid; gap: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.audio-heading-row h2 { margin: 3px 0 0; }
+.save-state { font-size: 13px; font-weight: 700; color: var(--muted); }
+.native-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.player-shell { display: grid; gap: 18px; }
+.player-primary { justify-content: flex-start; }
+.play-button, .skip-button, .fav-btn, .error-actions button { min-width: 44px; min-height: 44px; border-radius: 999px; border: 1px solid var(--accent); background: transparent; color: var(--accent-strong); cursor: pointer; }
+.play-button { width: 58px; height: 58px; font-size: 22px; background: var(--accent); color: var(--surface); }
+.skip-button { padding: 0 12px; font-weight: 800; }
+.now-playing { min-width: 0; display: grid; gap: 3px; }
+.now-playing strong { overflow-wrap: anywhere; }
+.now-playing span, .player-progress-text { font-size: 13px; color: var(--muted); }
+.timeline-row { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; font-size: 13px; }
+.timeline { width: 100%; min-height: 44px; cursor: pointer; accent-color: var(--accent); }
+.rate-control { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.rate-control select { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 0 10px; background: var(--surface); color: var(--ink); }
+.player-placeholder { min-height: 112px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--surface-soft); }
+.relisten-notice, .status-state { border-radius: var(--radius-md); padding: 14px 16px; }
+.relisten-notice { display: grid; gap: 4px; border: 1px solid var(--accent); background: var(--accent-soft); }
+.error-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.error-actions button { padding: 0 16px; border-radius: var(--radius-md); }
+.prose { max-width: 76ch; font-family: var(--font-reading); font-size: 1.05rem; line-height: 1.78; overflow-wrap: anywhere; }
+.prose p { margin: 0 0 1.1em; }
+
+@media (max-width: 1024px) {
+  .reader-layout { grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 18px; }
+  .chapter-nav { position: static; max-height: none; }
+  .chapter-nav-list { max-height: 520px; }
+}
+
+@media (max-width: 760px) {
+  .reader-head { align-items: stretch; }
+  .reader-head, .audio-heading-row { flex-direction: column; }
+  .reader-head .fav-btn { align-self: flex-start; }
+  .reader-layout { grid-template-columns: 1fr; }
+  .chapter-nav { padding: 14px; }
+  .chapter-nav-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding-bottom: 4px; }
+  .chapter-tab { flex: 0 0 min(78vw, 280px); scroll-snap-align: start; min-height: 64px; }
+  .audio-section { padding: 16px; }
+  .player-primary { display: grid; grid-template-columns: auto auto auto; justify-content: center; }
+  .now-playing { grid-column: 1 / -1; text-align: center; }
+  .timeline-row { grid-template-columns: max-content minmax(0, 1fr) max-content; }
+  .player-secondary { align-items: flex-end; }
+}
+
+@media (max-width: 430px) {
+  .reader-head { margin-top: 14px; }
+  .audio-section { margin-inline: -4px; border-radius: var(--radius-lg); }
+  .timeline-row { grid-template-columns: 1fr 1fr; }
+  .timeline { grid-column: 1 / -1; grid-row: 1; }
+  .timeline-row span:last-child { text-align: right; }
+  .player-secondary { align-items: stretch; flex-direction: column; }
+  .rate-control { justify-content: space-between; }
+}
+</style>
