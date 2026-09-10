@@ -19,6 +19,18 @@ test('preview state rejects stale completion after chapter or asset selection ch
   })
 })
 
+test('reset invalidates an in-flight preview request before a new selection commits', () => {
+  const preview = createAudioPreviewState()
+  const pending = preview.begin('chapter-1', 'asset-1')
+  preview.reset()
+
+  assert.equal(pending.mayCommit(), false)
+  pending.succeed('https://stale.example/audio.mp3')
+  assert.deepEqual(preview.snapshot(), {
+    status: 'idle', chapterID: '', assetID: '', url: '', error: '',
+  })
+})
+
 test('preview retry replaces error without retaining a stale URL', () => {
   const preview = createAudioPreviewState()
   preview.begin('chapter-1', 'asset-1').fail('provider unavailable')
@@ -28,6 +40,15 @@ test('preview retry replaces error without retaining a stale URL', () => {
   preview.begin('chapter-1', 'asset-1').succeed('https://ready.example/audio.mp3')
   assert.equal(preview.snapshot().status, 'ready')
   assert.equal(preview.snapshot().error, '')
+})
+
+test('preview fails closed when the authority response has an empty URL', () => {
+  const preview = createAudioPreviewState()
+  const snapshot = preview.begin('chapter-1', 'asset-1').succeed('   ')
+
+  assert.equal(snapshot.status, 'error')
+  assert.equal(snapshot.url, '')
+  assert.match(snapshot.error, /URL không hợp lệ/)
 })
 
 test('preview asset selection never promotes foreign, non-ready, or stale asset authority', () => {
