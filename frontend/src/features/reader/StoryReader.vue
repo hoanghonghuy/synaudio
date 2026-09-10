@@ -9,6 +9,7 @@ import {
 } from '../../api/client'
 import { useListenerStore } from '../../stores/listener'
 import type { Chapter, ChapterContent } from '../../api/types'
+import { createLatestChapterSelectionGuard } from './readerSession.mjs'
 
 const route = useRoute()
 const storyID = computed(() => route.params.storyID as string)
@@ -26,6 +27,7 @@ const contentError = ref('')
 const audioError = ref('')
 
 const audioEl = ref<HTMLAudioElement | null>(null)
+const chapterSelection = createLatestChapterSelectionGuard()
 const progressWriteIntervalMs = 15_000
 let lastProgressWriteAt = 0
 let progressWrite: Promise<void> = Promise.resolve()
@@ -50,6 +52,7 @@ async function loadChapters() {
 
 async function selectChapter(chapter: Chapter) {
   persistCurrentPosition(true)
+  const mayCommit = chapterSelection.begin(chapter.ID)
   activeChapter.value = chapter
   lastProgressWriteAt = 0
   content.value = null
@@ -61,33 +64,40 @@ async function selectChapter(chapter: Chapter) {
 
   const contentRequest = getChapterContent(chapter.ID)
     .then((result) => {
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
       content.value = result
     })
     .catch((e) => {
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
       contentError.value = e instanceof Error ? e.message : 'Không thể tải nội dung chương.'
     })
     .finally(() => {
-      contentLoading.value = false
+      if (mayCommit() && activeChapter.value?.ID === chapter.ID) contentLoading.value = false
     })
 
   const audioRequest = getAudioURL(chapter.ID)
     .then((result) => {
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
       audioURL.value = result.url
     })
     .catch((e) => {
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
       audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
     })
     .finally(() => {
-      audioLoading.value = false
+      if (mayCommit() && activeChapter.value?.ID === chapter.ID) audioLoading.value = false
     })
 
   await Promise.all([contentRequest, audioRequest])
+  if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
 
   try {
     await listener.loadProgress(chapter.ID)
+    if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     const saved = listener.progress[chapter.ID]
     if (saved && saved.PositionMs > 0) {
       await nextTick()
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
       const el = audioEl.value
       if (el) {
         el.currentTime = saved.PositionMs / 1000
