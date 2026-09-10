@@ -17,6 +17,8 @@ Metrics use bounded labels only. Do not add user IDs, story/chapter/job IDs, raw
 
 API request metrics use the chi route pattern after routing, not the raw request path. Unknown/invalid routes collapse to `unmatched`. Worker loop, result, queue, job-type and error-class labels are explicit allowlists and collapse unknown values to `other`/`UNKNOWN`.
 
+Application logs follow a separate repository-owned redaction and correlation contract documented in `docs/operations/logging.md`. Use structured logs for detailed diagnosis, but keep secrets/private content out of messages and attributes and use the safe logging helpers for errors.
+
 ## Metrics
 
 - `synaudio_api_requests_total{method,route,status_class}`: API traffic and status-class trend.

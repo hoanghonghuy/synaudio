@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/synaudio/synaudio/backend/internal/platform/db"
+	"github.com/synaudio/synaudio/backend/internal/platform/logging"
 	platformmetrics "github.com/synaudio/synaudio/backend/internal/platform/metrics"
 )
 
@@ -20,7 +21,7 @@ type backlogSnapshot struct {
 func startBacklogSampler(ctx context.Context, database db.DBTX, registry *platformmetrics.Registry, log *slog.Logger) {
 	sample := func() {
 		if err := refreshBacklogMetrics(ctx, database, registry, time.Now()); err != nil && ctx.Err() == nil {
-			log.Error("backlog metrics refresh failed", "error", err)
+			log.Error("backlog metrics refresh failed", logging.ErrAttr(err))
 		}
 	}
 
