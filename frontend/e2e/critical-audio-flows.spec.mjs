@@ -15,11 +15,23 @@ const viewports = [
   { name: 'desktop', width: 1280, height: 900 },
 ]
 
+const progress = {
+  UserID: 'admin-1',
+  ChapterID: chapter.ID,
+  PositionMs: 0,
+  CompletedAt: '',
+  LastAudioAssetID: '',
+  LastPlaybackSessionID: '',
+  Version: 0,
+  RelistenStatus: 'NO_RELISTEN_NEEDED',
+}
+
 async function mockAPI(page, options = {}) {
   let chapterListAttempts = 0
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url())
     const path = url.pathname.replace('/api/v1', '')
+    const method = route.request().method()
 
     const json = (body, status = 200) => route.fulfill({
       status,
@@ -28,8 +40,9 @@ async function mockAPI(page, options = {}) {
     })
 
     if (path === '/auth/me') return json({ id: 'admin-1', email: 'admin@example.test', roles: ['ADMIN'], status: 'ACTIVE', email_verified: true, mfa_enabled: false })
-    if (path === '/me/favorites') return json({ stories: [] })
-    if (path === '/me/progress/chapter-1') return json({ ChapterID: chapter.ID, PositionMs: 0, Completed: false, RelistenStatus: 'NO_RELISTEN_NEEDED' })
+    if (path === '/me/favorites') return json({ favorites: [] })
+    if (path === '/me/progress/chapter-1' && method === 'GET') return json(progress)
+    if (path === '/me/progress/chapter-1' && method === 'PUT') return json({ ...progress, PositionMs: 15000, Version: 1 })
 
     if (path === '/stories/story-1/chapters') {
       chapterListAttempts += 1
@@ -46,7 +59,6 @@ async function mockAPI(page, options = {}) {
       if (options.failAudio) return json({ code: 'AUDIO_UNAVAILABLE', message: 'fixture audio unavailable' }, 503)
       return json({ url: 'data:audio/mpeg;base64,' })
     }
-    if (path === '/me/progress/chapter-1' && route.request().method() !== 'GET') return json({ ChapterID: chapter.ID, PositionMs: 15000, Completed: false, RelistenStatus: 'NO_RELISTEN_NEEDED' })
 
     if (path === '/admin/stories/story-1/chapters') return json({ chapters: [chapter] })
     if (path === '/admin/stories/story-1/workflow-settings') return json({ story_id: 'story-1', batch_generation_size: 1, creative_autonomy: 'ASSISTED', preferred_text_provider: 'mock', preferred_text_model: 'mock', preferred_tts_provider: 'mock', preferred_voice_id: 'voice-1' })
@@ -57,7 +69,7 @@ async function mockAPI(page, options = {}) {
     if (path === '/admin/chapters/chapter-1/narration/nar-1/audio/latest-ready') return json({ ID: 'asset-1', ChapterID: 'chapter-1', VersionNo: 1, SourceNarrationRevisionID: 'nar-1', Status: 'READY', IsActive: true, Checksum: 'abc', StorageKey: 'private/key.mp3', DurationMs: 60000, SizeBytes: 1024 })
     if (path === '/admin/chapters/chapter-1/publish-readiness') return json({ ready: true, missing: [] })
 
-    return json({ code: 'NOT_FOUND', message: `fixture route not configured: ${route.request().method()} ${path}` }, 404)
+    return json({ code: 'NOT_FOUND', message: `fixture route not configured: ${method} ${path}` }, 404)
   })
 }
 
