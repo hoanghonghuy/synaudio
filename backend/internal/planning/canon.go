@@ -2,9 +2,12 @@ package planning
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 )
+
+var ErrCanonBranchNotFound = errors.New("active official canon branch not found")
 
 // CanonBranch is a lineage of canon versions.
 type CanonBranch struct {
@@ -16,16 +19,16 @@ type CanonBranch struct {
 
 // CanonVersion is a committed point in a canon branch.
 type CanonVersion struct {
-	ID             string
-	StoryID        string
-	BranchID       string
-	SequenceNo     int
-	ParentVersionID string
-	SourceChapterID string
-	SourceContentRevisionID string
+	ID                         string
+	StoryID                    string
+	BranchID                   string
+	SequenceNo                 int
+	ParentVersionID            string
+	SourceChapterID            string
+	SourceContentRevisionID    string
 	SourceProvisionalVersionID string
-	Status         string
-	CommittedBy    string
+	Status                     string
+	CommittedBy                string
 }
 
 // CreateCanonBranch creates a new ACTIVE canon branch.
@@ -42,6 +45,14 @@ func (s *Service) CreateCanonBranch(ctx context.Context, storyID, branchType str
 	}
 
 	return s.store.CreateCanonBranch(ctx, b)
+}
+
+// GetActiveOfficialCanonBranch returns the authoritative ACTIVE OFFICIAL branch for a story.
+func (s *Service) GetActiveOfficialCanonBranch(ctx context.Context, storyID string) (CanonBranch, error) {
+	if storyID == "" {
+		return CanonBranch{}, ErrCanonBranchNotFound
+	}
+	return s.store.GetActiveOfficialCanonBranch(ctx, storyID)
 }
 
 // CreateCanonVersion creates a new canon version with the next sequence number.
