@@ -24,6 +24,7 @@ const audioLoading = ref(false)
 const error = ref('')
 const contentError = ref('')
 const audioError = ref('')
+const mediaState = ref<'idle' | 'ready' | 'playing' | 'paused' | 'buffering' | 'error'>('idle')
 
 const audioEl = ref<HTMLAudioElement | null>(null)
 const progressWriteIntervalMs = 15_000
@@ -48,6 +49,31 @@ async function loadChapters() {
   }
 }
 
+async function loadAudio(chapterID: string) {
+  audioLoading.value = true
+  audioError.value = ''
+  mediaState.value = 'idle'
+  try {
+    const result = await getAudioURL(chapterID)
+    if (activeChapter.value?.ID !== chapterID) return
+    audioURL.value = result.url
+    mediaState.value = 'ready'
+  } catch (e) {
+    if (activeChapter.value?.ID !== chapterID) return
+    audioURL.value = ''
+    audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
+    mediaState.value = 'error'
+  } finally {
+    if (activeChapter.value?.ID === chapterID) audioLoading.value = false
+  }
+}
+
+async function retryAudio() {
+  const chapter = activeChapter.value
+  if (!chapter) return
+  await loadAudio(chapter.ID)
+}
+
 async function selectChapter(chapter: Chapter) {
   persistCurrentPosition(true)
   activeChapter.value = chapter
@@ -56,40 +82,35 @@ async function selectChapter(chapter: Chapter) {
   audioURL.value = ''
   contentError.value = ''
   audioError.value = ''
+  mediaState.value = 'idle'
   contentLoading.value = true
-  audioLoading.value = true
 
   const contentRequest = getChapterContent(chapter.ID)
     .then((result) => {
-      content.value = result
+      if (activeChapter.value?.ID === chapter.ID) content.value = result
     })
     .catch((e) => {
-      contentError.value = e instanceof Error ? e.message : 'Không thể tải nội dung chương.'
+      if (activeChapter.value?.ID === chapter.ID) {
+        contentError.value = e instanceof Error ? e.message : 'Không thể tải nội dung chương.'
+      }
     })
     .finally(() => {
-      contentLoading.value = false
+      if (activeChapter.value?.ID === chapter.ID) contentLoading.value = false
     })
 
-  const audioRequest = getAudioURL(chapter.ID)
-    .then((result) => {
-      audioURL.value = result.url
-    })
-    .catch((e) => {
-      audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
-    })
-    .finally(() => {
-      audioLoading.value = false
-    })
+  const audioRequest = loadAudio(chapter.ID)
 
   await Promise.all([contentRequest, audioRequest])
 
+  if (activeChapter.value?.ID !== chapter.ID) return
   try {
     await listener.loadProgress(chapter.ID)
+    if (activeChapter.value?.ID !== chapter.ID) return
     const saved = listener.progress[chapter.ID]
     if (saved && saved.PositionMs > 0) {
       await nextTick()
       const el = audioEl.value
-      if (el) {
+      if (el && activeChapter.value?.ID === chapter.ID) {
         el.currentTime = saved.PositionMs / 1000
       }
     }
@@ -124,7 +145,29 @@ function onPauseOrSeek() {
   persistCurrentPosition(true)
 }
 
+function onPlay() {
+  mediaState.value = 'playing'
+}
+
+function onPlaying() {
+  mediaState.value = 'playing'
+}
+
+function onPause() {
+  mediaState.value = 'paused'
+  onPauseOrSeek()
+}
+
+function onWaiting() {
+  mediaState.value = 'buffering'
+}
+
+function onMediaError() {
+  mediaState.value = 'error'
+}
+
 async function onEnded() {
+  mediaState.value = 'paused'
   persistCurrentPosition(true)
   const chapter = activeChapter.value
   if (!chapter || listener.isGuest) return
@@ -222,11 +265,29 @@ onBeforeUnmount(() => {
               :src="audioURL"
               controls
               preload="metadata"
+              @play="onPlay"
+              @playing="onPlaying"
+              @waiting="onWaiting"
+              @error="onMediaError"
               @timeupdate="onTimeUpdate"
-              @pause="onPauseOrSeek"
+              @pause="onPause"
               @seeked="onPauseOrSeek"
               @ended="onEnded"
             />
+            <p v-if="mediaState === 'buffering'" class="muted" role="status" aria-live="polite">
+              Audio đang tải thêm dữ liệu...
+            </p>
+            <p v-else-if="mediaState === 'playing'" class="muted" role="status" aria-live="polite">
+              Đang phát audio.
+            </p>
+            <p v-else-if="mediaState === 'paused'" class="muted" role="status" aria-live="polite">
+              Audio đang tạm dừng.
+            </p>
+            <div v-else-if="mediaState === 'error' && audioURL" class="status-state audio-state" role="alert">
+              <strong>Audio gặp lỗi khi phát.</strong>
+              <p>Bạn vẫn có thể đọc nội dung chương này hoặc thử tải lại audio.</p>
+              <button class="secondary-link" type="button" @click="retryAudio">Thử tải lại audio</button>
+            </div>
           </div>
           <div
             v-if="listener.progress[activeChapter.ID]?.RelistenStatus && listener.progress[activeChapter.ID]?.RelistenStatus !== 'NO_RELISTEN_NEEDED'"
@@ -242,6 +303,7 @@ onBeforeUnmount(() => {
             <strong>Audio tạm thời chưa sẵn sàng.</strong>
             <p>{{ audioError }}</p>
             <span class="muted">Bạn vẫn có thể đọc nội dung chương này.</span>
+            <button class="secondary-link" type="button" @click="retryAudio">Thử tải lại audio</button>
           </div>
 
           <div v-if="contentError" class="status-state error" role="alert">
