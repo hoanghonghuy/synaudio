@@ -36,6 +36,11 @@ import {
   generationJobFromContentResponse,
   generationRunFromContentResponse,
 } from './latestSelection.mjs'
+import {
+  buildChapterProductionStages,
+  getPrimaryProductionStage,
+  stageStateLabel,
+} from './chapterProductionStages.mjs'
 
 const route = useRoute()
 const storyID = computed(() => route.params.storyID as string)
@@ -185,6 +190,18 @@ const publishStatus = computed(() => {
   const missing = publishReadiness.value.missing.map((item) => publishMissingLabels[item] ?? item.replaceAll('_', ' '))
   return `BLOCKED — thiếu: ${missing.join(', ')}`
 })
+
+const productionStages = computed(() => buildChapterProductionStages({
+  selectionLoading: selectionLoading.value,
+  hasPlanRevision: Boolean(activeChapter.value?.CurrentPlanRevisionID),
+  generationJobStatus: generationJobStatus.value,
+  hasApprovedRevision: Boolean(approvedRevision.value),
+  narrationStatus: narrationStatus.value,
+  audioStatus: audioStatus.value,
+  publishStatus: publishStatus.value,
+  chapterPublished: activeChapter.value?.Status === 'PUBLISHED',
+}))
+const primaryStage = computed(() => getPrimaryProductionStage(productionStages.value))
 
 async function loadAudioProjections(chapterID: string) {
   const [narration, active] = await Promise.all([
@@ -442,87 +459,195 @@ onMounted(load)
       <div>
         <p class="eyebrow">Studio / Chapter Production</p>
         <h1>Chapter Production</h1>
-        <p>Backend-authoritative workspace cho P0 Chapter → Audio → Listen. Stage chưa có authority sẽ hiển thị blocker, không suy diễn client-side.</p>
+        <p>Đi theo pipeline Plan → Generation → Review → Narration → Audio → Publish. Mọi trạng thái và blocker vẫn lấy authority từ backend.</p>
       </div>
-      <RouterLink :to="`/admin/stories/${storyID}/planning`">← Story Planning Studio</RouterLink>
+      <RouterLink class="back-link" :to="`/admin/stories/${storyID}/planning`">← Story Planning Studio</RouterLink>
     </header>
 
-    <p v-if="loading">Đang tải production workspace...</p>
+    <p v-if="loading" class="page-status" role="status">Đang tải production workspace...</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
 
     <div v-if="!loading" class="workspace-grid">
-      <aside class="chapter-panel">
-        <h2>Chapters</h2>
-        <button v-for="chapter in chapters" :key="chapter.ID" type="button" :class="{ active: activeChapter?.ID === chapter.ID }" :disabled="!maySelectChapter" :aria-disabled="!maySelectChapter" @click="selectChapter(chapter)">
-          <span>Chương {{ chapter.ChapterNumber }}</span>
-          <strong>{{ chapter.Title }}</strong>
-          <small>{{ chapter.Status }}</small>
-        </button>
+      <aside class="chapter-panel" aria-label="Danh sách chương">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Story chapters</p>
+            <h2>Chapters</h2>
+          </div>
+          <span class="count-badge">{{ chapters.length }}</span>
+        </div>
+        <div v-if="chapters.length" class="chapter-list">
+          <button
+            v-for="chapter in chapters"
+            :key="chapter.ID"
+            type="button"
+            :class="['chapter-card', { active: activeChapter?.ID === chapter.ID }]"
+            :disabled="!maySelectChapter"
+            :aria-disabled="!maySelectChapter"
+            :aria-current="activeChapter?.ID === chapter.ID ? 'true' : undefined"
+            @click="selectChapter(chapter)"
+          >
+            <span class="chapter-number">Chương {{ chapter.ChapterNumber }}</span>
+            <strong>{{ chapter.Title }}</strong>
+            <small>{{ chapter.Status }}</small>
+          </button>
+        </div>
+        <p v-else class="empty-state">Chưa có chapter để production.</p>
       </aside>
 
       <main v-if="activeChapter" class="pipeline-panel" :aria-busy="selectionLoading">
-        <h2>{{ activeChapter.Title }}</h2>
-        <p v-if="selectionLoading" role="status">Đang tải trạng thái authoritative của chương…</p>
-        <dl>
-          <div><dt>Plan</dt><dd>{{ activeChapter.CurrentPlanRevisionID || 'BLOCKED — chưa có plan revision hiện hành' }}</dd></div>
-          <div><dt>Generation job</dt><dd>{{ generationJobStatus }}</dd></div>
-          <div><dt>Approved content</dt><dd>{{ approvedRevision ? `Revision #${approvedRevision.RevisionNo} · ${approvedRevision.ID}` : selectionLoading ? 'Đang tải…' : 'WAITING — chưa có approved revision' }}</dd></div>
-          <div><dt>Narration</dt><dd>{{ narrationStatus }}</dd></div>
-          <div><dt>Audio</dt><dd>{{ audioStatus }}</dd></div>
-          <div><dt>Publish</dt><dd>{{ publishStatus }}</dd></div>
-        </dl>
-
-        <div class="actions">
-          <button v-if="!generationRun" type="button" :disabled="!mayStartGeneration" @click="startGeneration">
-            {{ action === 'start-generation' ? 'Đang bắt đầu…' : 'Start Generation' }}
-          </button>
-          <button v-if="generationRun || generationJob" type="button" :disabled="Boolean(action) || selectionLoading" @click="refreshGeneration">
-            {{ action === 'refresh-generation' ? 'Đang refresh…' : 'Refresh Generation State' }}
-          </button>
-          <button v-if="mayRetryGeneration" type="button" :disabled="!mayRetryGeneration" @click="runRetryGeneration">
-            {{ action === 'retry-generation' ? 'Đang retry…' : 'Retry Generation Job' }}
-          </button>
-          <button type="button" :disabled="!mayCreateNarration" @click="startNarration">
-            {{ action === 'create-narration' ? 'Đang tạo narration…' : 'Create Narration' }}
-          </button>
-          <button type="button" :disabled="!maySynthesize" @click="runSynthesize">
-            {{ action === 'synthesize' ? 'Đang synthesize…' : 'Synthesize TTS' }}
-          </button>
-          <button type="button" :disabled="!mayActivate" @click="runActivate">
-            {{ action === 'activate' ? 'Đang activate…' : 'Activate Audio' }}
-          </button>
-          <button type="button" :disabled="!mayMarkReady" @click="runMarkReady">
-            {{ action === 'mark-ready' ? 'Đang mark ready…' : 'Mark Chapter Ready' }}
-          </button>
-          <button type="button" :disabled="!mayPublish" @click="runPublish">
-            {{ action === 'publish' ? 'Đang publish…' : 'Publish Chapter' }}
-          </button>
-          <RouterLink :to="`/admin/stories/${storyID}/review`">Mở Content Review</RouterLink>
+        <div class="chapter-heading">
+          <div>
+            <p class="eyebrow">Chương {{ activeChapter.ChapterNumber }}</p>
+            <h2>{{ activeChapter.Title }}</h2>
+          </div>
+          <span class="chapter-state">{{ activeChapter.Status }}</span>
         </div>
 
-        <p v-if="latestRevision">Latest revision {{ latestRevision.ID }} · source {{ latestRevision.SourceType }} · run {{ latestRevision.GenerationRunID || '—' }}</p>
-        <p v-if="latestNarration">Narration {{ latestNarration.ID }} · voice {{ latestNarration.VoiceID }} · status {{ latestNarration.Status }}</p>
-        <p v-if="latestReadyAudio">Latest READY asset {{ latestReadyAudio.ID }} · narration {{ latestReadyAudio.SourceNarrationRevisionID }} · {{ latestReadyAudio.SizeBytes }} bytes</p>
-        <p>Review records loaded: {{ reviews.length }}</p>
+        <p v-if="selectionLoading" class="page-status" role="status">Đang tải trạng thái authoritative của chương…</p>
+
+        <section v-if="primaryStage" class="next-step" aria-labelledby="next-step-title">
+          <div>
+            <p class="eyebrow">Next attention</p>
+            <h3 id="next-step-title">{{ primaryStage.label }}</h3>
+          </div>
+          <div>
+            <span :class="['state-badge', `state-${primaryStage.state}`]">{{ stageStateLabel(primaryStage.state) }}</span>
+            <p>{{ primaryStage.summary }}</p>
+            <p v-if="primaryStage.blocker" class="blocker-copy">{{ primaryStage.blocker }}</p>
+          </div>
+        </section>
+
+        <ol class="stage-list" aria-label="Chapter production pipeline">
+          <li v-for="(stage, index) in productionStages" :key="stage.id" :class="['stage-card', `stage-${stage.state}`]">
+            <div class="stage-index" aria-hidden="true">{{ index + 1 }}</div>
+            <div class="stage-copy">
+              <div class="stage-title-row">
+                <h3>{{ stage.label }}</h3>
+                <span :class="['state-badge', `state-${stage.state}`]">{{ stageStateLabel(stage.state) }}</span>
+              </div>
+              <p>{{ stage.summary }}</p>
+              <p v-if="stage.blocker" class="blocker-copy">{{ stage.blocker }}</p>
+            </div>
+          </li>
+        </ol>
+
+        <section class="action-panel" aria-labelledby="actions-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Safe actions</p>
+              <h3 id="actions-title">Production controls</h3>
+            </div>
+            <span v-if="action" class="action-progress" role="status">Đang xử lý…</span>
+          </div>
+          <div class="actions">
+            <button v-if="!generationRun" type="button" :disabled="!mayStartGeneration" @click="startGeneration">
+              {{ action === 'start-generation' ? 'Đang bắt đầu…' : 'Start Generation' }}
+            </button>
+            <button v-if="generationRun || generationJob" type="button" :disabled="Boolean(action) || selectionLoading" @click="refreshGeneration">
+              {{ action === 'refresh-generation' ? 'Đang refresh…' : 'Refresh Generation' }}
+            </button>
+            <button v-if="mayRetryGeneration" type="button" :disabled="!mayRetryGeneration" @click="runRetryGeneration">
+              {{ action === 'retry-generation' ? 'Đang retry…' : 'Retry Generation' }}
+            </button>
+            <RouterLink class="action-link" :to="`/admin/stories/${storyID}/review`">Mở Content Review</RouterLink>
+            <button type="button" :disabled="!mayCreateNarration" @click="startNarration">
+              {{ action === 'create-narration' ? 'Đang tạo narration…' : 'Create Narration' }}
+            </button>
+            <button type="button" :disabled="!maySynthesize" @click="runSynthesize">
+              {{ action === 'synthesize' ? 'Đang synthesize…' : 'Synthesize TTS' }}
+            </button>
+            <button type="button" :disabled="!mayActivate" @click="runActivate">
+              {{ action === 'activate' ? 'Đang activate…' : 'Activate Audio' }}
+            </button>
+            <button type="button" :disabled="!mayMarkReady" @click="runMarkReady">
+              {{ action === 'mark-ready' ? 'Đang mark ready…' : 'Mark Chapter Ready' }}
+            </button>
+            <button class="primary-action" type="button" :disabled="!mayPublish" @click="runPublish">
+              {{ action === 'publish' ? 'Đang publish…' : 'Publish Chapter' }}
+            </button>
+          </div>
+        </section>
+
+        <details class="technical-details">
+          <summary>Technical production details</summary>
+          <div class="detail-grid">
+            <p v-if="latestRevision"><strong>Latest revision</strong><span>{{ latestRevision.ID }} · {{ latestRevision.SourceType }} · run {{ latestRevision.GenerationRunID || '—' }}</span></p>
+            <p v-if="latestNarration"><strong>Narration</strong><span>{{ latestNarration.ID }} · voice {{ latestNarration.VoiceID }} · {{ latestNarration.Status }}</span></p>
+            <p v-if="activeAudio"><strong>Active audio</strong><span>v{{ activeAudio.VersionNo }} · {{ activeAudio.DurationMs }}ms · checksum {{ activeAudio.Checksum || '—' }}</span></p>
+            <p v-if="latestReadyAudio"><strong>Latest READY audio</strong><span>{{ latestReadyAudio.ID }} · {{ latestReadyAudio.SizeBytes }} bytes</span></p>
+            <p><strong>Review records</strong><span>{{ reviews.length }}</span></p>
+          </div>
+        </details>
       </main>
     </div>
   </section>
 </template>
 
 <style scoped>
-.production-page { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+.production-page { max-width: 1240px; margin: 0 auto; padding: 32px 24px 64px; }
 .production-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 24px; }
-.workspace-grid { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 24px; }
-.chapter-panel, .pipeline-panel { border: 1px solid #d8d8d8; border-radius: 16px; padding: 18px; }
-.chapter-panel button { width: 100%; display: grid; gap: 3px; text-align: left; margin: 8px 0; padding: 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; }
-.chapter-panel button.active { border-color: currentColor; }
-.chapter-panel button:disabled { opacity: 0.55; cursor: not-allowed; }
-dl { display: grid; gap: 10px; }
-dl div { display: grid; grid-template-columns: 160px 1fr; gap: 12px; }
-dt { font-weight: 700; }
-dd { margin: 0; overflow-wrap: anywhere; }
-.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 20px; }
-.error { color: #b42318; }
-.eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
-@media (max-width: 800px) { .workspace-grid { grid-template-columns: 1fr; } .production-header { flex-direction: column; } }
+.production-header h1, .chapter-heading h2, .panel-heading h2, .panel-heading h3, .stage-card h3, .next-step h3 { margin: 0; }
+.production-header p:not(.eyebrow) { max-width: 760px; margin-bottom: 0; line-height: 1.6; }
+.back-link, .action-link { min-height: 44px; display: inline-flex; align-items: center; }
+.workspace-grid { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.chapter-panel, .pipeline-panel { border: 1px solid var(--border-color, #d8d8d8); border-radius: 18px; background: var(--surface-color, #fff); }
+.chapter-panel { padding: 16px; position: sticky; top: 20px; }
+.pipeline-panel { min-width: 0; padding: 22px; }
+.panel-heading, .chapter-heading, .stage-title-row { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.chapter-heading { margin-bottom: 20px; align-items: flex-start; }
+.chapter-list { display: grid; gap: 8px; margin-top: 12px; }
+.chapter-card { min-height: 68px; width: 100%; display: grid; gap: 4px; text-align: left; padding: 12px 14px; border: 1px solid transparent; border-radius: 12px; background: transparent; overflow-wrap: anywhere; cursor: pointer; }
+.chapter-card:hover:not(:disabled), .chapter-card:focus-visible { border-color: currentColor; }
+.chapter-card.active { border-color: currentColor; background: color-mix(in srgb, currentColor 7%, transparent); }
+.chapter-card:disabled { opacity: .55; cursor: not-allowed; }
+.chapter-number, .chapter-card small { font-size: 12px; opacity: .72; }
+.count-badge, .chapter-state, .state-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 4px 9px; border: 1px solid currentColor; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.next-step { display: grid; grid-template-columns: minmax(130px, .35fr) 1fr; gap: 18px; padding: 18px; margin-bottom: 18px; border: 1px solid currentColor; border-radius: 14px; }
+.next-step p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.stage-list { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0; margin: 0; }
+.stage-card { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 16px; border: 1px solid var(--border-color, #d8d8d8); border-radius: 14px; }
+.stage-index { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-weight: 800; }
+.stage-copy { min-width: 0; }
+.stage-copy p { margin: 8px 0 0; line-height: 1.45; overflow-wrap: anywhere; }
+.blocker-copy { font-weight: 650; }
+.stage-loading, .state-loading, .stage-waiting, .state-waiting { opacity: .72; }
+.stage-blocked, .state-blocked, .stage-failed, .state-failed { border-style: dashed; }
+.action-panel { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color, #d8d8d8); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.actions button, .action-link { min-height: 44px; padding: 9px 14px; border-radius: 10px; font: inherit; }
+.actions button { border: 1px solid currentColor; background: transparent; cursor: pointer; }
+.actions button:hover:not(:disabled), .actions button:focus-visible, .action-link:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.actions button:disabled { opacity: .5; cursor: not-allowed; }
+.primary-action { font-weight: 800; }
+.action-progress, .page-status { font-weight: 650; }
+.technical-details { margin-top: 20px; border-top: 1px solid var(--border-color, #d8d8d8); padding-top: 16px; }
+.technical-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
+.detail-grid { display: grid; gap: 8px; }
+.detail-grid p { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; margin: 0; }
+.detail-grid span { overflow-wrap: anywhere; }
+.empty-state { opacity: .72; }
+.error { color: #b42318; font-weight: 650; }
+.eyebrow { margin: 0 0 5px; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
+
+@media (max-width: 1024px) {
+  .workspace-grid { grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 16px; }
+  .stage-list { grid-template-columns: 1fr; }
+  .next-step { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .production-page { padding: 20px 16px 48px; }
+  .production-header { flex-direction: column; margin-bottom: 18px; }
+  .workspace-grid { grid-template-columns: 1fr; }
+  .chapter-panel { position: static; padding: 14px; }
+  .chapter-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+  .chapter-card { min-width: min(78vw, 280px); scroll-snap-align: start; }
+  .pipeline-panel { padding: 16px; }
+  .chapter-heading { align-items: flex-start; }
+  .stage-title-row { align-items: flex-start; }
+  .actions { display: grid; grid-template-columns: 1fr; }
+  .actions button, .action-link { width: 100%; justify-content: center; text-align: center; }
+  .detail-grid p { grid-template-columns: 1fr; gap: 2px; }
+}
 </style>
