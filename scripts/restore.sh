@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Restore a Synaudio PostgreSQL dump.
 #
-# Bounded local development (POSTGRES_PASSWORD + libpq vars; no DATABASE_URL):
+# Bounded local development (POSTGRES_PASSWORD + allowlisted libpq host; no DATABASE_URL):
 #   POSTGRES_PASSWORD=... ./scripts/restore.sh <dump_file>
+#   POSTGRES_HOST must be localhost, 127.0.0.1, or ::1 (default: localhost)
 #
 # URL-based/destructive restore requires all of (regardless of APP_ENV):
 #   DATABASE_URL=<explicit recovery target; must equal ISOLATED_RECOVERY_DATABASE_URL>
@@ -15,9 +16,21 @@
 #
 # APP_ENV=production without DATABASE_URL is rejected. A supplied DATABASE_URL
 # never authorizes destructive restore by itself; isolation + acknowledgement
-# are always required for URL-based restore paths.
+# are always required for URL-based restore paths. Non-local libpq targets must
+# use the isolated DATABASE_URL restore path instead of POSTGRES_* convenience vars.
 
 set -euo pipefail
+
+is_local_postgres_host() {
+  case "${1}" in
+    localhost|127.0.0.1|::1)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 DUMP_FILE="${1:-}"
 if [[ -z "${DUMP_FILE}" ]]; then
@@ -66,6 +79,10 @@ else
   DEV_USER="${POSTGRES_USER:-synaudio}"
   if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
     echo "Error: local development restore requires POSTGRES_PASSWORD (DATABASE_URL triggers isolated restore gates)" >&2
+    exit 1
+  fi
+  if ! is_local_postgres_host "${DEV_HOST}"; then
+    echo "Error: local development restore is permitted only against localhost, 127.0.0.1, or ::1; remote targets require the isolated DATABASE_URL restore path" >&2
     exit 1
   fi
   export PGPASSWORD="${POSTGRES_PASSWORD}"
