@@ -14,7 +14,7 @@ Both binaries call `config.LoadDatabasePoolSettings` and `db.NewPool` with the s
 | `DATABASE_POOL_MAX_CONN_LIFETIME` | no | Connection recycle interval (default `1h`) |
 | `DATABASE_POOL_MAX_CONN_IDLE_TIME` | no | Idle connection close interval (default `30m`) |
 | `DATABASE_POOL_HEALTH_CHECK_PERIOD` | no | Idle health-check interval (default `1m`) |
-| `DATABASE_POOL_ACQUIRE_TIMEOUT` | no | Documented upper bound for saturated acquire waits (default `30s`). API request handlers inherit HTTP read timeouts (#52); worker loops retry on the next tick when acquires are canceled. |
+| `DATABASE_POOL_ACQUIRE_TIMEOUT` | no | Enforced upper bound for waiting to obtain a pooled connection (default `30s`). A shorter caller deadline/cancellation still wins. The timeout stops after acquisition and does not impose an artificial query-duration limit. |
 
 Development leaves `DATABASE_POOL_MAX_CONNS` unset to use the explicit pgx default of `max(4, runtime.NumCPU())` without requiring budget inputs.
 
@@ -69,7 +69,8 @@ rollout_peak = 2 * (2*10 + 1*5) + 5 = 55 <= 100
 ## Saturation behavior
 
 - Pool size is fixed by `DATABASE_POOL_MAX_CONNS`; Synaudio does not create unbounded connections under load.
-- When all connections are busy, additional acquires wait until a connection is released or the caller context is canceled.
-- API handlers should continue passing request contexts into database calls so HTTP read timeouts bound saturated waits.
-- Worker loops already retry on the next poll/reclaim tick when a database call fails or times out.
+- DBTX operations (`Exec`, `Query`, `QueryRow`) and transaction establishment (`Begin`) enforce `DATABASE_POOL_ACQUIRE_TIMEOUT` only while waiting for a connection. Once acquired, the original request/job context controls query execution.
+- A shorter request/job deadline or cancellation takes precedence over the pool acquire timeout.
+- Query/result wrappers retain the acquired connection until rows are closed/exhausted or `QueryRow.Scan` completes, preserving normal pgx lifecycle semantics.
+- Worker backlog sampling also uses the bounded DBTX path so saturation cannot strand that loop indefinitely.
 - Pool saturation is observable through bounded Prometheus gauges/counters documented in `observability.md`.
