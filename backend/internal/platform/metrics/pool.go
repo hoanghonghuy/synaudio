@@ -17,6 +17,10 @@ type databasePoolSnapshot struct {
 	emptyAcquireWaitSec float64
 }
 
+type databasePoolStatsSource interface {
+	Stat() *pgxpool.Stat
+}
+
 // SetDatabasePool records a bounded snapshot of pgxpool saturation signals.
 func (r *Registry) SetDatabasePool(role string, stat *pgxpool.Stat) {
 	if stat == nil {
@@ -40,7 +44,7 @@ func (r *Registry) SetDatabasePool(role string, stat *pgxpool.Stat) {
 }
 
 // StartDatabasePoolSampler publishes pool saturation gauges on a fixed interval.
-func StartDatabasePoolSampler(ctx context.Context, pool *pgxpool.Pool, registry *Registry, role string, interval time.Duration) {
+func StartDatabasePoolSampler(ctx context.Context, pool databasePoolStatsSource, registry *Registry, role string, interval time.Duration) {
 	if pool == nil || registry == nil {
 		return
 	}
