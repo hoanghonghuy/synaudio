@@ -14,6 +14,7 @@ const progress = { UserID: 'admin-1', ChapterID: chapter.ID, PositionMs: 0, Comp
 
 async function mockAPI(page, options = {}) {
   let chapterListAttempts = 0
+  let adminPreviewAttempts = 0
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url())
     const path = url.pathname.replace('/api/v1', '')
@@ -41,6 +42,11 @@ async function mockAPI(page, options = {}) {
     if (path === '/admin/chapters/chapter-1/narration/latest') return json({ ID: 'nar-1', ChapterID: 'chapter-1', RevisionNo: 1, SourceContentRevisionID: 'cr-1', VoiceID: 'voice-1', Script: 'Hello.', Status: 'APPROVED' })
     if (path === '/admin/chapters/chapter-1/audio') return json({ ID: 'asset-1', ChapterID: 'chapter-1', VersionNo: 1, SourceNarrationRevisionID: 'nar-1', Status: 'READY', IsActive: true, Checksum: 'abc', StorageKey: 'private/key.mp3', DurationMs: 60000, SizeBytes: 1024 })
     if (path === '/admin/chapters/chapter-1/narration/nar-1/audio/latest-ready') return json({ ID: 'asset-1', ChapterID: 'chapter-1', VersionNo: 1, SourceNarrationRevisionID: 'nar-1', Status: 'READY', IsActive: true, Checksum: 'abc', StorageKey: 'private/key.mp3', DurationMs: 60000, SizeBytes: 1024 })
+    if (path === '/admin/chapters/chapter-1/audio/asset-1/preview-url') {
+      adminPreviewAttempts += 1
+      if (options.failAdminPreviewOnce && adminPreviewAttempts === 1) return json({ error: { code: 'PREVIEW_UNAVAILABLE', message: 'preview temporarily unavailable' } }, 503)
+      return json({ url: 'data:audio/mpeg;base64,' })
+    }
     if (path === '/admin/chapters/chapter-1/publish-readiness') return json({ ready: true, missing: [] })
     return json({ code: 'NOT_FOUND', message: `fixture route not configured: ${method} ${path}` }, 404)
   })
@@ -54,7 +60,7 @@ async function expectVisibleFocus(locator) {
   const s = await locator.evaluate((el) => { const x = getComputedStyle(el); return { outlineStyle: x.outlineStyle, outlineWidth: x.outlineWidth, boxShadow: x.boxShadow } })
   expect((s.outlineStyle !== 'none' && s.outlineWidth !== '0px') || s.boxShadow !== 'none').toBe(true)
 }
-async function tabTo(page, locator, maxTabs = 16) {
+async function tabTo(page, locator, maxTabs = 20) {
   await page.locator('body').click({ position: { x: 1, y: 1 } })
   await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur())
   for (let i = 0; i < maxTabs; i += 1) {
@@ -74,14 +80,24 @@ for (const viewport of viewports) {
   })
 }
 for (const viewport of viewports) {
-  test(`chapter production is responsive and keyboard reachable on ${viewport.name}`, async ({ page }) => {
+  test(`chapter production preview is responsive and keyboard reachable on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height }); await mockAPI(page); await page.goto('/admin/stories/story-1/production')
     await expect(page.getByRole('heading', { name: 'Chapter Production' })).toBeVisible(); await expect(page.getByText(chapter.Title, { exact: true }).first()).toBeVisible(); await expectNoHorizontalOverflow(page)
-    const back = page.getByRole('link', { name: /Story Planning Studio/ }); const chapterButton = page.getByRole('button', { name: new RegExp(chapter.Title) }).first()
+    const back = page.getByRole('link', { name: /Story Planning Studio/ }); const chapterButton = page.getByRole('button', { name: new RegExp(chapter.Title) }).first(); const preview = page.getByRole('button', { name: 'Load audio preview' })
     await tabTo(page, back); await expectVisibleFocus(back); await page.keyboard.press('Tab'); await expectVisibleFocus(chapterButton); await page.keyboard.press('Shift+Tab'); await expectVisibleFocus(back)
-    await expect(page.getByRole('button', { name: /Start Generation|Refresh Generation State/ })).toBeVisible()
+    await expect(preview).toBeVisible(); await tabTo(page, preview); await expectVisibleFocus(preview); await preview.click()
+    const audio = page.locator('.preview-player audio'); await expect(audio).toHaveCount(1); await expect(audio).toHaveAttribute('src', 'data:audio/mpeg;base64,'); await expect(page.getByRole('button', { name: 'Refresh preview URL' })).toBeVisible(); await expectNoHorizontalOverflow(page)
+    await expect(page.getByRole('button', { name: /Start Generation|Refresh Generation/ })).toBeVisible()
   })
 }
+
+test('admin preview exposes deterministic failure and retry without storage-key fallback', async ({ page }) => {
+  await mockAPI(page, { failAdminPreviewOnce: true }); await page.goto('/admin/stories/story-1/production')
+  await page.getByRole('button', { name: 'Load audio preview' }).click()
+  const alert = page.getByRole('alert'); await expect(alert).toContainText('preview temporarily unavailable'); await expect(page.locator('.preview-player audio')).toHaveCount(0)
+  await alert.getByRole('button', { name: 'Retry preview' }).click(); await expect(alert).toBeHidden(); await expect(page.locator('.preview-player audio')).toHaveCount(1)
+  await expect(page.locator('body')).not.toContainText('private/key.mp3')
+})
 
 test('listener exposes deterministic initial loading feedback', async ({ page }) => { await mockAPI(page, { delayChapterListMs: 1500 }); await page.goto('/stories/story-1/read'); await expect(page.getByText('Đang mở thư viện chương...')).toBeVisible(); await expect(page.getByRole('heading', { name: chapter.Title })).toBeVisible() })
 test('listener exposes deterministic failure and retry feedback', async ({ page }) => { await mockAPI(page, { failChapterListOnce: true }); await page.goto('/stories/story-1/read'); await expect(page.getByRole('alert')).toContainText('Không thể tải các chương.'); await page.getByRole('button', { name: 'Thử lại' }).click(); await expect(page.getByRole('heading', { name: chapter.Title })).toBeVisible() })
@@ -89,51 +105,15 @@ test('listener keeps readable content available when audio URL fails', async ({ 
 
 test('custom audiobook controls expose play pause seek rate buffering error and recovery', async ({ page }) => {
   await page.addInitScript(() => {
-    HTMLMediaElement.prototype.play = function () {
-      Object.defineProperty(this, 'paused', { configurable: true, get: () => false })
-      this.dispatchEvent(new Event('play'))
-      this.dispatchEvent(new Event('playing'))
-      return Promise.resolve()
-    }
-    HTMLMediaElement.prototype.pause = function () {
-      Object.defineProperty(this, 'paused', { configurable: true, get: () => true })
-      this.dispatchEvent(new Event('pause'))
-    }
+    HTMLMediaElement.prototype.play = function () { Object.defineProperty(this, 'paused', { configurable: true, get: () => false }); this.dispatchEvent(new Event('play')); this.dispatchEvent(new Event('playing')); return Promise.resolve() }
+    HTMLMediaElement.prototype.pause = function () { Object.defineProperty(this, 'paused', { configurable: true, get: () => true }); this.dispatchEvent(new Event('pause')) }
   })
-  await mockAPI(page)
-  await page.goto('/stories/story-1/read')
-  const audio = page.locator('audio')
-  await expect(audio).toHaveCount(1)
-  const play = page.getByRole('button', { name: 'Phát audio' })
-
-  await play.click()
-  await expect(page.getByRole('button', { name: 'Tạm dừng' })).toBeVisible()
-  await expect(page.getByText('Đang phát', { exact: true })).toBeVisible()
-
-  await audio.evaluate((el) => { el.currentTime = 20; el.dispatchEvent(new Event('timeupdate')) })
-  await page.getByRole('button', { name: 'Tua tới 30 giây' }).click()
-  expect(await audio.evaluate((el) => el.currentTime)).toBe(50)
-  await page.getByRole('button', { name: 'Lùi 15 giây' }).click()
-  expect(await audio.evaluate((el) => el.currentTime)).toBe(35)
-
-  await page.getByRole('combobox', { name: 'Tốc độ phát' }).selectOption('1.5')
-  expect(await audio.evaluate((el) => el.playbackRate)).toBe(1.5)
-
-  await audio.dispatchEvent('waiting')
-  await expect(page.getByText('Đang tải audio…', { exact: true })).toBeVisible()
-  await audio.dispatchEvent('canplay')
-  await expect(page.getByText('Đang phát', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Tạm dừng' }).click()
-  await expect(page.getByRole('button', { name: 'Phát audio' })).toBeVisible()
-  await expect(page.getByText('Sẵn sàng nghe', { exact: true })).toBeVisible()
-
-  await audio.dispatchEvent('error')
-  const playbackError = page.getByRole('alert')
-  await expect(playbackError).toContainText('Không thể phát audio lúc này.')
-  await expect(playbackError.getByRole('button', { name: 'Thử tải lại audio' })).toBeVisible()
-  await expect(page.getByText('Readable chapter content remains available while audio state changes.')).toBeVisible()
-
-  await playbackError.getByRole('button', { name: 'Thử tải lại audio' }).click()
-  await expect(playbackError).toBeHidden()
-  await expect(page.getByRole('button', { name: 'Phát audio' })).toBeVisible()
+  await mockAPI(page); await page.goto('/stories/story-1/read')
+  const audio = page.locator('audio'); await expect(audio).toHaveCount(1); const play = page.getByRole('button', { name: 'Phát audio' })
+  await play.click(); await expect(page.getByRole('button', { name: 'Tạm dừng' })).toBeVisible(); await expect(page.getByText('Đang phát', { exact: true })).toBeVisible()
+  await audio.evaluate((el) => { el.currentTime = 20; el.dispatchEvent(new Event('timeupdate')) }); await page.getByRole('button', { name: 'Tua tới 30 giây' }).click(); expect(await audio.evaluate((el) => el.currentTime)).toBe(50); await page.getByRole('button', { name: 'Lùi 15 giây' }).click(); expect(await audio.evaluate((el) => el.currentTime)).toBe(35)
+  await page.getByRole('combobox', { name: 'Tốc độ phát' }).selectOption('1.5'); expect(await audio.evaluate((el) => el.playbackRate)).toBe(1.5)
+  await audio.dispatchEvent('waiting'); await expect(page.getByText('Đang tải audio…', { exact: true })).toBeVisible(); await audio.dispatchEvent('canplay'); await expect(page.getByText('Đang phát', { exact: true })).toBeVisible(); await page.getByRole('button', { name: 'Tạm dừng' }).click(); await expect(page.getByRole('button', { name: 'Phát audio' })).toBeVisible(); await expect(page.getByText('Sẵn sàng nghe', { exact: true })).toBeVisible()
+  await audio.dispatchEvent('error'); const playbackError = page.getByRole('alert'); await expect(playbackError).toContainText('Không thể phát audio lúc này.'); await expect(playbackError.getByRole('button', { name: 'Thử tải lại audio' })).toBeVisible(); await expect(page.getByText('Readable chapter content remains available while audio state changes.')).toBeVisible()
+  await playbackError.getByRole('button', { name: 'Thử tải lại audio' }).click(); await expect(playbackError).toBeHidden(); await expect(page.getByRole('button', { name: 'Phát audio' })).toBeVisible()
 })

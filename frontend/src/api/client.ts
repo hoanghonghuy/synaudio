@@ -548,6 +548,9 @@ export function runContentReview(chapterID: string, reviewType: 'CONTINUITY' | '
 
 export function getChapterContent(chapterID: string): Promise<ChapterContent> { return request<ChapterContent>(`/chapters/${chapterID}/content`) }
 export function getAudioURL(chapterID: string): Promise<AudioURLResponse> { return request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`) }
+export function getAdminAudioPreviewURL(chapterID: string, assetID: string): Promise<AudioURLResponse> {
+  return request<AudioURLResponse>(`/admin/chapters/${chapterID}/audio/${assetID}/preview-url`)
+}
 
 export async function getLatestNarrationRevision(chapterID: string): Promise<NarrationRevision | null> {
   try {
