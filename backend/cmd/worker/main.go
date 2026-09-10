@@ -25,29 +25,29 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Error("config load failed", "error", err)
+		log.Error("config load failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	emailCfg, err := config.LoadEmail(cfg.AppEnv, cfg.AppPublicURL)
 	if err != nil {
-		log.Error("email config load failed", "error", err)
+		log.Error("email config load failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	workerID, err := config.LoadWorkerID(cfg.AppEnv)
 	if err != nil {
-		log.Error("worker identity config failed", "error", err)
+		log.Error("worker identity config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 
 	aiProviders, err := providers.BuildAI(cfg)
 	if err != nil {
-		log.Error("AI provider init failed", "error", err)
+		log.Error("AI provider init failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 
 	poolSettings, err := config.LoadDatabasePoolSettings(cfg.AppEnv)
 	if err != nil {
-		log.Error("database pool config failed", "error", err)
+		log.Error("database pool config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 
@@ -60,7 +60,7 @@ func main() {
 
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL, poolSettings)
 	if err != nil {
-		log.Error("database pool create failed", "error", err)
+		log.Error("database pool create failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	defer pool.Close()
@@ -75,7 +75,7 @@ func main() {
 	if emailCfg.Mode != config.EmailModeDisabled {
 		emailService, err = providers.BuildEmail(emailCfg, pgstore.NewEmailOutboxStore(pool))
 		if err != nil {
-			log.Error("email provider init failed", "error", err)
+			log.Error("email provider init failed", logging.ErrAttr(err))
 			os.Exit(1)
 		}
 	}
@@ -173,7 +173,7 @@ func main() {
 			reclaimed, err := generationService.ReclaimExpiredJobs(ctx)
 			metricRegistry.ObserveWorkerLoop("stale_reclaim", err)
 			if err != nil {
-				log.Error("reclaim stale jobs failed", "error", err)
+				log.Error("reclaim stale jobs failed", logging.ErrAttr(err))
 				continue
 			}
 			metricRegistry.AddWorkerItems("stale_reclaim", "reclaimed", len(reclaimed))
@@ -185,7 +185,7 @@ func main() {
 			report, err := auditService.DeliverPending(ctx, 50)
 			metricRegistry.ObserveWorkerLoop("audit_delivery", err)
 			if err != nil {
-				log.Error("audit outbox reconciliation failed", "error", err)
+				log.Error("audit outbox reconciliation failed", logging.ErrAttr(err))
 				continue
 			}
 			metricRegistry.AddWorkerItems("audit_delivery", "claimed", report.Claimed)
@@ -208,7 +208,7 @@ func main() {
 				didWork, err := emailService.DeliverNext(ctx)
 				if err != nil {
 					deliveryErr = err
-					log.Error("transactional email delivery failed", "error", err)
+					log.Error("transactional email delivery failed", logging.ErrAttr(err))
 					break
 				}
 				if !didWork {
@@ -223,7 +223,7 @@ func main() {
 			purged, err := identityService.PurgeEligibleAccountsObserved(ctx, 50, deletionAudit)
 			metricRegistry.ObserveWorkerLoop("account_deletion", err)
 			if err != nil {
-				log.Error("account deletion reconciliation failed", "error", err)
+				log.Error("account deletion reconciliation failed", logging.ErrAttr(err))
 				continue
 			}
 			metricRegistry.AddWorkerItems("account_deletion", "purged", purged)
@@ -239,7 +239,7 @@ func main() {
 					continue
 				}
 				metricRegistry.ObserveWorkerLoop("generation_poll", err)
-				log.Error("process job failed", "error", err)
+				log.Error("process job failed", logging.ErrAttr(err))
 				continue
 			}
 			metricRegistry.ObserveWorkerLoop("generation_poll", nil)
@@ -255,7 +255,9 @@ func processJob(svc *generation.Service, log *slog.Logger) generation.JobProcess
 			log.Info("processing writer job", "job_id", job.ID, "run_id", job.RunID)
 			revision, err := svc.ExecuteWriterJob(ctx, job)
 			if err != nil {
-				log.Error("writer job failed", "job_id", job.ID, "run_id", job.RunID, "error", err)
+				fields := logging.SafeFailureFields(err)
+				log.Error("writer job failed", "job_id", job.ID, "run_id", job.RunID,
+					"error_class", fields.Class, "error_code", fields.Code)
 				return err
 			}
 			log.Info("writer job durable output ready",
