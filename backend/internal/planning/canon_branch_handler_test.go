@@ -44,3 +44,20 @@ func TestWorkspaceHandlerActiveOfficialCanonBranchFailsClosedWhenMissing(t *test
 		t.Fatalf("expected 404, got %d: %s", res.Code, res.Body.String())
 	}
 }
+
+func TestWorkspaceHandlerActiveOfficialCanonBranchFailsClosedWhenAmbiguous(t *testing.T) {
+	store := newFakeStore()
+	store.branches["s1"] = []CanonBranch{
+		{ID: "official-active-1", StoryID: "s1", Type: "OFFICIAL", Status: "ACTIVE"},
+		{ID: "official-active-2", StoryID: "s1", Type: "OFFICIAL", Status: "ACTIVE"},
+	}
+	h := NewWorkspaceHandler(NewService(store))
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/stories/s1/canon-branches/active-official", nil)
+	res := httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("expected ambiguous authority to return 404, got %d: %s", res.Code, res.Body.String())
+	}
+}
