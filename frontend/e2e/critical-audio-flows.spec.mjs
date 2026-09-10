@@ -44,7 +44,7 @@ async function mockAPI(page, options = {}) {
     if (path === '/admin/chapters/chapter-1/narration/nar-1/audio/latest-ready') return json({ ID: 'asset-1', ChapterID: 'chapter-1', VersionNo: 1, SourceNarrationRevisionID: 'nar-1', Status: 'READY', IsActive: true, Checksum: 'abc', StorageKey: 'private/key.mp3', DurationMs: 60000, SizeBytes: 1024 })
     if (path === '/admin/chapters/chapter-1/audio/asset-1/preview-url') {
       adminPreviewAttempts += 1
-      if (options.failAdminPreviewOnce && adminPreviewAttempts === 1) return json({ code: 'PREVIEW_UNAVAILABLE', message: 'preview temporarily unavailable' }, 503)
+      if (options.failAdminPreviewOnce && adminPreviewAttempts === 1) return json({ error: { code: 'PREVIEW_UNAVAILABLE', message: 'preview temporarily unavailable' } }, 503)
       return json({ url: 'data:audio/mpeg;base64,' })
     }
     if (path === '/admin/chapters/chapter-1/publish-readiness') return json({ ready: true, missing: [] })
