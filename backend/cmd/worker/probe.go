@@ -7,15 +7,17 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	platformmetrics "github.com/synaudio/synaudio/backend/internal/platform/metrics"
 	"github.com/synaudio/synaudio/backend/internal/platform/workerprobe"
 )
 
+type databasePinger interface {
+	Ping(context.Context) error
+}
+
 func startWorkerProbe(
 	ctx context.Context,
-	pool *pgxpool.Pool,
+	pool databasePinger,
 	registry *platformmetrics.Registry,
 	acceptingWork func() bool,
 	log *slog.Logger,
