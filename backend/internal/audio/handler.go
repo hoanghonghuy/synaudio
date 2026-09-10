@@ -27,6 +27,7 @@ func NewHandler(svc *Service) http.Handler {
 	r.Get("/admin/chapters/{chapterID}/narration/latest", h.getLatestNarrationRevision)
 	r.Get("/admin/chapters/{chapterID}/narration/{narrationID}/audio/latest-ready", h.getLatestReadyAudioAssetForNarration)
 	r.Get("/admin/chapters/{chapterID}/audio", h.getActiveAudioAsset)
+	r.Get("/admin/chapters/{chapterID}/audio/{assetID}/preview-url", h.getAdminAudioPreviewURL)
 	r.Get("/chapters/{chapterID}/audio-url", h.getAudioURL)
 	return r
 }
