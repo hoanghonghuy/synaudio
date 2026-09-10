@@ -86,15 +86,37 @@ for (const viewport of viewports) {
 
 test('listener exposes deterministic initial loading feedback', async ({ page }) => { await mockAPI(page, { delayChapterListMs: 1500 }); await page.goto('/stories/story-1/read'); await expect(page.getByText('Đang mở thư viện chương...')).toBeVisible(); await expect(page.getByRole('heading', { name: chapter.Title })).toBeVisible() })
 test('listener exposes deterministic failure and retry feedback', async ({ page }) => { await mockAPI(page, { failChapterListOnce: true }); await page.goto('/stories/story-1/read'); await expect(page.getByRole('alert')).toContainText('Không thể tải các chương.'); await page.getByRole('button', { name: 'Thử lại' }).click(); await expect(page.getByRole('heading', { name: chapter.Title })).toBeVisible() })
-test('listener keeps readable content available when audio URL fails', async ({ page }) => { await mockAPI(page, { failAudio: true }); await page.goto('/stories/story-1/read'); await expect(page.getByText('Audio tạm thời chưa sẵn sàng.')).toBeVisible(); await expect(page.getByText('Readable chapter content remains available while audio state changes.')).toBeVisible() })
+test('listener keeps readable content available when audio URL fails', async ({ page }) => { await mockAPI(page, { failAudio: true }); await page.goto('/stories/story-1/read'); await expect(page.getByText('Audio tạm thời chưa sẵn sàng.')).toBeVisible(); await expect(page.getByRole('button', { name: 'Thử tải lại audio' })).toBeVisible(); await expect(page.getByText('Readable chapter content remains available while audio state changes.')).toBeVisible() })
 
-test('current media boundary exposes controls and observable play pause seek rate and error states', async ({ page }) => {
-  await mockAPI(page); await page.goto('/stories/story-1/read'); const audio = page.locator('audio[controls]'); await expect(audio).toBeVisible()
-  const state = await audio.evaluate((el) => {
-    let playEvents = 0; let pauseEvents = 0; let waitingEvents = 0; let errorEvents = 0
-    el.addEventListener('play', () => { playEvents += 1 }); el.addEventListener('pause', () => { pauseEvents += 1 }); el.addEventListener('waiting', () => { waitingEvents += 1 }); el.addEventListener('error', () => { errorEvents += 1 })
-    el.playbackRate = 1.5; el.currentTime = 15; el.dispatchEvent(new Event('play')); el.dispatchEvent(new Event('waiting')); el.dispatchEvent(new Event('seeked')); el.dispatchEvent(new Event('pause')); el.dispatchEvent(new Event('error'))
-    return { controls: el.controls, playbackRate: el.playbackRate, currentTime: el.currentTime, playEvents, pauseEvents, waitingEvents, errorEvents }
+test('current media boundary exposes visible play pause buffering error and recovery states', async ({ page }) => {
+  await mockAPI(page)
+  await page.goto('/stories/story-1/read')
+  const audio = page.locator('audio[controls]')
+  await expect(audio).toBeVisible()
+
+  const mediaValues = await audio.evaluate((el) => {
+    el.playbackRate = 1.5
+    el.currentTime = 15
+    return { controls: el.controls, playbackRate: el.playbackRate, currentTime: el.currentTime }
   })
-  expect(state).toEqual({ controls: true, playbackRate: 1.5, currentTime: 15, playEvents: 1, pauseEvents: 1, waitingEvents: 1, errorEvents: 1 })
+  expect(mediaValues).toEqual({ controls: true, playbackRate: 1.5, currentTime: 15 })
+
+  await audio.dispatchEvent('play')
+  await expect(page.getByText('Đang phát audio.')).toBeVisible()
+
+  await audio.dispatchEvent('waiting')
+  await expect(page.getByText('Audio đang tải thêm dữ liệu...')).toBeVisible()
+
+  await audio.dispatchEvent('pause')
+  await expect(page.getByText('Audio đang tạm dừng.')).toBeVisible()
+
+  await audio.dispatchEvent('error')
+  const playbackError = page.getByRole('alert')
+  await expect(playbackError).toContainText('Audio gặp lỗi khi phát.')
+  await expect(playbackError.getByRole('button', { name: 'Thử tải lại audio' })).toBeVisible()
+  await expect(page.getByText('Readable chapter content remains available while audio state changes.')).toBeVisible()
+
+  await playbackError.getByRole('button', { name: 'Thử tải lại audio' }).click()
+  await expect(playbackError).toBeHidden()
+  await expect(audio).toBeVisible()
 })
