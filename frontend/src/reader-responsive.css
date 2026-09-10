@@ -1,0 +1,31 @@
+/* Reader-level responsive guards shared by the custom audiobook layout.
+ * Keep flex/grid children shrinkable so long chapter titles never force the
+ * document wider than the viewport while preserving the 44px control targets.
+ */
+.reader.reader .reader-head > div,
+.reader.reader .chapter-nav,
+.reader.reader .chapter-nav-heading > div,
+.reader.reader .chapter-tab,
+.reader.reader .audio-section,
+.reader.reader .audio-heading-row > div,
+.reader.reader .player-shell,
+.reader.reader .player-primary,
+.reader.reader .now-playing,
+.reader.reader .timeline-row,
+.reader.reader .player-secondary {
+  min-width: 0;
+}
+
+.reader.reader .reader-head > div {
+  flex: 1 1 auto;
+}
+
+.reader.reader .reader-head .fav-btn {
+  flex: 0 0 auto;
+}
+
+.reader.reader .chapter-tab strong,
+.reader.reader .reader-head h1,
+.reader.reader .now-playing strong {
+  overflow-wrap: anywhere;
+}

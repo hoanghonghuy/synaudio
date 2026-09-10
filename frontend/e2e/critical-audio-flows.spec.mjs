@@ -121,6 +121,8 @@ test('custom audiobook controls expose play pause seek rate buffering error and 
 
   await audio.dispatchEvent('waiting')
   await expect(page.getByText('Đang tải audio…', { exact: true })).toBeVisible()
+  await audio.dispatchEvent('canplay')
+  await expect(page.getByText('Đang phát', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Tạm dừng' }).click()
   await expect(page.getByRole('button', { name: 'Phát audio' })).toBeVisible()
   await expect(page.getByText('Sẵn sàng nghe', { exact: true })).toBeVisible()
