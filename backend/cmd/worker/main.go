@@ -8,8 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/synaudio/synaudio/backend/internal/audit"
 	"github.com/synaudio/synaudio/backend/internal/generation"
 	"github.com/synaudio/synaudio/backend/internal/identity"
@@ -47,6 +45,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	poolSettings, err := config.LoadDatabasePoolSettings(cfg.AppEnv)
+	if err != nil {
+		log.Error("database pool config failed", "error", err)
+		os.Exit(1)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -54,7 +58,7 @@ func main() {
 		return ctx.Err() == nil
 	}
 
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL, poolSettings)
 	if err != nil {
 		log.Error("database pool create failed", "error", err)
 		os.Exit(1)
@@ -79,6 +83,7 @@ func main() {
 	metricRegistry := platformmetrics.NewRegistry()
 	providers.WireMetrics(metricRegistry)
 	metricRegistry.WorkerHeartbeat(time.Now())
+	platformmetrics.StartDatabasePoolSampler(ctx, pool, metricRegistry, config.DatabasePoolRoleWorker, 15*time.Second)
 	startWorkerMetrics(ctx, metricRegistry, log)
 	startWorkerProbe(ctx, pool, metricRegistry, acceptingWork, log)
 	startBacklogSampler(ctx, pool, metricRegistry, log)
