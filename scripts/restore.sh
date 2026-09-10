@@ -1,58 +1,111 @@
 #!/usr/bin/env bash
-# Restore the Synaudio PostgreSQL database from a dump file.
+# Restore a Synaudio PostgreSQL dump.
 #
-# Usage:
-#   ./scripts/restore.sh <dump_file>
+# Bounded local development (POSTGRES_PASSWORD + allowlisted libpq host; no DATABASE_URL):
+#   POSTGRES_PASSWORD=... ./scripts/restore.sh <dump_file>
+#   POSTGRES_HOST must be localhost, 127.0.0.1, or ::1 (default: localhost)
 #
-# The dump file may be either:
-#   - a custom-format dump (.dump) produced by pg_dump -Fc, restored with pg_restore
-#   - a plain-text SQL dump (.sql), restored with psql
+# URL-based/destructive restore requires all of (regardless of APP_ENV):
+#   DATABASE_URL=<explicit recovery target; must equal ISOLATED_RECOVERY_DATABASE_URL>
+#   ISOLATED_RECOVERY_DATABASE_URL=<designated isolated recovery target>
+#   RECOVERY_TARGET=isolated
+#   ALLOW_DESTRUCTIVE_RESTORE=YES_I_UNDERSTAND
 #
-# Environment (optional, falls back to docker-compose defaults):
-#   DATABASE_URL  - full postgres connection string
-#   POSTGRES_HOST - host (default: localhost)
-#   POSTGRES_PORT - port (default: 5432)
-#   POSTGRES_DB   - database name (default: synaudio)
-#   POSTGRES_USER - user (default: synaudio)
-#   POSTGRES_PASSWORD - password (default: synaudio)
+# Optional fail-closed boundary when live production is configured:
+#   PRODUCTION_DATABASE_URL=<live production target; must not equal ISOLATED_RECOVERY_DATABASE_URL>
 #
-# WARNING: This DROPS and recreates the target database. Run only as part of a
-# planned restore drill or disaster recovery, never against production without
-# explicit approval.
+# APP_ENV=production without DATABASE_URL is rejected. A supplied DATABASE_URL
+# never authorizes destructive restore by itself; isolation + acknowledgement
+# are always required for URL-based restore paths. Non-local libpq targets must
+# use the isolated DATABASE_URL restore path instead of POSTGRES_* convenience vars.
 
 set -euo pipefail
+
+is_local_postgres_host() {
+  case "${1}" in
+    localhost|127.0.0.1|::1)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 DUMP_FILE="${1:-}"
 if [[ -z "${DUMP_FILE}" ]]; then
   echo "Usage: $0 <dump_file>" >&2
   exit 1
 fi
-
 if [[ ! -f "${DUMP_FILE}" ]]; then
   echo "Error: dump file not found: ${DUMP_FILE}" >&2
   exit 1
 fi
 
-# Resolve connection parameters.
+APP_ENV="${APP_ENV:-development}"
+RESTORE_CONN_MODE=""
+
 if [[ -n "${DATABASE_URL:-}" ]]; then
+  if [[ "${RECOVERY_TARGET:-}" != "isolated" ]]; then
+    echo "Error: DATABASE_URL restore is permitted only with RECOVERY_TARGET=isolated" >&2
+    exit 1
+  fi
+  if [[ "${ALLOW_DESTRUCTIVE_RESTORE:-}" != "YES_I_UNDERSTAND" ]]; then
+    echo "Error: destructive restore requires ALLOW_DESTRUCTIVE_RESTORE=YES_I_UNDERSTAND" >&2
+    exit 1
+  fi
+  if [[ -z "${ISOLATED_RECOVERY_DATABASE_URL:-}" ]]; then
+    echo "Error: DATABASE_URL restore requires ISOLATED_RECOVERY_DATABASE_URL" >&2
+    exit 1
+  fi
+  if [[ -n "${PRODUCTION_DATABASE_URL:-}" ]] \
+    && [[ "${ISOLATED_RECOVERY_DATABASE_URL}" == "${PRODUCTION_DATABASE_URL}" ]]; then
+    echo "Error: ISOLATED_RECOVERY_DATABASE_URL must not equal PRODUCTION_DATABASE_URL" >&2
+    exit 1
+  fi
+  if [[ "${DATABASE_URL}" != "${ISOLATED_RECOVERY_DATABASE_URL}" ]]; then
+    echo "Error: DATABASE_URL must match ISOLATED_RECOVERY_DATABASE_URL for isolated recovery" >&2
+    exit 1
+  fi
   DB_URL="${DATABASE_URL}"
+  RESTORE_CONN_MODE="connstring"
+elif [[ "${APP_ENV}" == "production" ]]; then
+  echo "Error: production restore requires explicit DATABASE_URL" >&2
+  exit 1
 else
-  HOST="${POSTGRES_HOST:-localhost}"
-  PORT="${POSTGRES_PORT:-5432}"
-  DB="${POSTGRES_DB:-synaudio}"
-  USER="${POSTGRES_USER:-synaudio}"
-  export PGPASSWORD="${POSTGRES_PASSWORD:-synaudio}"
-  DB_URL="postgres://${USER}:${PGPASSWORD}@${HOST}:${PORT}/${DB}?sslmode=disable"
+  DEV_HOST="${POSTGRES_HOST:-localhost}"
+  DEV_PORT="${POSTGRES_PORT:-5432}"
+  DEV_DB="${POSTGRES_DB:-synaudio}"
+  DEV_USER="${POSTGRES_USER:-synaudio}"
+  if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
+    echo "Error: local development restore requires POSTGRES_PASSWORD (DATABASE_URL triggers isolated restore gates)" >&2
+    exit 1
+  fi
+  if ! is_local_postgres_host "${DEV_HOST}"; then
+    echo "Error: local development restore is permitted only against localhost, 127.0.0.1, or ::1; remote targets require the isolated DATABASE_URL restore path" >&2
+    exit 1
+  fi
+  export PGPASSWORD="${POSTGRES_PASSWORD}"
+  RESTORE_CONN_MODE="libpq"
 fi
 
 echo "Restoring from: ${DUMP_FILE}"
-
 case "${DUMP_FILE}" in
   *.dump)
-    pg_restore --dbname="${DB_URL}" --clean --if-exists --no-owner "${DUMP_FILE}"
+    if [[ "${RESTORE_CONN_MODE}" == "connstring" ]]; then
+      pg_restore --dbname="${DB_URL}" --clean --if-exists --no-owner "${DUMP_FILE}"
+    else
+      pg_restore --host="${DEV_HOST}" --port="${DEV_PORT}" --username="${DEV_USER}" \
+        --dbname="${DEV_DB}" --clean --if-exists --no-owner "${DUMP_FILE}"
+    fi
     ;;
   *.sql)
-    psql --dbname="${DB_URL}" --file="${DUMP_FILE}"
+    if [[ "${RESTORE_CONN_MODE}" == "connstring" ]]; then
+      psql --dbname="${DB_URL}" --file="${DUMP_FILE}"
+    else
+      psql --host="${DEV_HOST}" --port="${DEV_PORT}" --username="${DEV_USER}" \
+        --dbname="${DEV_DB}" --file="${DUMP_FILE}"
+    fi
     ;;
   *)
     echo "Error: unrecognized dump extension (expected .dump or .sql): ${DUMP_FILE}" >&2
@@ -60,4 +113,4 @@ case "${DUMP_FILE}" in
     ;;
 esac
 
-echo "Restore complete."
+echo "Restore complete. Verify database + object-storage coherence before promotion."
