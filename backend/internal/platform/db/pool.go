@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -26,7 +27,7 @@ var beginPoolTx = func(pool *pgxpool.Pool, ctx context.Context) (pgx.Tx, error) 
 // into a query-duration timeout.
 type Pool struct {
 	*pgxpool.Pool
-	acquireTimeout config.DatabasePoolSettings
+	acquireTimeout time.Duration
 }
 
 // NewPool constructs a PostgreSQL pool using the shared Synaudio pool contract.
@@ -46,11 +47,11 @@ func NewPool(ctx context.Context, databaseURL string, settings config.DatabasePo
 	if err != nil {
 		return nil, fmt.Errorf("create database pool: %w", err)
 	}
-	return &Pool{Pool: pool, acquireTimeout: settings}, nil
+	return &Pool{Pool: pool, acquireTimeout: settings.AcquireTimeout}, nil
 }
 
 func (p *Pool) acquire(ctx context.Context) (*pgxpool.Conn, error) {
-	acquireCtx, cancel := context.WithTimeout(ctx, p.acquireTimeout.AcquireTimeout)
+	acquireCtx, cancel := context.WithTimeout(ctx, p.acquireTimeout)
 	defer cancel()
 	conn, err := acquirePoolConn(p.Pool, acquireCtx)
 	if err != nil {
@@ -93,7 +94,7 @@ func (p *Pool) QueryRow(ctx context.Context, query string, args ...interface{}) 
 // The returned pgxpool transaction retains ownership of its acquired connection
 // until Commit/Rollback, so canceling the acquisition context here is safe.
 func (p *Pool) Begin(ctx context.Context) (pgx.Tx, error) {
-	acquireCtx, cancel := context.WithTimeout(ctx, p.acquireTimeout.AcquireTimeout)
+	acquireCtx, cancel := context.WithTimeout(ctx, p.acquireTimeout)
 	defer cancel()
 	tx, err := beginPoolTx(p.Pool, acquireCtx)
 	if err != nil {
