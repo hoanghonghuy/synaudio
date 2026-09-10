@@ -22,6 +22,13 @@ func (e *ClassifiedError) Error() string {
 
 func (e *ClassifiedError) Unwrap() error { return e.Err }
 
+// ErrorClass exposes the bounded failure class to cross-cutting safe logging
+// without coupling the logging package back to the generation domain.
+func (e *ClassifiedError) ErrorClass() string { return e.Class }
+
+// ErrorCode exposes the bounded failure code to cross-cutting safe logging.
+func (e *ClassifiedError) ErrorCode() string { return e.Code }
+
 // ClassifyError maps a raw error to a failure class.
 func ClassifyError(err error) (string, string) {
 	var ce *ClassifiedError
