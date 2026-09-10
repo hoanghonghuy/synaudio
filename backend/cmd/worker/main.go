@@ -255,9 +255,7 @@ func processJob(svc *generation.Service, log *slog.Logger) generation.JobProcess
 			log.Info("processing writer job", "job_id", job.ID, "run_id", job.RunID)
 			revision, err := svc.ExecuteWriterJob(ctx, job)
 			if err != nil {
-				fields := logging.SafeFailureFields(err)
-				log.Error("writer job failed", "job_id", job.ID, "run_id", job.RunID,
-					"error_class", fields.Class, "error_code", fields.Code)
+				log.Error("writer job failed", append([]any{"job_id", job.ID, "run_id", job.RunID}, logging.SafeFailureFields(err))...)
 				return err
 			}
 			log.Info("writer job durable output ready",
