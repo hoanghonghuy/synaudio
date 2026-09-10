@@ -44,6 +44,7 @@ const playbackRates = [0.75, 1, 1.25, 1.5, 1.75, 2]
 let lastProgressWriteAt = 0
 let progressWrite: Promise<void> = Promise.resolve()
 let progressStateTimer: number | undefined
+let activeSelectionMayCommit: () => boolean = () => false
 
 const playbackPercent = computed(() => duration.value > 0 ? Math.min(100, (currentTime.value / duration.value) * 100) : 0)
 const progressLabel = computed(() => {
@@ -87,6 +88,7 @@ async function loadChapters() {
 async function selectChapter(chapter: Chapter) {
   persistCurrentPosition(true)
   const mayCommit = chapterSelection.begin(chapter.ID)
+  activeSelectionMayCommit = mayCommit
   activeChapter.value = chapter
   lastProgressWriteAt = 0
   content.value = null
@@ -151,21 +153,22 @@ async function retryAudio() {
   const chapter = activeChapter.value
   if (!chapter || audioLoading.value) return
   const requestChapterID = chapter.ID
+  const mayCommit = activeSelectionMayCommit
   audioLoading.value = true
   audioError.value = ''
   try {
     const result = await getAudioURL(requestChapterID)
-    if (activeChapter.value?.ID !== requestChapterID) return
+    if (!mayCommit() || activeChapter.value?.ID !== requestChapterID) return
     audioChapterID.value = requestChapterID
     audioURL.value = result.url
     await nextTick()
-    if (activeChapter.value?.ID === requestChapterID && audioChapterID.value === requestChapterID) audioEl.value?.load()
+    if (mayCommit() && activeChapter.value?.ID === requestChapterID && audioChapterID.value === requestChapterID) audioEl.value?.load()
   } catch (e) {
-    if (activeChapter.value?.ID === requestChapterID) {
+    if (mayCommit() && activeChapter.value?.ID === requestChapterID) {
       audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
     }
   } finally {
-    if (activeChapter.value?.ID === requestChapterID) audioLoading.value = false
+    if (mayCommit() && activeChapter.value?.ID === requestChapterID) audioLoading.value = false
   }
 }
 
