@@ -7,13 +7,18 @@ import (
 )
 
 func activeOfficialFrom(branches []CanonBranch) (CanonBranch, error) {
-	for i := len(branches) - 1; i >= 0; i-- {
-		branch := branches[i]
+	var found CanonBranch
+	matches := 0
+	for _, branch := range branches {
 		if branch.Type == "OFFICIAL" && branch.Status == "ACTIVE" {
-			return branch, nil
+			found = branch
+			matches++
 		}
 	}
-	return CanonBranch{}, ErrCanonBranchNotFound
+	if matches != 1 {
+		return CanonBranch{}, ErrCanonBranchNotFound
+	}
+	return found, nil
 }
 
 func (s *fakeStore) GetActiveOfficialCanonBranch(_ context.Context, storyID string) (CanonBranch, error) {
@@ -53,6 +58,20 @@ func TestGetActiveOfficialCanonBranchFailsClosedWhenMissing(t *testing.T) {
 	_, err := svc.GetActiveOfficialCanonBranch(context.Background(), "s1")
 	if !errors.Is(err, ErrCanonBranchNotFound) {
 		t.Fatalf("expected ErrCanonBranchNotFound, got %v", err)
+	}
+}
+
+func TestGetActiveOfficialCanonBranchFailsClosedWhenAmbiguous(t *testing.T) {
+	store := newCanonFakeStore()
+	store.branches["s1"] = []CanonBranch{
+		{ID: "official-active-1", StoryID: "s1", Type: "OFFICIAL", Status: "ACTIVE"},
+		{ID: "official-active-2", StoryID: "s1", Type: "OFFICIAL", Status: "ACTIVE"},
+	}
+	svc := NewService(store)
+
+	_, err := svc.GetActiveOfficialCanonBranch(context.Background(), "s1")
+	if !errors.Is(err, ErrCanonBranchNotFound) {
+		t.Fatalf("expected ambiguous authority to fail closed, got %v", err)
 	}
 }
 
