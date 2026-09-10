@@ -46,13 +46,13 @@ async function mockAPI(page, options = {}) {
 
     if (path === '/stories/story-1/chapters') {
       chapterListAttempts += 1
+      if (options.delayChapterListMs) await new Promise((resolve) => setTimeout(resolve, options.delayChapterListMs))
       if (options.failChapterListOnce && chapterListAttempts === 1) {
         return json({ code: 'TEMPORARY', message: 'temporary chapter list failure' }, 503)
       }
       return json({ chapters: [chapter] })
     }
     if (path === '/chapters/chapter-1/content') {
-      if (options.delayContentMs) await new Promise((resolve) => setTimeout(resolve, options.delayContentMs))
       return json({ chapter_id: chapter.ID, title: chapter.Title, content_text: 'Readable chapter content remains available while audio state changes.' })
     }
     if (path === '/chapters/chapter-1/audio-url') {
@@ -127,7 +127,15 @@ for (const viewport of viewports) {
   })
 }
 
-test('listener exposes deterministic loading, failure and retry feedback', async ({ page }) => {
+test('listener exposes deterministic initial loading feedback', async ({ page }) => {
+  await mockAPI(page, { delayChapterListMs: 1500 })
+  await page.goto('/stories/story-1/read')
+
+  await expect(page.getByText('Đang mở thư viện chương...')).toBeVisible()
+  await expect(page.getByRole('heading', { name: chapter.Title })).toBeVisible()
+})
+
+test('listener exposes deterministic failure and retry feedback', async ({ page }) => {
   await mockAPI(page, { failChapterListOnce: true })
   await page.goto('/stories/story-1/read')
 
@@ -137,10 +145,9 @@ test('listener exposes deterministic loading, failure and retry feedback', async
 })
 
 test('listener keeps readable content available when audio URL fails', async ({ page }) => {
-  await mockAPI(page, { failAudio: true, delayContentMs: 1500 })
+  await mockAPI(page, { failAudio: true })
   await page.goto('/stories/story-1/read')
 
-  await expect(page.getByText(/Đang tải nội dung/)).toBeVisible()
   await expect(page.getByText('Audio tạm thời chưa sẵn sàng.')).toBeVisible()
   await expect(page.getByText('Readable chapter content remains available while audio state changes.')).toBeVisible()
 })
