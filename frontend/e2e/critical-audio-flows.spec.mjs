@@ -137,10 +137,10 @@ test('listener exposes deterministic loading, failure and retry feedback', async
 })
 
 test('listener keeps readable content available when audio URL fails', async ({ page }) => {
-  await mockAPI(page, { failAudio: true, delayContentMs: 100 })
+  await mockAPI(page, { failAudio: true, delayContentMs: 1500 })
   await page.goto('/stories/story-1/read')
 
-  await expect(page.getByRole('status')).toContainText(/Đang tải nội dung|Đang chuẩn bị audio/)
+  await expect(page.getByText(/Đang tải nội dung/)).toBeVisible()
   await expect(page.getByText('Audio tạm thời chưa sẵn sàng.')).toBeVisible()
   await expect(page.getByText('Readable chapter content remains available while audio state changes.')).toBeVisible()
 })
