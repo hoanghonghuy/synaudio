@@ -69,14 +69,21 @@ async function focusWithTab(page, locator) {
   throw new Error('Retry Generation was not reachable with keyboard Tab traversal')
 }
 
+function generationPipelineItem(page) {
+  return page
+    .getByRole('list', { name: 'Chapter production pipeline' })
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: 'Generation', exact: true }) })
+}
+
 for (const viewport of viewports) {
   test(`authoritative generation retry is responsive and keyboard reachable on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     const retryCalls = await mockAPI(page)
     await page.goto('/admin/stories/story-1/production')
 
-    const generationRegion = page.getByRole('region', { name: 'Generation' })
-    await expect(generationRegion.getByText('RETRYABLE · TRANSIENT · attempt 1/3')).toBeVisible()
+    const generationItem = generationPipelineItem(page)
+    await expect(generationItem.getByText('RETRYABLE · TRANSIENT · attempt 1/3')).toBeVisible()
     const retry = page.getByRole('button', { name: 'Retry Generation' })
     await expect(retry).toBeVisible()
     await focusWithTab(page, retry)
@@ -84,7 +91,7 @@ for (const viewport of viewports) {
     await expectNoHorizontalOverflow(page)
 
     await retry.click()
-    await expect(generationRegion.getByText('QUEUED · attempt 1/3')).toBeVisible()
+    await expect(generationItem.getByText('QUEUED · attempt 1/3')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Retry Generation' })).toHaveCount(0)
     expect(retryCalls()).toBe(1)
   })
@@ -93,8 +100,8 @@ for (const viewport of viewports) {
 test('exhausted generation fails closed and never exposes Retry Generation', async ({ page }) => {
   await mockAPI(page, { exhausted: true })
   await page.goto('/admin/stories/story-1/production')
-  const generationRegion = page.getByRole('region', { name: 'Generation' })
-  await expect(generationRegion.getByText('EXHAUSTED · MAX_ATTEMPTS_EXHAUSTED · attempt 3/3')).toBeVisible()
+  const generationItem = generationPipelineItem(page)
+  await expect(generationItem.getByText('EXHAUSTED · MAX_ATTEMPTS_EXHAUSTED · attempt 3/3')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Retry Generation' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Refresh Generation' })).toBeVisible()
 })
