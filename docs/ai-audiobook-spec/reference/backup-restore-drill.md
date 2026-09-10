@@ -26,13 +26,21 @@ Do not commit dumps, manifests, credentials, signed URLs, or recovery artifacts 
 
 ## Database backup
 
-Local development requires an explicit credential source (`DATABASE_URL` or `POSTGRES_PASSWORD`):
+The convenience path is deliberately local-only and uses libpq parameters with a loopback host (`localhost`, `127.0.0.1`, or `::1`):
 
 ```bash
 POSTGRES_PASSWORD="$POSTGRES_PASSWORD" ./scripts/backup.sh ./backups
 ```
 
-Production deliberately has no credential/target fallback:
+Any `DATABASE_URL` is treated as an arbitrary/non-local-capable target regardless of `APP_ENV` and therefore requires an explicit output destination. This prevents an omitted or mistyped environment label from dumping production data into the repository-local backup directory:
+
+```bash
+DATABASE_URL="$DATABASE_URL" \
+BACKUP_OUTPUT_DIR=/secure/staging/synaudio \
+./scripts/backup.sh
+```
+
+Production deliberately has no credential/target fallback and must use that explicit URL/output contract:
 
 ```bash
 APP_ENV=production \
