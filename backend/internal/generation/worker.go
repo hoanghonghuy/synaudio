@@ -92,29 +92,81 @@ func (w *Worker) ProcessOne(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	startedAt := time.Now()
-	procErr := w.process(ctx, job)
-	duration := time.Since(startedAt)
-	if procErr == nil {
-		if w.audit != nil {
-			if err := w.audit(ctx, JobAuditEvent{Job: job, AttemptID: attempt.ID, Outcome: "SUCCEEDED", Duration: duration}); err != nil {
-				return err
-			}
-		}
-		if err := w.svc.CompleteJobAttempt(ctx, attempt.ID, "SUCCEEDED", "", ""); err != nil {
+
+	started := time.Now()
+	runErr := w.process(ctx, job)
+	duration := time.Since(started)
+
+	if runErr == nil {
+		if err := w.recordAudit(ctx, JobAuditEvent{
+			Job:       job,
+			AttemptID: attempt.ID,
+			Outcome:   "SUCCEEDED",
+			Duration:  duration,
+		}); err != nil {
 			return err
 		}
-		return w.svc.MarkJobSucceeded(ctx, job.ID)
+		if _, err := w.svc.CompleteJob(ctx, job.ID, "SUCCEEDED", "", ""); err != nil {
+			return err
+		}
+		if _, err := w.svc.store.UpdateJobAttemptStatus(ctx, attempt.ID, "SUCCEEDED", "", ""); err != nil {
+			return err
+		}
+		return nil
 	}
 
-	class, code := ClassifyError(procErr)
-	if w.audit != nil {
-		if err := w.audit(ctx, JobAuditEvent{Job: job, AttemptID: attempt.ID, Outcome: "FAILED", ErrorClass: class, ErrorCode: code, Duration: duration}); err != nil {
-			return err
-		}
+	// A cancellation owned by the ProcessOne context is a worker/runtime
+	// interruption, not an application/provider failure. Do not persist a fake
+	// PERMANENT/UNKNOWN outcome or immediately requeue by unguarded job ID. The
+	// durable lease remains authoritative and normal expiry/reclaim consumes the
+	// already-counted attempt according to the queue's attempt budget.
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(runErr, ctxErr) {
+		return ctxErr
 	}
-	if err := w.svc.CompleteJobAttempt(ctx, attempt.ID, "FAILED", class, code); err != nil {
+
+	class, code := ClassifyError(runErr)
+	if err := w.recordAudit(ctx, JobAuditEvent{
+		Job:        job,
+		AttemptID:  attempt.ID,
+		Outcome:    "FAILED",
+		ErrorClass: class,
+		ErrorCode:  code,
+		Duration:   duration,
+	}); err != nil {
 		return err
 	}
-	return w.svc.MarkJobFailed(ctx, job.ID, class, code)
+	if _, err := w.svc.store.UpdateJobAttemptStatus(ctx, attempt.ID, "FAILED", class, code); err != nil {
+		return err
+	}
+
+	if shouldRetry(class, job.AttemptCount, job.MaxAttempts) {
+		if _, err := w.svc.store.UpdateJobStatus(ctx, job.ID, "PENDING", class, code); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	_, err = w.svc.CompleteJob(ctx, job.ID, "FAILED", class, code)
+	return err
+}
+
+func (w *Worker) recordAudit(ctx context.Context, event JobAuditEvent) error {
+	if w.audit == nil {
+		return nil
+	}
+	return w.audit(ctx, event)
+}
+
+// shouldRetry reports whether a job should be retried given its failure class.
+func shouldRetry(class string, attemptCount, maxAttempts int) bool {
+	if class != "TRANSIENT" {
+		return false
+	}
+	return attemptCount < maxAttempts
+}
+
+// backoffDelay returns the delay before retrying a given attempt (1-indexed).
+func backoffDelay(attempt int) time.Duration {
+	base := time.Duration(attempt) * 2 * time.Second
+	return base
 }
