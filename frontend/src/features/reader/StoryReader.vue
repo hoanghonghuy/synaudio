@@ -23,6 +23,7 @@ const chapters = ref<Chapter[]>([])
 const activeChapter = ref<Chapter | null>(null)
 const content = ref<ChapterContent | null>(null)
 const audioURL = ref('')
+const audioChapterID = ref('')
 const loading = ref(false)
 const contentLoading = ref(false)
 const audioLoading = ref(false)
@@ -52,12 +53,17 @@ const progressLabel = computed(() => {
   return ''
 })
 
+function ownsCurrentAudio() {
+  return Boolean(activeChapter.value && audioChapterID.value === activeChapter.value.ID)
+}
+
 function resetPlayerState() {
   isPlaying.value = false
   isBuffering.value = false
   currentTime.value = 0
   duration.value = 0
   progressState.value = 'idle'
+  audioChapterID.value = ''
 }
 
 async function loadChapters() {
@@ -107,6 +113,7 @@ async function selectChapter(chapter: Chapter) {
   const audioRequest = getAudioURL(chapter.ID)
     .then((result) => {
       if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
+      audioChapterID.value = chapter.ID
       audioURL.value = result.url
       audioError.value = ''
     })
@@ -127,7 +134,7 @@ async function selectChapter(chapter: Chapter) {
     const saved = listener.progress[chapter.ID]
     if (saved && saved.PositionMs > 0) {
       await nextTick()
-      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
+      if (!mayCommit() || activeChapter.value?.ID !== chapter.ID || audioChapterID.value !== chapter.ID) return
       const el = audioEl.value
       if (el) {
         el.currentTime = saved.PositionMs / 1000
@@ -143,20 +150,22 @@ async function selectChapter(chapter: Chapter) {
 async function retryAudio() {
   const chapter = activeChapter.value
   if (!chapter || audioLoading.value) return
+  const requestChapterID = chapter.ID
   audioLoading.value = true
   audioError.value = ''
   try {
-    const result = await getAudioURL(chapter.ID)
-    if (activeChapter.value?.ID !== chapter.ID) return
+    const result = await getAudioURL(requestChapterID)
+    if (activeChapter.value?.ID !== requestChapterID) return
+    audioChapterID.value = requestChapterID
     audioURL.value = result.url
     await nextTick()
-    audioEl.value?.load()
+    if (activeChapter.value?.ID === requestChapterID && audioChapterID.value === requestChapterID) audioEl.value?.load()
   } catch (e) {
-    if (activeChapter.value?.ID === chapter.ID) {
+    if (activeChapter.value?.ID === requestChapterID) {
       audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
     }
   } finally {
-    if (activeChapter.value?.ID === chapter.ID) audioLoading.value = false
+    if (activeChapter.value?.ID === requestChapterID) audioLoading.value = false
   }
 }
 
@@ -173,8 +182,9 @@ function markProgressState(state: 'idle' | 'saving' | 'saved' | 'error') {
 function persistCurrentPosition(force = false) {
   const el = audioEl.value
   const chapter = activeChapter.value
-  if (!el || !chapter) return
+  if (!el || !chapter || audioChapterID.value !== chapter.ID) return
 
+  const chapterID = chapter.ID
   const now = Date.now()
   if (!force && now - lastProgressWriteAt < progressWriteIntervalMs) return
   const positionMs = Math.max(0, Math.floor(el.currentTime * 1000))
@@ -183,14 +193,18 @@ function persistCurrentPosition(force = false) {
 
   progressWrite = progressWrite
     .catch(() => undefined)
-    .then(() => listener.saveProgress(chapter.ID, positionMs, ''))
-    .then(() => markProgressState('saved'))
-    .catch(() => markProgressState('error'))
+    .then(() => listener.saveProgress(chapterID, positionMs, ''))
+    .then(() => {
+      if (activeChapter.value?.ID === chapterID && audioChapterID.value === chapterID) markProgressState('saved')
+    })
+    .catch(() => {
+      if (activeChapter.value?.ID === chapterID && audioChapterID.value === chapterID) markProgressState('error')
+    })
 }
 
 async function togglePlayback() {
   const el = audioEl.value
-  if (!el || !audioURL.value) return
+  if (!el || !audioURL.value || !ownsCurrentAudio()) return
   audioError.value = ''
   try {
     if (el.paused) {
@@ -206,7 +220,7 @@ async function togglePlayback() {
 
 function seekTo(value: number) {
   const el = audioEl.value
-  if (!el || !Number.isFinite(value)) return
+  if (!el || !ownsCurrentAudio() || !Number.isFinite(value)) return
   const next = Math.max(0, Math.min(value, duration.value || value))
   el.currentTime = next
   currentTime.value = next
@@ -220,12 +234,12 @@ function seekBy(deltaSeconds: number) {
 function changePlaybackRate(value: unknown) {
   const rate = normalizePlaybackRate(value)
   playbackRate.value = rate
-  if (audioEl.value) audioEl.value.playbackRate = rate
+  if (audioEl.value && ownsCurrentAudio()) audioEl.value.playbackRate = rate
 }
 
 function onLoadedMetadata() {
   const el = audioEl.value
-  if (!el) return
+  if (!el || !ownsCurrentAudio()) return
   duration.value = Number.isFinite(el.duration) ? el.duration : 0
   currentTime.value = el.currentTime
   el.playbackRate = playbackRate.value
@@ -233,33 +247,39 @@ function onLoadedMetadata() {
 
 function onTimeUpdate() {
   const el = audioEl.value
-  if (el) currentTime.value = el.currentTime
+  if (!el || !ownsCurrentAudio()) return
+  currentTime.value = el.currentTime
   persistCurrentPosition(false)
 }
 
 function onPauseOrSeek() {
   const el = audioEl.value
-  if (el) currentTime.value = el.currentTime
+  if (!el || !ownsCurrentAudio()) return
+  currentTime.value = el.currentTime
   persistCurrentPosition(true)
 }
 
 function onAudioError() {
+  if (!ownsCurrentAudio()) return
   isPlaying.value = false
   isBuffering.value = false
   audioError.value = 'Không thể phát audio lúc này. Hãy thử tải lại audio.'
 }
 
 async function onEnded() {
+  const chapter = activeChapter.value
+  if (!chapter || audioChapterID.value !== chapter.ID) return
+  const chapterID = chapter.ID
   isPlaying.value = false
   persistCurrentPosition(true)
-  const chapter = activeChapter.value
-  if (!chapter || listener.isGuest) return
+  if (listener.isGuest) return
   try {
     // Completion must be ordered after the final position write; otherwise a
     // brand-new progress row could race the completion mutation and return 404.
     await progressWrite
-    const completed = await completeProgress(chapter.ID)
-    listener.progress[chapter.ID] = completed
+    if (activeChapter.value?.ID !== chapterID || audioChapterID.value !== chapterID) return
+    const completed = await completeProgress(chapterID)
+    if (activeChapter.value?.ID === chapterID && audioChapterID.value === chapterID) listener.progress[chapterID] = completed
   } catch {
     // The final persisted position is still useful if completion marking is
     // temporarily unavailable; the next interaction can retry naturally.
@@ -363,12 +383,12 @@ onBeforeUnmount(() => {
               preload="metadata"
               @loadedmetadata="onLoadedMetadata"
               @timeupdate="onTimeUpdate"
-              @play="isPlaying = true"
+              @play="isPlaying = ownsCurrentAudio()"
               @playing="isBuffering = false"
               @pause="isPlaying = false; onPauseOrSeek()"
-              @seeking="isBuffering = true"
+              @seeking="isBuffering = ownsCurrentAudio()"
               @seeked="isBuffering = false; onPauseOrSeek()"
-              @waiting="isBuffering = true"
+              @waiting="isBuffering = ownsCurrentAudio()"
               @canplay="isBuffering = false"
               @error="onAudioError"
               @ended="onEnded"
@@ -450,46 +470,45 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.reader { max-width: 1280px; margin: 0 auto; }
+.reader { max-width: var(--content-max); margin: 0 auto; }
 .reader-head, .chapter-nav-heading, .audio-heading-row, .player-primary, .player-secondary { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .reader-head { margin: 18px 0 24px; align-items: flex-start; }
 .reader-head h1 { margin: 4px 0 0; overflow-wrap: anywhere; }
 .eyebrow { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .68; }
 .reader-layout { display: grid; grid-template-columns: minmax(230px, 290px) minmax(0, 1fr); gap: 24px; align-items: start; }
-.chapter-nav { position: sticky; top: 20px; border: 1px solid var(--border-color, #d8d8d8); border-radius: 18px; padding: 16px; max-height: calc(100vh - 40px); overflow: hidden; }
+.chapter-nav { position: sticky; top: 20px; border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px; max-height: calc(100vh - 40px); overflow: hidden; background: var(--surface); }
 .chapter-nav-heading h2 { margin: 3px 0 0; }
-.chapter-count { min-width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: 999px; background: color-mix(in srgb, currentColor 10%, transparent); font-weight: 700; }
+.chapter-count { min-width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 700; }
 .chapter-nav-list { display: grid; gap: 8px; margin-top: 14px; max-height: calc(100vh - 130px); overflow: auto; padding-right: 4px; }
-.chapter-tab { min-height: 56px; width: 100%; display: grid; gap: 4px; text-align: left; padding: 11px 12px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: inherit; cursor: pointer; }
-.chapter-tab:hover { background: color-mix(in srgb, currentColor 5%, transparent); }
-.chapter-tab:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, .back-link:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
-.chapter-tab.active { border-color: currentColor; background: color-mix(in srgb, currentColor 7%, transparent); }
-.chapter-number, .chapter-current { font-size: 12px; opacity: .72; }
-.chapter-current { font-weight: 800; opacity: 1; }
+.chapter-tab { min-height: 56px; width: 100%; display: grid; gap: 4px; text-align: left; padding: 11px 12px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; color: inherit; cursor: pointer; }
+.chapter-tab:hover { background: var(--surface-soft); }
+.chapter-tab.active { border-color: var(--accent); background: var(--accent-soft); }
+.chapter-number, .chapter-current { font-size: 12px; color: var(--muted); }
+.chapter-current { font-weight: 800; color: var(--accent-strong); }
 .reader-body { min-width: 0; display: grid; gap: 18px; }
 .loading-line { min-height: 24px; }
-.audio-section { border: 1px solid var(--border-color, #d8d8d8); border-radius: 20px; padding: 20px; display: grid; gap: 16px; }
+.audio-section { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px; display: grid; gap: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .audio-heading-row h2 { margin: 3px 0 0; }
-.save-state { font-size: 13px; font-weight: 700; }
+.save-state { font-size: 13px; font-weight: 700; color: var(--muted); }
 .native-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .player-shell { display: grid; gap: 18px; }
 .player-primary { justify-content: flex-start; }
-.play-button, .skip-button, .fav-btn, .error-actions button { min-width: 44px; min-height: 44px; border-radius: 999px; border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
-.play-button { width: 58px; height: 58px; font-size: 22px; background: currentColor; color: Canvas; }
+.play-button, .skip-button, .fav-btn, .error-actions button { min-width: 44px; min-height: 44px; border-radius: 999px; border: 1px solid var(--accent); background: transparent; color: var(--accent-strong); cursor: pointer; }
+.play-button { width: 58px; height: 58px; font-size: 22px; background: var(--accent); color: var(--surface); }
 .skip-button { padding: 0 12px; font-weight: 800; }
 .now-playing { min-width: 0; display: grid; gap: 3px; }
 .now-playing strong { overflow-wrap: anywhere; }
-.now-playing span, .player-progress-text { font-size: 13px; opacity: .72; }
+.now-playing span, .player-progress-text { font-size: 13px; color: var(--muted); }
 .timeline-row { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; font-size: 13px; }
-.timeline { width: 100%; min-height: 44px; cursor: pointer; accent-color: currentColor; }
+.timeline { width: 100%; min-height: 44px; cursor: pointer; accent-color: var(--accent); }
 .rate-control { display: flex; align-items: center; gap: 8px; font-weight: 700; }
-.rate-control select { min-height: 44px; border: 1px solid var(--border-color, #d8d8d8); border-radius: 10px; padding: 0 10px; background: Canvas; color: CanvasText; }
-.player-placeholder { min-height: 112px; display: grid; place-items: center; border-radius: 14px; background: color-mix(in srgb, currentColor 5%, transparent); }
-.relisten-notice, .status-state { border-radius: 14px; padding: 14px 16px; }
-.relisten-notice { display: grid; gap: 4px; border: 1px solid currentColor; }
+.rate-control select { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 0 10px; background: var(--surface); color: var(--ink); }
+.player-placeholder { min-height: 112px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--surface-soft); }
+.relisten-notice, .status-state { border-radius: var(--radius-md); padding: 14px 16px; }
+.relisten-notice { display: grid; gap: 4px; border: 1px solid var(--accent); background: var(--accent-soft); }
 .error-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.error-actions button { padding: 0 16px; border-radius: 10px; }
-.prose { max-width: 76ch; font-size: 1.05rem; line-height: 1.78; overflow-wrap: anywhere; }
+.error-actions button { padding: 0 16px; border-radius: var(--radius-md); }
+.prose { max-width: 76ch; font-family: var(--font-reading); font-size: 1.05rem; line-height: 1.78; overflow-wrap: anywhere; }
 .prose p { margin: 0 0 1.1em; }
 
 @media (max-width: 1024px) {
@@ -515,7 +534,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 430px) {
   .reader-head { margin-top: 14px; }
-  .audio-section { margin-inline: -4px; border-radius: 16px; }
+  .audio-section { margin-inline: -4px; border-radius: var(--radius-lg); }
   .timeline-row { grid-template-columns: 1fr 1fr; }
   .timeline { grid-column: 1 / -1; grid-row: 1; }
   .timeline-row span:last-child { text-align: right; }
