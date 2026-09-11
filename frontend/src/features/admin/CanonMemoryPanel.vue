@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { presentCanonWorkspace } from './canonWorkspacePresentation.mjs'
+import { presentCanonWorkspace, type CanonWorkspaceState } from './canonWorkspacePresentation.mjs'
 
 const props = defineProps<{
-  state: Record<string, unknown>
+  state: CanonWorkspaceState
   disabled?: boolean
 }>()
 
@@ -15,6 +15,8 @@ const emit = defineEmits<{
 const view = computed(() => presentCanonWorkspace(props.state))
 const commitDisabled = computed(() => props.disabled || !view.value.canCommit)
 const retryDisabled = computed(() => props.disabled || !view.value.canRetry)
+const showCommitAction = computed(() => view.value.canCommit || (view.value.busy && view.value.status === 'READY_TO_COMMIT'))
+const showActions = computed(() => showCommitAction.value || view.value.canRetry)
 </script>
 
 <template>
@@ -30,8 +32,8 @@ const retryDisabled = computed(() => props.disabled || !view.value.canRetry)
     <p class="canon-summary" :role="view.status === 'BLOCKED' ? 'alert' : 'status'">{{ view.summary }}</p>
     <p class="canon-detail">{{ view.detail }}</p>
 
-    <div v-if="view.canCommit || view.canRetry || view.busy" class="canon-actions">
-      <button v-if="view.canCommit || view.busy" type="button" class="canon-primary" :disabled="commitDisabled" @click="emit('commit')">
+    <div v-if="showActions" class="canon-actions">
+      <button v-if="showCommitAction" type="button" class="canon-primary" :disabled="commitDisabled" @click="emit('commit')">
         {{ view.busy ? 'Đang commit Canon/Memory…' : 'Commit Canon / Memory' }}
       </button>
       <button v-if="view.canRetry" type="button" class="canon-secondary" :disabled="retryDisabled" @click="emit('retry')">Retry authority</button>
