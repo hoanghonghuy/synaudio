@@ -9,7 +9,7 @@ export type ChapterProductionStageState =
   | 'published'
 
 export interface ChapterProductionStage {
-  id: 'plan' | 'generation' | 'review' | 'narration' | 'audio' | 'publish'
+  id: 'plan' | 'generation' | 'review' | 'canon' | 'narration' | 'audio' | 'publish'
   label: string
   state: ChapterProductionStageState
   summary: string
@@ -21,6 +21,7 @@ export interface ChapterProductionStageInput {
   hasPlanRevision?: boolean
   generationJobStatus?: string
   hasApprovedRevision?: boolean
+  canonStatus?: string
   narrationStatus?: string
   audioStatus?: string
   publishStatus?: string

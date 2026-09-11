@@ -2,6 +2,7 @@ const LABELS = {
   plan: 'Plan',
   generation: 'Generation',
   review: 'Review',
+  canon: 'Canon / Memory',
   narration: 'Narration',
   audio: 'Audio',
   publish: 'Publish',
@@ -17,14 +18,19 @@ export function buildChapterProductionStages(input) {
     hasPlanRevision = false,
     generationJobStatus = '',
     hasApprovedRevision = false,
+    canonStatus,
     narrationStatus = '',
     audioStatus = '',
     publishStatus = '',
     chapterPublished = false,
   } = input
+  const includeCanon = typeof canonStatus === 'string'
+  const stageIDs = includeCanon
+    ? ['plan', 'generation', 'review', 'canon', 'narration', 'audio', 'publish']
+    : ['plan', 'generation', 'review', 'narration', 'audio', 'publish']
 
   if (selectionLoading) {
-    return Object.keys(LABELS).map((id) => stage(id, 'loading', 'Đang tải trạng thái authoritative…'))
+    return stageIDs.map((id) => stage(id, 'loading', 'Đang tải trạng thái authoritative…'))
   }
 
   const plan = hasPlanRevision
@@ -41,7 +47,19 @@ export function buildChapterProductionStages(input) {
 
   const review = hasApprovedRevision
     ? stage('review', 'ready', 'Approved content authoritative đã sẵn sàng.')
-    : stage('review', 'waiting', 'Chưa có approved content.', 'Mở Content Review và approve revision trước khi tạo narration.')
+    : stage('review', 'waiting', 'Chưa có approved content.', includeCanon ? 'Mở Content Review và approve revision trước khi commit Canon/Memory.' : 'Mở Content Review và approve revision trước khi tạo narration.')
+
+  const canon = includeCanon
+    ? canonStatus.startsWith('BLOCKED')
+      ? stage('canon', 'blocked', canonStatus, canonStatus.replace(/^BLOCKED\s*[—-]?\s*/, ''))
+      : canonStatus.startsWith('CURRENT')
+        ? stage('canon', 'ready', canonStatus)
+        : canonStatus.startsWith('READY TO COMMIT')
+          ? stage('canon', 'waiting', canonStatus, 'Commit Canon/Memory cho exact approved revision trước khi tiếp tục production.')
+          : canonStatus.startsWith('WAITING')
+            ? stage('canon', 'waiting', canonStatus)
+            : stage('canon', hasApprovedRevision ? 'waiting' : 'blocked', canonStatus || 'Chưa có Canon/Memory authority.', hasApprovedRevision ? 'Đang chờ Canon/Memory authority cho approved revision.' : 'Cần approved content trước.')
+    : null
 
   const narration = narrationStatus.startsWith('BLOCKED')
     ? stage('narration', 'blocked', narrationStatus, narrationStatus.replace(/^BLOCKED\s*[—-]?\s*/, ''))
@@ -69,7 +87,9 @@ export function buildChapterProductionStages(input) {
         ? stage('publish', 'ready', publishStatus)
         : stage('publish', 'waiting', publishStatus || 'Chưa có publish readiness authoritative.')
 
-  return [plan, generation, review, narration, audio, publish]
+  return canon
+    ? [plan, generation, review, canon, narration, audio, publish]
+    : [plan, generation, review, narration, audio, publish]
 }
 
 export function getPrimaryProductionStage(stages) {
