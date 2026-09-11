@@ -314,6 +314,10 @@ async function request<T>(path: string, init?: RequestInit, retryAuth = true): P
   return (await res.json()) as T
 }
 
+export function authenticatedRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  return request<T>(path, init)
+}
+
 export function listGenres(): Promise<GenreListResponse> {
   return request<GenreListResponse>('/genres')
 }

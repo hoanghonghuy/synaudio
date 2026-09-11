@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
   activateAudioAsset,
+  authenticatedRequest,
   createNarrationRevision,
   getActiveAudioAsset,
   getAdminAudioPreviewURL,
@@ -47,6 +48,10 @@ import {
   previewAssetForChapter,
   type AudioPreviewSnapshot,
 } from './audioPreviewState.mjs'
+import { createCanonApiBoundary } from './canonApiBoundary.mjs'
+import { createCanonWorkspaceController } from './canonWorkspaceController.mjs'
+import { presentCanonWorkspace, type CanonWorkspaceState } from './canonWorkspacePresentation.mjs'
+import CanonMemoryPanel from './CanonMemoryPanel.vue'
 
 const route = useRoute()
 const storyID = computed(() => route.params.storyID as string)
@@ -68,6 +73,8 @@ const error = ref('')
 const chapterSelection = createLatestSelectionGuard()
 const previewState = createAudioPreviewState()
 const audioPreview = ref<AudioPreviewSnapshot>(previewState.snapshot())
+const canonController = createCanonWorkspaceController(createCanonApiBoundary(authenticatedRequest))
+const canonState = ref<CanonWorkspaceState>(canonController.snapshot())
 
 const latestRevision = computed(() => revisions.value[revisions.value.length - 1] ?? null)
 const approvedRevision = computed(() => [...revisions.value].reverse().find((revision) => revision.Status === 'APPROVED') ?? null)
@@ -91,6 +98,11 @@ const previewAsset = computed(() => previewAssetForChapter({
   activeAudio: activeAudio.value,
   latestReadyAudio: latestReadyAudio.value,
 }))
+const canonView = computed(() => presentCanonWorkspace(canonState.value))
+const canonStageStatus = computed(() => {
+  const view = canonView.value
+  return view.summary.startsWith(view.badge) ? view.summary : `${view.badge} — ${view.summary}`
+})
 
 const mayStartGeneration = computed(() => canStartChapterGeneration({
   hasPlanRevision: Boolean(activeChapter.value?.CurrentPlanRevisionID),
@@ -187,6 +199,7 @@ const productionStages = computed(() => buildChapterProductionStages({
   hasPlanRevision: Boolean(activeChapter.value?.CurrentPlanRevisionID),
   generationJobStatus: generationJobStatus.value,
   hasApprovedRevision: Boolean(approvedRevision.value),
+  canonStatus: canonStageStatus.value,
   narrationStatus: narrationStatus.value,
   audioStatus: audioStatus.value,
   publishStatus: publishStatus.value,
@@ -225,6 +238,7 @@ async function selectChapter(chapter: Chapter) {
   resetAudioPreview()
   revisions.value = []; reviews.value = []; generationRun.value = null; generationJob.value = null
   latestNarration.value = null; activeAudio.value = null; latestReadyAudio.value = null; publishReadiness.value = null
+  canonState.value = canonController.reset()
   selectionLoading.value = true; error.value = ''
   try {
     const [revisionResponse, reviewResponse, audioState, readiness] = await Promise.all([
@@ -232,6 +246,7 @@ async function selectChapter(chapter: Chapter) {
     ])
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     const authoritativeContentState = revisionResponse as typeof revisionResponse & { generation_run?: GenerationRun | null; generation_job?: GenerationJobView | null }
+    const selectedApprovedRevision = [...revisionResponse.revisions].reverse().find((revision) => revision.Status === 'APPROVED') ?? null
     revisions.value = revisionResponse.revisions
     reviews.value = reviewResponse.reviews
     generationRun.value = generationRunFromContentResponse(authoritativeContentState)
@@ -240,13 +255,60 @@ async function selectChapter(chapter: Chapter) {
     activeAudio.value = audioState.active
     latestReadyAudio.value = audioState.ready
     publishReadiness.value = readiness
+
+    const canonLoad = canonController.load({
+      storyID: storyID.value,
+      chapterID: chapter.ID,
+      approvedRevision: selectedApprovedRevision,
+    })
+    canonState.value = canonController.snapshot()
+    const loadedCanonState = await canonLoad
+    if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
+    canonState.value = loadedCanonState
   } catch (e) {
     if (!mayCommit() || activeChapter.value?.ID !== chapter.ID) return
     revisions.value = []; reviews.value = []; generationRun.value = null; generationJob.value = null
     latestNarration.value = null; activeAudio.value = null; latestReadyAudio.value = null; publishReadiness.value = null
+    canonState.value = canonController.reset()
     error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
   } finally {
     if (mayCommit() && activeChapter.value?.ID === chapter.ID) selectionLoading.value = false
+  }
+}
+
+async function retryCanonAuthority() {
+  const chapter = activeChapter.value
+  const approved = approvedRevision.value
+  if (!chapter || selectionLoading.value || action.value) return
+  const requestChapterID = chapter.ID
+  const requestRevisionID = approved?.ID ?? ''
+  action.value = 'retry-canon'; error.value = ''
+  try {
+    const loadRequest = canonController.load({ storyID: storyID.value, chapterID: requestChapterID, approvedRevision: approved })
+    canonState.value = canonController.snapshot()
+    const loaded = await loadRequest
+    if (activeChapter.value?.ID !== requestChapterID || (approvedRevision.value?.ID ?? '') !== requestRevisionID) return
+    canonState.value = loaded
+  } finally {
+    if (activeChapter.value?.ID === requestChapterID) action.value = ''
+  }
+}
+
+async function commitCanonMemory() {
+  const chapter = activeChapter.value
+  const approved = approvedRevision.value
+  if (!chapter || !approved || selectionLoading.value || action.value || !canonView.value.canCommit) return
+  const requestChapterID = chapter.ID
+  const requestRevisionID = approved.ID
+  action.value = 'commit-canon'; error.value = ''
+  try {
+    const commitRequest = canonController.commit()
+    canonState.value = canonController.snapshot()
+    const committed = await commitRequest
+    if (activeChapter.value?.ID !== requestChapterID || approvedRevision.value?.ID !== requestRevisionID) return
+    canonState.value = committed
+  } finally {
+    if (activeChapter.value?.ID === requestChapterID) action.value = ''
   }
 }
 
@@ -344,7 +406,7 @@ onMounted(load)
 <template>
   <section class="production-page">
     <header class="production-header">
-      <div><p class="eyebrow">Studio / Chapter Production</p><h1>Chapter Production</h1><p>Đi theo pipeline Plan → Generation → Review → Narration → Audio → Publish. Mọi trạng thái và blocker vẫn lấy authority từ backend.</p></div>
+      <div><p class="eyebrow">Studio / Chapter Production</p><h1>Chapter Production</h1><p>Đi theo pipeline Plan → Generation → Review → Canon / Memory → Narration → Audio → Publish. Mọi trạng thái và blocker vẫn lấy authority từ backend.</p></div>
       <RouterLink class="back-link" :to="`/admin/stories/${storyID}/planning`">← Story Planning Studio</RouterLink>
     </header>
     <p v-if="loading" class="page-status" role="status">Đang tải production workspace...</p>
@@ -371,6 +433,10 @@ onMounted(load)
             <div class="stage-index" aria-hidden="true">{{ index + 1 }}</div><div class="stage-copy"><div class="stage-title-row"><h3>{{ stage.label }}</h3><span :class="['state-badge', `state-${stage.state}`]">{{ stageStateLabel(stage.state) }}</span></div><p>{{ stage.summary }}</p><p v-if="stage.blocker" class="blocker-copy">{{ stage.blocker }}</p></div>
           </li>
         </ol>
+
+        <div class="canon-workspace-panel">
+          <CanonMemoryPanel :state="canonState" :disabled="selectionLoading || Boolean(action)" @commit="commitCanonMemory" @retry="retryCanonAuthority" />
+        </div>
 
         <section class="preview-panel" aria-labelledby="audio-preview-title">
           <div class="panel-heading">
@@ -444,6 +510,7 @@ onMounted(load)
 .stage-index { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-weight: 800; }
 .stage-copy { min-width: 0; }.stage-copy p { margin: 8px 0 0; line-height: 1.45; overflow-wrap: anywhere; }.blocker-copy { font-weight: 650; }
 .stage-loading, .state-loading, .stage-waiting, .state-waiting { opacity: .72; }.stage-blocked, .state-blocked, .stage-failed, .state-failed { border-style: dashed; }
+.canon-workspace-panel { margin-top: 20px; }
 .preview-panel { margin-top: 20px; padding: 18px; border: 1px solid var(--border-color, #d8d8d8); border-radius: 14px; }.preview-copy { line-height: 1.5; }.preview-player { display: grid; gap: 12px; }.preview-player audio { width: 100%; min-height: 44px; }.preview-button { min-height: 44px; padding: 9px 14px; border: 1px solid currentColor; border-radius: 10px; background: transparent; font: inherit; cursor: pointer; }.preview-button:hover, .preview-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }.preview-button:disabled { opacity: .5; cursor: not-allowed; }.preview-button.secondary { justify-self: start; }.preview-error { border-left: 3px solid #b42318; padding-left: 12px; }.preview-error p { color: #b42318; font-weight: 650; }
 .action-panel { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color, #d8d8d8); }.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }.actions button, .action-link { min-height: 44px; padding: 9px 14px; border-radius: 10px; font: inherit; }.actions button { border: 1px solid currentColor; background: transparent; cursor: pointer; }.actions button:hover:not(:disabled), .actions button:focus-visible, .action-link:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }.actions button:disabled { opacity: .5; cursor: not-allowed; }.primary-action { font-weight: 800; }.action-progress, .page-status { font-weight: 650; }
 .technical-details { margin-top: 20px; border-top: 1px solid var(--border-color, #d8d8d8); padding-top: 16px; }.technical-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }.detail-grid { display: grid; gap: 8px; }.detail-grid p { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; margin: 0; }.detail-grid span { overflow-wrap: anywhere; }
