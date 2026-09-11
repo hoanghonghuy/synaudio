@@ -317,7 +317,7 @@ func (h *Handler) createPlotThreadEvent(w http.ResponseWriter, r *http.Request) 
 
 	e, err := h.svc.CreatePlotThreadEvent(r.Context(), threadID, req.EventType, req.ChapterID, req.Detail)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_EVENT", "invalid event")
+		writeError(w, http.StatusBadRequest, "INVALID_EVENT", "invalid plot thread event")
 		return
 	}
 
@@ -638,6 +638,26 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	})
 }
 
+func requireCreativeDecisionAdminActor(w http.ResponseWriter, r *http.Request) (string, bool) {
+	actorID := httpapi.AdminActorID(r.Context())
+	if actorID == "" {
+		writeError(w, http.StatusUnauthorized, "ADMIN_ACTOR_REQUIRED", "authenticated admin actor is required")
+		return "", false
+	}
+	return actorID, true
+}
+
+func writeCreativeDecisionMutationError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrCreativeDecisionNotFound):
+		writeError(w, http.StatusNotFound, "DECISION_NOT_FOUND", "decision not found")
+	case errors.Is(err, ErrCreativeDecisionInvalidTransition):
+		writeError(w, http.StatusConflict, "CREATIVE_DECISION_INVALID_TRANSITION", "creative decision transition is not allowed")
+	default:
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+	}
+}
+
 type createCreativeDecisionRequest struct {
 	ChapterID      string `json:"chapter_id"`
 	ArcID          string `json:"arc_id"`
@@ -659,9 +679,9 @@ func (h *Handler) createCreativeDecision(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	createdBy := req.CreatedBy
-	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
-		createdBy = actorID
+	createdBy, ok := requireCreativeDecisionAdminActor(w, r)
+	if !ok {
+		return
 	}
 	d, err := h.svc.CreateCreativeDecision(r.Context(), CreateCreativeDecisionInput{
 		StoryID:        storyID,
@@ -708,17 +728,13 @@ func (h *Handler) selectCreativeDecision(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	selectedBy := req.SelectedBy
-	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
-		selectedBy = actorID
+	selectedBy, ok := requireCreativeDecisionAdminActor(w, r)
+	if !ok {
+		return
 	}
 	d, err := h.svc.SelectCreativeDecision(r.Context(), decisionID, selectedBy)
 	if err != nil {
-		if errors.Is(err, ErrCreativeDecisionNotFound) {
-			writeError(w, http.StatusNotFound, "DECISION_NOT_FOUND", "decision not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		writeCreativeDecisionMutationError(w, err)
 		return
 	}
 
@@ -739,17 +755,13 @@ func (h *Handler) rejectCreativeDecision(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	rejectedBy := req.RejectedBy
-	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
-		rejectedBy = actorID
+	rejectedBy, ok := requireCreativeDecisionAdminActor(w, r)
+	if !ok {
+		return
 	}
 	d, err := h.svc.RejectCreativeDecision(r.Context(), decisionID, rejectedBy, req.Scope)
 	if err != nil {
-		if errors.Is(err, ErrCreativeDecisionNotFound) {
-			writeError(w, http.StatusNotFound, "DECISION_NOT_FOUND", "decision not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		writeCreativeDecisionMutationError(w, err)
 		return
 	}
 

@@ -8,7 +8,8 @@ import (
 )
 
 var (
-	ErrCreativeDecisionNotFound = errors.New("creative decision not found")
+	ErrCreativeDecisionNotFound          = errors.New("creative decision not found")
+	ErrCreativeDecisionInvalidTransition = errors.New("creative decision invalid transition")
 )
 
 // CreativeDecision is a controlled creative choice that may require admin input.
@@ -88,11 +89,14 @@ func (s *Service) CreateCreativeDecision(ctx context.Context, in CreateCreativeD
 	return s.store.CreateCreativeDecision(ctx, d)
 }
 
-// SelectCreativeDecision marks a decision as SELECTED by an admin.
+// SelectCreativeDecision marks a PROPOSED decision as SELECTED by an admin.
 func (s *Service) SelectCreativeDecision(ctx context.Context, id, selectedBy string) (CreativeDecision, error) {
 	d, err := s.store.GetCreativeDecision(ctx, id)
 	if err != nil {
 		return CreativeDecision{}, err
+	}
+	if d.Status != "PROPOSED" {
+		return CreativeDecision{}, ErrCreativeDecisionInvalidTransition
 	}
 
 	d.Status = "SELECTED"
@@ -101,11 +105,14 @@ func (s *Service) SelectCreativeDecision(ctx context.Context, id, selectedBy str
 	return s.store.UpdateCreativeDecision(ctx, d)
 }
 
-// RejectCreativeDecision marks a decision as REJECTED.
+// RejectCreativeDecision marks a PROPOSED decision as REJECTED.
 func (s *Service) RejectCreativeDecision(ctx context.Context, id, rejectedBy, scope string) (CreativeDecision, error) {
 	d, err := s.store.GetCreativeDecision(ctx, id)
 	if err != nil {
 		return CreativeDecision{}, err
+	}
+	if d.Status != "PROPOSED" {
+		return CreativeDecision{}, ErrCreativeDecisionInvalidTransition
 	}
 
 	d.Status = "REJECTED"
