@@ -180,7 +180,11 @@ func propertyType(raw any, all map[string]any) string {
 		if items == nil {
 			return "unknown[]"
 		}
-		return propertyType(items, all) + "[]"
+		itemType := propertyType(items, all)
+		if strings.Contains(itemType, " | ") {
+			itemType = "(" + itemType + ")"
+		}
+		return itemType + "[]"
 	case "object":
 		if obj["additionalProperties"] != nil {
 			return "Record<string, unknown>"
