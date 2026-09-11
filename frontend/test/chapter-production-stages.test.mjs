@@ -9,7 +9,7 @@ import {
 
 test('selection loading is represented across every production stage', () => {
   const stages = buildChapterProductionStages({ selectionLoading: true })
-  assert.equal(stages.length, 6)
+  assert.equal(stages.length, 7)
   assert.ok(stages.every((stage) => stage.state === 'loading'))
 })
 
@@ -34,11 +34,50 @@ test('failed generation exposes actionable recovery semantics', () => {
   assert.equal(getPrimaryProductionStage(stages).id, 'generation')
 })
 
+test('canon memory becomes the next attention after review until exact approved revision is current', () => {
+  const readyToCommit = buildChapterProductionStages({
+    hasPlanRevision: true,
+    generationJobStatus: 'SUCCEEDED',
+    hasApprovedRevision: true,
+    canonStatus: 'READY TO COMMIT — approved revision rev-2 mới hơn Canon source rev-1',
+    narrationStatus: 'READY — có thể tạo narration từ approved revision hiện hành',
+  })
+  const canon = readyToCommit.find((stage) => stage.id === 'canon')
+  assert.equal(canon.state, 'waiting')
+  assert.match(canon.blocker, /exact approved revision/)
+  assert.equal(getPrimaryProductionStage(readyToCommit).id, 'canon')
+
+  const current = buildChapterProductionStages({
+    hasPlanRevision: true,
+    generationJobStatus: 'SUCCEEDED',
+    hasApprovedRevision: true,
+    canonStatus: 'CURRENT — Canon/Memory đã commit từ approved revision rev-2',
+    narrationStatus: 'WAITING — chưa có narration authoritative',
+  })
+  assert.equal(current.find((stage) => stage.id === 'canon').state, 'ready')
+  assert.equal(getPrimaryProductionStage(current).id, 'narration')
+})
+
+test('missing canon authority fails closed instead of allowing client-side readiness inference', () => {
+  const stages = buildChapterProductionStages({
+    hasPlanRevision: true,
+    generationJobStatus: 'SUCCEEDED',
+    hasApprovedRevision: true,
+    canonStatus: 'BLOCKED — thiếu ACTIVE OFFICIAL CanonBranch authority',
+    narrationStatus: 'READY — có thể tạo narration từ approved revision hiện hành',
+  })
+  const canon = stages.find((stage) => stage.id === 'canon')
+  assert.equal(canon.state, 'blocked')
+  assert.match(canon.blocker, /ACTIVE OFFICIAL/)
+  assert.equal(getPrimaryProductionStage(stages).id, 'canon')
+})
+
 test('stale audio projection remains blocked and is never promoted client-side', () => {
   const stages = buildChapterProductionStages({
     hasPlanRevision: true,
     generationJobStatus: 'SUCCEEDED',
     hasApprovedRevision: true,
+    canonStatus: 'CURRENT — Canon/Memory đã commit từ approved revision rev-3',
     narrationStatus: 'Revision #3',
     audioStatus: 'BLOCKED — READY asset thuộc narration cũ, không khớp narration mới nhất',
     publishStatus: 'BLOCKED — thiếu: Active durable audio',
@@ -53,6 +92,7 @@ test('active audio and published chapter produce terminal states', () => {
     hasPlanRevision: true,
     generationJobStatus: 'SUCCEEDED',
     hasApprovedRevision: true,
+    canonStatus: 'CURRENT — Canon/Memory đã commit từ approved revision rev-4',
     narrationStatus: 'Revision #4',
     audioStatus: 'ACTIVE v4 · asset-4',
     publishStatus: 'PUBLISHED · chapter-1',
