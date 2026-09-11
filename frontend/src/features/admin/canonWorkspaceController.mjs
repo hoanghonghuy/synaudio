@@ -5,6 +5,14 @@ function messageFrom(error, fallback) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
+function snapshotApprovedRevision(revision) {
+  if (!revision) return null
+  return {
+    ...revision,
+    ID: String(revision.ID ?? '').trim(),
+  }
+}
+
 /**
  * Orchestrates the Chapter Production Canon/Memory authority lifecycle.
  *
@@ -40,7 +48,7 @@ export function createCanonWorkspaceController(api) {
       ? {
           storyID: String(nextSelection.storyID ?? '').trim(),
           chapterID: String(nextSelection.chapterID ?? '').trim(),
-          approvedRevision: nextSelection.approvedRevision ?? null,
+          approvedRevision: snapshotApprovedRevision(nextSelection.approvedRevision),
         }
       : null
 
