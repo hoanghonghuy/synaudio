@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	ErrRetconNotFound = errors.New("retcon request not found")
-	ErrRetconNotReady = errors.New("retcon request not ready to apply")
+	ErrRetconNotFound          = errors.New("retcon request not found")
+	ErrRetconNotReady          = errors.New("retcon request not ready to apply")
+	ErrRetconInvalidTransition = errors.New("invalid retcon lifecycle transition")
 )
 
 // RetconRequest is a controlled request to change published story history.
@@ -75,11 +76,14 @@ func (s *Service) CreateRetconRequest(ctx context.Context, in CreateRetconInput)
 	return s.store.CreateRetconRequest(ctx, r)
 }
 
-// ApproveRetconRequest marks a retcon request as APPROVED.
+// ApproveRetconRequest marks a DRAFT or ANALYZING retcon request as APPROVED.
 func (s *Service) ApproveRetconRequest(ctx context.Context, id, approvedBy string) (RetconRequest, error) {
 	r, err := s.store.GetRetconRequest(ctx, id)
 	if err != nil {
 		return RetconRequest{}, err
+	}
+	if r.Status != "DRAFT" && r.Status != "ANALYZING" {
+		return RetconRequest{}, ErrRetconInvalidTransition
 	}
 
 	r.Status = "APPROVED"
@@ -88,11 +92,14 @@ func (s *Service) ApproveRetconRequest(ctx context.Context, id, approvedBy strin
 	return s.store.UpdateRetconRequest(ctx, r)
 }
 
-// CancelRetconRequest marks a retcon request as CANCELLED.
+// CancelRetconRequest marks a non-terminal retcon request as CANCELLED.
 func (s *Service) CancelRetconRequest(ctx context.Context, id string) (RetconRequest, error) {
 	r, err := s.store.GetRetconRequest(ctx, id)
 	if err != nil {
 		return RetconRequest{}, err
+	}
+	if r.Status == "APPLIED" || r.Status == "CANCELLED" {
+		return RetconRequest{}, ErrRetconInvalidTransition
 	}
 
 	r.Status = "CANCELLED"
@@ -110,6 +117,9 @@ func (s *Service) AnalyzeRetconRequest(ctx context.Context, id string) (RetconRe
 	r, err := s.store.GetRetconRequest(ctx, id)
 	if err != nil {
 		return RetconRequest{}, err
+	}
+	if r.Status != "DRAFT" {
+		return RetconRequest{}, ErrRetconInvalidTransition
 	}
 
 	r.Status = "ANALYZING"
