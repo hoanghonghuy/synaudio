@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import {
   analyzeThreadInactivity,
@@ -7,6 +7,10 @@ import {
   listCreativeDecisions,
   listUsage,
 } from '../../api/client'
+import {
+  rejectCreativeDecision,
+  selectCreativeDecision,
+} from '../../api/creative-decisions'
 import type {
   AttentionItem,
   CreativeDecision,
@@ -15,7 +19,7 @@ import type {
 } from '../../api/types'
 
 const route = useRoute()
-const storyID = route.params.storyID as string
+const storyID = computed(() => String(route.params.storyID ?? ''))
 
 const decisions = ref<CreativeDecision[]>([])
 const attention = ref<AttentionItem[]>([])
@@ -24,10 +28,19 @@ const usage = ref<UsageRecord[]>([])
 
 const loading = ref(false)
 const error = ref('')
+const mutationError = ref('')
+const mutationMessage = ref('')
+const pendingDecisionID = ref('')
+const rejectingDecisionID = ref('')
+const rejectionScopes = ref<Record<string, string>>({})
+let loadGeneration = 0
+let decisionRefreshGeneration = 0
+let mutationGeneration = 0
 
+const proposedDecisionCount = computed(() => decisions.value.filter((decision) => decision.Status === 'PROPOSED').length)
 const summaryItems = computed(() => [
   { label: 'Cần chú ý', value: attention.value.length },
-  { label: 'Quyết định mở', value: decisions.value.length },
+  { label: 'Quyết định mở', value: proposedDecisionCount.value },
   { label: 'Mạch ít hoạt động', value: inactiveThreads.value.length },
   { label: 'Lần gọi gần đây', value: usage.value.length },
 ])
@@ -41,28 +54,110 @@ function priorityLabel(priority: string) {
   return labels[priority] ?? priority
 }
 
+function decisionStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    PROPOSED: 'Chờ quyết định',
+    SELECTED: 'Đã chọn',
+    REJECTED: 'Đã từ chối',
+  }
+  return labels[status] ?? status
+}
+
+async function refreshDecisions(expectedStoryID = storyID.value) {
+  const generation = ++decisionRefreshGeneration
+  const response = await listCreativeDecisions(expectedStoryID)
+  if (generation !== decisionRefreshGeneration || expectedStoryID !== storyID.value) return
+  decisions.value = response.decisions
+}
+
 async function load() {
+  const expectedStoryID = storyID.value
+  const generation = ++loadGeneration
+  ++decisionRefreshGeneration
   loading.value = true
   error.value = ''
+  mutationError.value = ''
+  mutationMessage.value = ''
+
   try {
     const [d, a, t, u] = await Promise.all([
-      listCreativeDecisions(storyID),
-      listAttentionItems(storyID),
-      analyzeThreadInactivity(storyID),
-      listUsage(storyID),
+      listCreativeDecisions(expectedStoryID),
+      listAttentionItems(expectedStoryID),
+      analyzeThreadInactivity(expectedStoryID),
+      listUsage(expectedStoryID),
     ])
+    if (generation !== loadGeneration || expectedStoryID !== storyID.value) return
     decisions.value = d.decisions
     attention.value = a.items
     inactiveThreads.value = t.inactive_threads
     usage.value = u.usage
   } catch (e) {
+    if (generation !== loadGeneration || expectedStoryID !== storyID.value) return
     error.value = e instanceof Error ? e.message : 'Không thể tải dữ liệu điều khiển.'
   } finally {
-    loading.value = false
+    if (generation === loadGeneration) loading.value = false
   }
 }
 
-onMounted(load)
+async function runDecisionMutation(decision: CreativeDecision, action: 'select' | 'reject') {
+  if (pendingDecisionID.value || decision.Status !== 'PROPOSED') return
+
+  const expectedStoryID = storyID.value
+  const generation = ++mutationGeneration
+  const rejectionScope = rejectionScopes.value[decision.ID]?.trim() ?? ''
+  if (action === 'reject' && !rejectionScope) {
+    mutationError.value = 'Hãy nhập phạm vi/lý do từ chối trước khi xác nhận.'
+    return
+  }
+
+  pendingDecisionID.value = decision.ID
+  mutationError.value = ''
+  mutationMessage.value = ''
+
+  try {
+    if (action === 'select') {
+      await selectCreativeDecision(decision.ID)
+    } else {
+      await rejectCreativeDecision(decision.ID, rejectionScope)
+    }
+
+    if (generation !== mutationGeneration || expectedStoryID !== storyID.value) return
+    mutationMessage.value = action === 'select'
+      ? 'Đã chọn quyết định. Đang đồng bộ trạng thái từ máy chủ.'
+      : 'Đã từ chối quyết định. Đang đồng bộ trạng thái từ máy chủ.'
+    rejectingDecisionID.value = ''
+    await refreshDecisions(expectedStoryID)
+  } catch (e) {
+    if (generation !== mutationGeneration || expectedStoryID !== storyID.value) return
+    mutationError.value = e instanceof Error ? e.message : 'Không thể cập nhật quyết định.'
+    try {
+      await refreshDecisions(expectedStoryID)
+    } catch {
+      // Preserve the mutation error; the explicit page retry remains available.
+    }
+  } finally {
+    if (generation === mutationGeneration) pendingDecisionID.value = ''
+  }
+}
+
+function beginReject(decisionID: string) {
+  mutationError.value = ''
+  mutationMessage.value = ''
+  rejectingDecisionID.value = decisionID
+}
+
+function cancelReject() {
+  rejectingDecisionID.value = ''
+  mutationError.value = ''
+}
+
+watch(storyID, () => {
+  ++mutationGeneration
+  pendingDecisionID.value = ''
+  rejectingDecisionID.value = ''
+  rejectionScopes.value = {}
+  void load()
+}, { immediate: true })
 </script>
 
 <template>
@@ -127,16 +222,77 @@ onMounted(load)
               </div>
               <span class="count-label">{{ decisions.length }}</span>
             </div>
+            <div class="decision-feedback" aria-live="polite" aria-atomic="true">
+              <p v-if="mutationMessage" class="note success-note">{{ mutationMessage }}</p>
+              <p v-if="mutationError" class="note error" role="alert">{{ mutationError }}</p>
+            </div>
             <p v-if="decisions.length === 0" class="note">Không có quyết định nào.</p>
-            <ul v-else class="item-list">
-              <li v-for="d in decisions" :key="d.ID" class="item-row">
-                <strong>{{ d.Question }}</strong>
+            <ul v-else class="item-list decision-list">
+              <li v-for="d in decisions" :key="d.ID" class="item-row decision-row">
+                <div class="decision-heading-row">
+                  <strong class="decision-question">{{ d.Question }}</strong>
+                  <span class="badge" :class="`decision-status decision-status-${d.Status.toLowerCase()}`">
+                    {{ decisionStatusLabel(d.Status) }}
+                  </span>
+                </div>
                 <div class="item-meta">
                   <span>{{ d.Severity }}</span>
-                  <span>{{ d.Status }}</span>
                   <span>{{ d.BlockingLevel }}</span>
                 </div>
-                <p v-if="d.ContextSummary" class="muted">{{ d.ContextSummary }}</p>
+                <p v-if="d.ContextSummary" class="muted decision-context">{{ d.ContextSummary }}</p>
+
+                <div v-if="d.Status === 'PROPOSED'" class="decision-actions" :aria-busy="pendingDecisionID === d.ID">
+                  <button
+                    class="decision-button"
+                    type="button"
+                    :disabled="Boolean(pendingDecisionID)"
+                    @click="runDecisionMutation(d, 'select')"
+                  >
+                    {{ pendingDecisionID === d.ID ? 'Đang xử lý…' : 'Chọn quyết định' }}
+                  </button>
+                  <button
+                    class="decision-button decision-button-danger"
+                    type="button"
+                    :disabled="Boolean(pendingDecisionID)"
+                    :aria-expanded="rejectingDecisionID === d.ID"
+                    @click="beginReject(d.ID)"
+                  >
+                    Từ chối…
+                  </button>
+                </div>
+
+                <form
+                  v-if="d.Status === 'PROPOSED' && rejectingDecisionID === d.ID"
+                  class="reject-form"
+                  @submit.prevent="runDecisionMutation(d, 'reject')"
+                >
+                  <label :for="`reject-scope-${d.ID}`">Phạm vi / lý do từ chối</label>
+                  <textarea
+                    :id="`reject-scope-${d.ID}`"
+                    v-model="rejectionScopes[d.ID]"
+                    rows="3"
+                    maxlength="500"
+                    required
+                    :disabled="Boolean(pendingDecisionID)"
+                    placeholder="Mô tả rõ quyết định này bị từ chối vì sao hoặc phạm vi cần tránh."
+                  />
+                  <div class="reject-form-actions">
+                    <button
+                      class="decision-button decision-button-danger"
+                      type="submit"
+                      :disabled="Boolean(pendingDecisionID) || !rejectionScopes[d.ID]?.trim()"
+                    >
+                      {{ pendingDecisionID === d.ID ? 'Đang từ chối…' : 'Xác nhận từ chối' }}
+                    </button>
+                    <button class="decision-button" type="button" :disabled="Boolean(pendingDecisionID)" @click="cancelReject">
+                      Hủy
+                    </button>
+                  </div>
+                </form>
+
+                <p v-else-if="d.Status === 'SELECTED' || d.Status === 'REJECTED'" class="terminal-note">
+                  Trạng thái cuối — không thể mở lại từ màn hình này.
+                </p>
               </li>
             </ul>
           </section>
@@ -188,3 +344,118 @@ onMounted(load)
     </template>
   </section>
 </template>
+
+<style scoped>
+.decision-list,
+.decision-row {
+  min-width: 0;
+}
+
+.decision-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.decision-question,
+.decision-context {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.decision-status {
+  flex: 0 0 auto;
+}
+
+.decision-status-selected {
+  opacity: 0.9;
+}
+
+.decision-status-rejected {
+  opacity: 0.75;
+}
+
+.decision-actions,
+.reject-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.decision-button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid currentColor;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.decision-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.decision-button:focus-visible,
+.reject-form textarea:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 2px;
+}
+
+.decision-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.decision-button-danger {
+  font-weight: 650;
+}
+
+.reject-form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border: 1px solid currentColor;
+  border-radius: 0.75rem;
+}
+
+.reject-form label {
+  font-weight: 650;
+}
+
+.reject-form textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font: inherit;
+}
+
+.terminal-note,
+.success-note {
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 560px) {
+  .decision-heading-row {
+    flex-direction: column;
+  }
+
+  .decision-actions,
+  .reject-form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .decision-button {
+    width: 100%;
+  }
+}
+</style>
