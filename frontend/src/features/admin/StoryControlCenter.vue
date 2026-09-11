@@ -73,6 +73,8 @@ onMounted(load)
     <p class="page-intro">Ưu tiên các điểm cần quyết định trước khi tiếp tục tạo nội dung.</p>
     <p>
       <RouterLink class="secondary-link" :to="`/admin/stories/${storyID}/production`">Mở Chapter Production →</RouterLink>
+      <span aria-hidden="true"> · </span>
+      <RouterLink class="secondary-link" :to="`/admin/stories/${storyID}/retcons`">Mở Retcon Governance →</RouterLink>
     </p>
 
     <p v-if="loading" class="status-state" role="status" aria-live="polite">Đang tải dữ liệu điều khiển...</p>

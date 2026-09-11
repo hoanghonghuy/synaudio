@@ -9,6 +9,7 @@ import ListenerLibraryPage from '../features/library/LibraryPage.vue'
 import StoryControlCenter from '../features/admin/StoryControlCenter.vue'
 import StoryPlanningStudio from '../features/admin/StoryPlanningStudio.vue'
 import ChapterProductionWorkspace from '../features/admin/ChapterProductionWorkspace.vue'
+import RetconWorkbench from '../features/admin/RetconWorkbench.vue'
 import AuthPage from '../features/auth/AuthPage.vue'
 import ForgotPasswordPage from '../features/auth/ForgotPasswordPage.vue'
 import ResetPasswordPage from '../features/auth/ResetPasswordPage.vue'
@@ -107,6 +108,12 @@ export const router = createRouter({
       path: '/admin/stories/:storyID/control',
       name: 'control-center',
       component: StoryControlCenter,
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/admin/stories/:storyID/retcons',
+      name: 'retcon-workbench',
+      component: RetconWorkbench,
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
