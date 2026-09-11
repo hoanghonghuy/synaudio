@@ -19,6 +19,7 @@ import {
   retconStatusLabel,
   type RetconAction,
 } from './retconPresentation.mjs'
+import { createRetconSelectionGuard } from './retconSelectionGuard.mjs'
 
 const route = useRoute()
 const storyID = computed(() => String(route.params.storyID ?? ''))
@@ -30,6 +31,7 @@ const detailLoading = ref(false)
 const busyAction = ref<RetconAction | null>(null)
 const error = ref('')
 const success = ref('')
+const detailGuard = createRetconSelectionGuard()
 
 const actions = computed(() => selected.value ? retconActions(selected.value.Status) : [])
 
@@ -55,33 +57,44 @@ async function loadList(preferredID = selectedID.value) {
     items.value = response.retcons
     if (preferredID && items.value.some((item) => item.ID === preferredID)) selectedID.value = preferredID
     else selectedID.value = items.value[0]?.ID ?? ''
-    await loadDetail()
+    if (!selectedID.value) {
+      detailGuard.clear()
+      selected.value = null
+      detailLoading.value = false
+    }
   } catch (e) {
     error.value = messageFor(e)
+    detailGuard.clear()
     selected.value = null
   } finally {
     loading.value = false
   }
 }
 
-async function loadDetail() {
-  if (!selectedID.value) {
+async function loadDetail(id: string) {
+  if (!id) {
+    detailGuard.clear()
     selected.value = null
+    detailLoading.value = false
     return
   }
+  const request = detailGuard.select(id)
   detailLoading.value = true
   error.value = ''
   try {
-    selected.value = await getRetcon(selectedID.value)
+    const response = await getRetcon(id)
+    if (!detailGuard.isCurrent(request)) return
+    selected.value = response
   } catch (e) {
+    if (!detailGuard.isCurrent(request)) return
     error.value = messageFor(e)
     selected.value = null
   } finally {
-    detailLoading.value = false
+    if (detailGuard.isCurrent(request)) detailLoading.value = false
   }
 }
 
-watch(selectedID, () => { void loadDetail() })
+watch(selectedID, (id) => { void loadDetail(id) }, { immediate: true })
 
 async function perform(action: RetconAction) {
   if (!selected.value || busyAction.value) return
@@ -103,10 +116,12 @@ async function perform(action: RetconAction) {
     else if (action === 'apply') await applyRetcon(id)
     else await cancelRetcon(id)
     await loadList(id)
+    if (selectedID.value === id) await loadDetail(id)
     success.value = `${retconActionLabel(action)} thành công. Trạng thái đã được tải lại từ authority.`
   } catch (e) {
     const mutationError = messageFor(e)
     await loadList(id)
+    if (selectedID.value === id) await loadDetail(id)
     error.value = mutationError
   } finally {
     busyAction.value = null
