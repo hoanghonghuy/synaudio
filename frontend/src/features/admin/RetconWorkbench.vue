@@ -105,8 +105,9 @@ async function perform(action: RetconAction) {
     await loadList(id)
     success.value = `${retconActionLabel(action)} thành công. Trạng thái đã được tải lại từ authority.`
   } catch (e) {
-    error.value = messageFor(e)
+    const mutationError = messageFor(e)
     await loadList(id)
+    error.value = mutationError
   } finally {
     busyAction.value = null
   }
