@@ -1,0 +1,1151 @@
+components:
+  schemas:
+    # --- Primitives & shared envelopes ---
+    RelistenStatus:
+      type: string
+      enum: [NO_RELISTEN_NEEDED, RELISTEN_REQUIRED, RELISTEN_RECOMMENDED]
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/ErrorBody" }
+    ProgressConflictResponse:
+      type: object
+      required: [error, progress]
+      properties:
+        error: { $ref: "#/components/schemas/ErrorBody" }
+        progress: { $ref: "#/components/schemas/ListeningProgressPascal" }
+    StatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+    ReadinessResponse:
+      type: object
+      required: [ready, missing]
+      properties:
+        ready: { type: boolean }
+        missing:
+          type: array
+          items: { type: string }
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+    ReadyResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ready, degraded, unavailable] }
+        error: { type: string }
+        dependencies:
+          type: object
+          additionalProperties: { type: string }
+
+    # --- Auth ---
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    EmailVerifyRequest:
+      type: object
+      required: [email, token]
+      properties:
+        email: { type: string, format: email }
+        token: { type: string }
+    EmailResendRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    PasswordForgotRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    PasswordResetRequest:
+      type: object
+      required: [email, token, new_password]
+      properties:
+        email: { type: string, format: email }
+        token: { type: string }
+        new_password: { type: string, minLength: 8 }
+    MFAConfirmRequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string }
+    ReAuthRequest:
+      type: object
+      properties:
+        code: { type: string }
+        recovery_code: { type: string }
+    UserResponse:
+      type: object
+      required: [id, email, status]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DEACTIVATED] }
+    TokenResponse:
+      type: object
+      required: [status, access_token, token_type, expires_in]
+      properties:
+        status: { type: string }
+        access_token: { type: string }
+        token_type: { type: string, enum: [Bearer] }
+        expires_in: { type: integer, format: int64 }
+    MeResponse:
+      type: object
+      required: [id, email, status, email_verified, roles, mfa_enabled]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        status: { type: string }
+        email_verified: { type: boolean }
+        roles:
+          type: array
+          items: { type: string, enum: [GUEST, USER, ADMIN] }
+        mfa_enabled: { type: boolean }
+    SessionResponse:
+      type: object
+      required: [id, current, created_at, last_used_at, expires_at]
+      properties:
+        id: { type: string }
+        current: { type: boolean }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        user_agent_summary: { type: string }
+        safe_ip_metadata: { type: string }
+    SessionListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SessionResponse" }
+    MFASetupResponse:
+      type: object
+      required: [secret]
+      properties:
+        secret: { type: string }
+    AdminUserSummary:
+      type: object
+      required: [id, email, display_name, status, email_verified, roles]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DEACTIVATED] }
+        email_verified: { type: boolean }
+        roles:
+          type: array
+          items: { type: string, enum: [GUEST, USER, ADMIN] }
+    AdminUserListResponse:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUserSummary" }
+    AdminStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DEACTIVATED] }
+    MFAConfirmResponse:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes:
+          type: array
+          items: { type: string }
+
+    # --- Story / catalog ---
+    StorySummary:
+      type: object
+      required: [id, slug, title, description, status, visibility]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [DRAFT, ACTIVE, COMPLETED, ARCHIVED] }
+        visibility: { type: string, enum: [PRIVATE, PUBLIC] }
+    StoryListResponse:
+      type: object
+      required: [stories]
+      properties:
+        stories:
+          type: array
+          items: { $ref: "#/components/schemas/StorySummary" }
+    Genre:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+    GenreListResponse:
+      type: object
+      required: [genres]
+      properties:
+        genres:
+          type: array
+          items: { $ref: "#/components/schemas/Genre" }
+    GenerationPolicyResponse:
+      type: object
+      required: [story_id, minimum_audio_duration_sec, target_audio_duration_sec, content_origin, language, narration_language, policy_version]
+      properties:
+        story_id: { type: string }
+        minimum_audio_duration_sec: { type: integer }
+        target_audio_duration_sec: { type: integer }
+        content_origin: { type: string }
+        language: { type: string }
+        narration_language: { type: string }
+        policy_version: { type: integer }
+    GenerationPolicyInput:
+      type: object
+      properties:
+        minimum_audio_duration_sec: { type: integer }
+        target_audio_duration_sec: { type: integer }
+        content_origin: { type: string }
+        language: { type: string }
+        narration_language: { type: string }
+    CreateStoryRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        created_by: { type: string, description: "Server-overridden for admin routes" }
+        policy: { $ref: "#/components/schemas/GenerationPolicyInput" }
+    WorkflowSettingsRequest:
+      type: object
+      properties:
+        batch_generation_size: { type: integer }
+        creative_autonomy: { type: string }
+        preferred_text_provider: { type: string }
+        preferred_text_model: { type: string }
+        preferred_tts_provider: { type: string }
+        preferred_voice_id: { type: string }
+        pause_before_tts: { type: boolean }
+        auto_ai_review: { type: boolean }
+        planning_horizon: { type: integer }
+        fallback_policy: { type: object, additionalProperties: true }
+    WorkflowSettingsResponse:
+      type: object
+      required: [story_id]
+      properties:
+        story_id: { type: string }
+        batch_generation_size: { type: integer }
+        creative_autonomy: { type: string }
+        preferred_text_provider: { type: string }
+        preferred_text_model: { type: string }
+        preferred_tts_provider: { type: string }
+        preferred_voice_id: { type: string }
+        pause_before_tts: { type: boolean }
+        auto_ai_review: { type: boolean }
+        planning_horizon: { type: integer }
+        fallback_policy: { type: object, additionalProperties: true }
+    ContentProfileRequest:
+      type: object
+      properties:
+        maturity_target: { type: string }
+        allowed_themes: { type: array, items: { type: string } }
+        disallowed_themes: { type: array, items: { type: string } }
+        violence_level: { type: string }
+        language_limits: { type: string }
+        romance_limits: { type: string }
+        constraints: { type: object, additionalProperties: true }
+    ContentProfileResponse:
+      type: object
+      required: [id, story_id, version_no, profile]
+      properties:
+        id: { type: string }
+        story_id: { type: string }
+        version_no: { type: integer }
+        profile: { type: object, additionalProperties: true }
+    StoryAssetResponse:
+      type: object
+      required: [id, story_id, type, storage_key, mime_type, size_bytes, status]
+      properties:
+        id: { type: string }
+        story_id: { type: string }
+        type: { type: string, enum: [COVER] }
+        storage_key: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer, format: int64 }
+        status: { type: string, enum: [PENDING, READY] }
+    UpdateMetadataRequest:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+    ActivationReadinessResponse:
+      type: object
+      required: [ready, missing]
+      properties:
+        ready: { type: boolean }
+        missing: { type: array, items: { type: string } }
+        generation_policy: { $ref: "#/components/schemas/GenerationPolicyResponse" }
+        story_workspace:
+          type: object
+          properties:
+            planning_mode: { type: string }
+            planning_phase: { type: string }
+            public_rating: { type: string }
+            public_warnings: { type: array, items: { type: string } }
+            cover_asset_id: { type: string }
+
+    # --- Planning (PascalCase JSON from domain structs) ---
+    ChapterPascal:
+      type: object
+      required: [ID, StoryID, ChapterNumber, Title, Status]
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        ChapterNumber: { type: integer }
+        Title: { type: string }
+        Status: { type: string, enum: [DRAFT, READY, PUBLISHED, ARCHIVED] }
+        ArcID: { type: string }
+    ChapterListResponse:
+      type: object
+      required: [chapters]
+      properties:
+        chapters:
+          type: array
+          items: { $ref: "#/components/schemas/ChapterPascal" }
+    PublishedChapterListResponse:
+      type: object
+      required: [chapters]
+      properties:
+        chapters:
+          type: array
+          items: { $ref: "#/components/schemas/ChapterPascal" }
+    FoundationRequest:
+      type: object
+      required: [premise]
+      properties:
+        premise: { type: string }
+        created_by: { type: string }
+    FoundationResponse:
+      type: object
+      properties:
+        bible: { $ref: "#/components/schemas/StoryBibleVersionPascal" }
+        ending: { $ref: "#/components/schemas/EndingPlanVersionPascal" }
+        arcs: { type: array, items: { $ref: "#/components/schemas/StoryArcPascal" } }
+        characters: { type: array, items: { $ref: "#/components/schemas/CharacterPascal" } }
+    VersionContentRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: object, additionalProperties: true }
+    StoryBibleVersionPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        VersionNo: { type: integer }
+        Content: { type: object, additionalProperties: true }
+        BasedOnVersionID: { type: string }
+        CreatedBy: { type: string }
+    EndingPlanVersionPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        VersionNo: { type: integer }
+        Content: { type: object, additionalProperties: true }
+        BasedOnVersionID: { type: string }
+        CreatedBy: { type: string }
+    StoryArcPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        Ordinal: { type: integer }
+        Status: { type: string }
+        CurrentVersionID: { type: string }
+    StoryArcListResponse:
+      type: object
+      required: [arcs]
+      properties:
+        arcs:
+          type: array
+          items: { $ref: "#/components/schemas/StoryArcPascal" }
+    CreateArcRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: object, additionalProperties: true }
+    CharacterPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        CanonicalName: { type: string }
+        Importance: { type: string }
+        CurrentProfileVersionID: { type: string }
+    CharacterListResponse:
+      type: object
+      required: [characters]
+      properties:
+        characters:
+          type: array
+          items: { $ref: "#/components/schemas/CharacterPascal" }
+    CreateCharacterRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        importance: { type: string }
+        profile: { type: object, additionalProperties: true }
+    CreateChapterRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        created_by: { type: string }
+    CreatePlanRequest:
+      type: object
+      required: [plan]
+      properties:
+        plan: { type: object, additionalProperties: true }
+        created_by: { type: string }
+    ChapterPlanRevisionPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        ChapterID: { type: string }
+        RevisionNo: { type: integer }
+        Plan: { type: object, additionalProperties: true }
+        SourceType: { type: string }
+        CreatedBy: { type: string }
+    CreateFactRequest:
+      type: object
+      required: [subject_type, subject_id, fact_type, value]
+      properties:
+        subject_type: { type: string }
+        subject_id: { type: string }
+        fact_type: { type: string }
+        value: { type: object, additionalProperties: true }
+        importance: { type: string }
+    StoryFactPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        SubjectType: { type: string }
+        SubjectID: { type: string }
+        FactType: { type: string }
+        Value: { type: object, additionalProperties: true }
+        Importance: { type: string }
+        Status: { type: string }
+        SupersedesFactID: { type: string }
+    StoryFactListResponse:
+      type: object
+      required: [facts]
+      properties:
+        facts:
+          type: array
+          items: { $ref: "#/components/schemas/StoryFactPascal" }
+    CreatePlotThreadRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        summary: { type: string }
+        importance: { type: string }
+    PlotThreadPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        Title: { type: string }
+        Summary: { type: string }
+        Importance: { type: string }
+        Status: { type: string }
+    PlotThreadListResponse:
+      type: object
+      required: [plot_threads]
+      properties:
+        plot_threads:
+          type: array
+          items: { $ref: "#/components/schemas/PlotThreadPascal" }
+    CreatePlotThreadEventRequest:
+      type: object
+      required: [event_type]
+      properties:
+        event_type: { type: string }
+        chapter_id: { type: string }
+        detail: { type: object, additionalProperties: true }
+    PlotThreadEventPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        PlotThreadID: { type: string }
+        ChapterID: { type: string }
+        EventType: { type: string }
+        Detail: { type: object, additionalProperties: true }
+    CreateCanonBranchRequest:
+      type: object
+      properties:
+        type: { type: string }
+    CanonBranchPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        Type: { type: string }
+        Status: { type: string }
+    CreateCanonVersionRequest:
+      type: object
+      required: [story_id, source_chapter_id]
+      properties:
+        story_id: { type: string }
+        source_chapter_id: { type: string }
+        committed_by: { type: string }
+    CreateProvisionalCanonVersionRequest:
+      type: object
+      required: [story_id, source_chapter_id, source_content_revision_id]
+      properties:
+        story_id: { type: string }
+        source_chapter_id: { type: string }
+        source_content_revision_id: { type: string }
+    PromoteProvisionalVersionRequest:
+      type: object
+      properties:
+        committed_by: { type: string }
+    CanonVersionPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        BranchID: { type: string }
+        SequenceNo: { type: integer }
+        ParentVersionID: { type: string }
+        SourceChapterID: { type: string }
+        SourceContentRevisionID: { type: string }
+        SourceProvisionalVersionID: { type: string }
+        Status: { type: string }
+        CommittedBy: { type: string }
+    CanonVersionListResponse:
+      type: object
+      required: [versions]
+      properties:
+        versions:
+          type: array
+          items: { $ref: "#/components/schemas/CanonVersionPascal" }
+    CreateContextSnapshotRequest:
+      type: object
+      properties:
+        chapter_id: { type: string }
+        bible_version_id: { type: string }
+        ending_plan_version_id: { type: string }
+        arc_version_id: { type: string }
+        content_profile_version_id: { type: string }
+        prompt_version: { type: string }
+        workflow_version: { type: string }
+        provider: { type: string }
+        model: { type: string }
+    ContextSnapshotPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        ChapterID: { type: string }
+        BibleVersionID: { type: string }
+        EndingPlanVersionID: { type: string }
+        ArcVersionID: { type: string }
+        ContentProfileVersionID: { type: string }
+        PromptVersion: { type: string }
+        WorkflowVersion: { type: string }
+        Provider: { type: string }
+        Model: { type: string }
+    ContextSnapshotListResponse:
+      type: object
+      required: [snapshots]
+      properties:
+        snapshots:
+          type: array
+          items: { $ref: "#/components/schemas/ContextSnapshotPascal" }
+    CommitCanonRequest:
+      type: object
+      required: [story_id, source_chapter_id, content_revision_id]
+      properties:
+        story_id: { type: string }
+        source_chapter_id: { type: string }
+        content_revision_id: { type: string }
+        committed_by: { type: string }
+    RepairCanonRequest:
+      type: object
+      required: [branch_id, source_chapter_id, content_revision_id]
+      properties:
+        branch_id: { type: string }
+        source_chapter_id: { type: string }
+        content_revision_id: { type: string }
+        committed_by: { type: string }
+    CanonCommitResultPascal:
+      type: object
+      properties:
+        Version: { $ref: "#/components/schemas/CanonVersionPascal" }
+        ChangeItems:
+          type: array
+          items: { $ref: "#/components/schemas/CanonChangeItemPascal" }
+    CanonChangeItemPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        CanonVersionID: { type: string }
+        EntityType: { type: string }
+        EntityID: { type: string }
+        ChangeType: { type: string }
+        Metadata: { type: object, additionalProperties: true }
+    CreateCreativeDecisionRequest:
+      type: object
+      required: [question]
+      properties:
+        chapter_id: { type: string }
+        arc_id: { type: string }
+        origin: { type: string }
+        decision_type: { type: string }
+        severity: { type: string }
+        blocking_level: { type: string }
+        question: { type: string }
+        context_summary: { type: string }
+        created_by: { type: string }
+    SelectCreativeDecisionRequest:
+      type: object
+      properties:
+        selected_by: { type: string }
+    RejectCreativeDecisionRequest:
+      type: object
+      properties:
+        rejected_by: { type: string }
+        scope: { type: string }
+    CreativeDecisionPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        ChapterID: { type: string }
+        ArcID: { type: string }
+        Origin: { type: string }
+        DecisionType: { type: string }
+        Severity: { type: string }
+        Status: { type: string }
+        BlockingLevel: { type: string }
+        Question: { type: string }
+        ContextSummary: { type: string }
+    CreativeDecisionListResponse:
+      type: object
+      required: [decisions]
+      properties:
+        decisions:
+          type: array
+          items: { $ref: "#/components/schemas/CreativeDecisionPascal" }
+    ArcCompletionResultPascal:
+      type: object
+      properties:
+        ArcID: { type: string }
+        Complete: { type: boolean }
+        TotalChapters: { type: integer }
+        CompletedChapters: { type: integer }
+        PendingChapters: { type: array, items: { type: string } }
+    CreateAttentionItemRequest:
+      type: object
+      required: [title]
+      properties:
+        chapter_id: { type: string }
+        priority: { type: string }
+        kind: { type: string }
+        title: { type: string }
+        detail: { type: string }
+        action: { type: string }
+    AttentionItemPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        ChapterID: { type: string }
+        Priority: { type: string }
+        Kind: { type: string }
+        Title: { type: string }
+        Detail: { type: string }
+        Action: { type: string }
+        Resolved: { type: boolean }
+    AttentionItemListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AttentionItemPascal" }
+    ThreadInactivityListResponse:
+      type: object
+      required: [inactive_threads]
+      properties:
+        inactive_threads:
+          type: array
+          items:
+            type: object
+            properties:
+              ThreadID: { type: string }
+              Title: { type: string }
+              Importance: { type: string }
+              EventCount: { type: integer }
+
+    # --- Generation ---
+    WriteChapterRequest:
+      type: object
+      properties:
+        prompt: { type: string }
+        created_by: { type: string }
+    ApproveContentRequest:
+      type: object
+      required: [revision_id]
+      properties:
+        revision_id: { type: string }
+        approved_by: { type: string }
+    CreateReviewRequest:
+      type: object
+      required: [content_revision_id, review_type, outcome]
+      properties:
+        content_revision_id: { type: string }
+        review_type: { type: string, enum: [CONTINUITY, QUALITY, SAFETY, DURATION] }
+        outcome: { type: string, enum: [PASS, OVERRIDABLE_BLOCK] }
+        report: { type: object, additionalProperties: true }
+    AnalyzeDurationRequest:
+      type: object
+      properties:
+        revision_id: { type: string }
+        text: { type: string }
+    RunReviewRequest:
+      type: object
+      properties:
+        revision_id: { type: string }
+        text: { type: string }
+    RewriteChapterRequest:
+      type: object
+      properties:
+        based_on_revision_id: { type: string }
+        feedback: { type: string }
+        created_by: { type: string }
+    EditContentRequest:
+      type: object
+      required: [text]
+      properties:
+        based_on_revision_id: { type: string }
+        text: { type: string }
+        edited_by: { type: string }
+    RegenerateContentRequest:
+      type: object
+      properties:
+        based_on_revision_id: { type: string }
+        requested_by: { type: string }
+    RejectContentRequest:
+      type: object
+      properties:
+        rejected_by: { type: string }
+        reason: { type: string }
+    CreateRunRequest:
+      type: object
+      required: [run_type]
+      properties:
+        run_type: { type: string }
+        story_id: { type: string }
+        chapter_id: { type: string }
+        requested_by: { type: string }
+    CreateJobRequest:
+      type: object
+      required: [job_type]
+      properties:
+        job_type: { type: string }
+        max_attempts: { type: integer }
+    StartBatchRequest:
+      type: object
+      required: [chapter_ids]
+      properties:
+        chapter_ids: { type: array, items: { type: string } }
+        requested_by: { type: string }
+    MarkStaleRequest:
+      type: object
+      properties:
+        chapter_id: { type: string }
+    RecordUsageRequest:
+      type: object
+      properties:
+        usage: { type: object, additionalProperties: true }
+    ContentRevisionPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        ChapterID: { type: string }
+        RevisionNo: { type: integer }
+        ContentText: { type: string }
+        SourceType: { type: string }
+        BasedOnRevisionID: { type: string }
+        PlanRevisionID: { type: string }
+        BaseCanonVersionID: { type: string }
+        GenerationRunID: { type: string }
+        Status: { type: string, enum: [CANDIDATE, APPROVED] }
+        CreatedBy: { type: string }
+    AdminChapterContentResponse:
+      type: object
+      required: [revisions]
+      properties:
+        revisions:
+          type: array
+          items: { $ref: "#/components/schemas/ContentRevisionPascal" }
+        generation_run: { $ref: "#/components/schemas/GenerationRunPascal" }
+        generation_job: { $ref: "#/components/schemas/JobViewPascal" }
+    PublishedChapterContentResponse:
+      type: object
+      required: [chapter_id, revision_id, content_text]
+      properties:
+        chapter_id: { type: string }
+        revision_id: { type: string }
+        content_text: { type: string }
+    ContentApprovalPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        ChapterID: { type: string }
+        ContentRevisionID: { type: string }
+        ApprovedBy: { type: string }
+        WarningsSnapshot: { type: object, additionalProperties: true }
+        OverrideSnapshot: { type: object, additionalProperties: true }
+    ChapterReviewPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        ChapterID: { type: string }
+        ContentRevisionID: { type: string }
+        ReviewType: { type: string }
+        Outcome: { type: string }
+        Report: { type: object, additionalProperties: true }
+    ChapterReviewListResponse:
+      type: object
+      required: [reviews]
+      properties:
+        reviews:
+          type: array
+          items: { $ref: "#/components/schemas/ChapterReviewPascal" }
+    DurationOutputPascal:
+      type: object
+      properties:
+        EstimatedMinutes: { type: integer }
+        Outcome: { type: string }
+        Report: { type: object, additionalProperties: true }
+    GenerationRunPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        RunType: { type: string }
+        StoryID: { type: string }
+        ChapterID: { type: string }
+        Status: { type: string }
+        WaitingReason: { type: string }
+        WorkflowVersion: { type: string }
+        Priority: { type: integer }
+        BaseCanonVersionID: { type: string }
+        ContextSnapshotID: { type: string }
+        RequestedBy: { type: string }
+        IdempotencyKey: { type: string }
+    GenerationJobPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        RunID: { type: string }
+        JobType: { type: string }
+        Status: { type: string }
+        Priority: { type: integer }
+        AttemptCount: { type: integer }
+        MaxAttempts: { type: integer }
+        InputFingerprint: { type: string }
+        LastErrorClass: { type: string }
+        LastErrorCode: { type: string }
+        LockedBy: { type: string }
+        OutputRef: { type: string }
+    JobViewPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        RunID: { type: string }
+        JobType: { type: string }
+        Status: { type: string }
+        AttemptCount: { type: integer }
+        MaxAttempts: { type: integer }
+        LastErrorClass: { type: string }
+        LastErrorCode: { type: string }
+        Observation: { type: string }
+        Retryable: { type: boolean }
+        AttemptsExhausted: { type: boolean }
+    JobAttemptPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        JobID: { type: string }
+        AttemptNo: { type: integer }
+        Provider: { type: string }
+        Model: { type: string }
+        Status: { type: string }
+        ErrorClass: { type: string }
+        ErrorCode: { type: string }
+        Usage: { type: object, additionalProperties: true }
+        LatencyMs: { type: integer }
+    JobAttemptListResponse:
+      type: object
+      required: [usage]
+      properties:
+        usage:
+          type: array
+          items: { $ref: "#/components/schemas/JobAttemptPascal" }
+    StaleJobsResponse:
+      type: object
+      required: [stale_jobs]
+      properties:
+        stale_jobs:
+          type: array
+          items: { $ref: "#/components/schemas/GenerationJobPascal" }
+
+    # --- Audio ---
+    CreateNarrationRequest:
+      type: object
+      required: [source_content_revision_id, voice_id]
+      properties:
+        source_content_revision_id: { type: string }
+        voice_id: { type: string }
+        script: { type: string }
+        created_by: { type: string }
+    CreateAudioAssetRequest:
+      type: object
+      required: [source_narration_revision_id, storage_key, mime_type]
+      properties:
+        source_narration_revision_id: { type: string }
+        storage_key: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer, format: int64 }
+        duration_ms: { type: integer, format: int64 }
+        bitrate_kbps: { type: integer }
+    NarrationRevisionPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        ChapterID: { type: string }
+        RevisionNo: { type: integer }
+        SourceContentRevisionID: { type: string }
+        VoiceID: { type: string }
+        Script: { type: string }
+        Status: { type: string }
+        CreatedBy: { type: string }
+    TTSSegmentPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        NarrationRevisionID: { type: string }
+        SegmentNo: { type: integer }
+        Text: { type: string }
+        Status: { type: string }
+        Provider: { type: string }
+        Model: { type: string }
+        VoiceID: { type: string }
+        DurationMs: { type: integer }
+        TempStorageKey: { type: string }
+    TTSSegmentListResponse:
+      type: object
+      required: [segments]
+      properties:
+        segments:
+          type: array
+          items: { $ref: "#/components/schemas/TTSSegmentPascal" }
+    AudioAssetPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        ChapterID: { type: string }
+        VersionNo: { type: integer }
+        SourceNarrationRevisionID: { type: string }
+        Status: { type: string, enum: [READY] }
+        StorageKey: { type: string }
+        MimeType: { type: string }
+        SizeBytes: { type: integer, format: int64 }
+        DurationMs: { type: integer, format: int64 }
+        BitrateKbps: { type: integer }
+        Checksum: { type: string }
+        IsActive: { type: boolean }
+    AudioURLResponse:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri }
+
+    # --- Listener ---
+    LibraryResponse:
+      type: object
+      required: [recent, completed, favorites]
+      properties:
+        continue_listening: { $ref: "#/components/schemas/LibraryItem" }
+        recent:
+          type: array
+          items: { $ref: "#/components/schemas/LibraryItem" }
+        completed:
+          type: array
+          items: { $ref: "#/components/schemas/LibraryItem" }
+        favorites:
+          type: array
+          items: { $ref: "#/components/schemas/FavoriteStory" }
+    LibraryItem:
+      type: object
+      properties:
+        story_id: { type: string }
+        story_slug: { type: string }
+        story_title: { type: string }
+        story_description: { type: string }
+        chapter_id: { type: string }
+        chapter_number: { type: integer }
+        chapter_title: { type: string }
+        position_ms: { type: integer, format: int64 }
+        completed_at: { type: string, format: date-time }
+        relisten_status: { $ref: "#/components/schemas/RelistenStatus" }
+        last_listened_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        audio_asset_id: { type: string }
+        audio_duration_ms: { type: integer }
+    FavoriteStory:
+      type: object
+      properties:
+        story_id: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        favorited_at: { type: string, format: date-time }
+    FavoriteListResponse:
+      type: object
+      required: [favorites]
+      properties:
+        favorites:
+          type: array
+          items:
+            type: object
+            properties:
+              UserID: { type: string }
+              StoryID: { type: string }
+    FavoriteStatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [favorited, unfavorited] }
+    SaveProgressRequest:
+      type: object
+      required: [position_ms]
+      properties:
+        position_ms: { type: integer, format: int64 }
+        audio_asset_id: { type: string }
+        playback_session_id: { type: string }
+        expected_version: { type: integer, format: int64 }
+    ListeningProgressPascal:
+      type: object
+      properties:
+        UserID: { type: string }
+        ChapterID: { type: string }
+        PositionMs: { type: integer, format: int64 }
+        CompletedAt: { type: string }
+        LastAudioAssetID: { type: string }
+        LastPlaybackSessionID: { type: string }
+        Version: { type: integer, format: int64 }
+        RelistenStatus: { $ref: "#/components/schemas/RelistenStatus" }
+    RevisionImpactRequest:
+      type: object
+      required: [relisten_status]
+      properties:
+        relisten_status: { $ref: "#/components/schemas/RelistenStatus" }
+    RevisionImpactResponse:
+      type: object
+      required: [affected_listeners]
+      properties:
+        affected_listeners: { type: integer, format: int64 }
+
+    # --- Retcon ---
+    CreateRetconRequest:
+      type: object
+      required: [story_id, target_chapter_id, proposed_change, reason]
+      properties:
+        story_id: { type: string }
+        target_chapter_id: { type: string }
+        proposed_change: { type: string }
+        reason: { type: string }
+        requested_by: { type: string }
+    ApproveRetconRequest:
+      type: object
+      properties:
+        approved_by: { type: string }
+    ApplyRetconRequest:
+      type: object
+      properties:
+        applied_by: { type: string }
+    RetconRequestPascal:
+      type: object
+      properties:
+        ID: { type: string }
+        StoryID: { type: string }
+        TargetChapterID: { type: string }
+        Status: { type: string, enum: [DRAFT, ANALYZING, APPROVED, READY_TO_APPLY, APPLIED, CANCELLED] }
+        ImpactScope: { type: string }
+        ProposedChange: { type: string }
+        Reason: { type: string }
+        RequestedBy: { type: string }
+        ApprovedBy: { type: string }
+        AppliedBy: { type: string }
+    RetconListResponse:
+      type: object
+      required: [retcons]
+      properties:
+        retcons:
+          type: array
+          items: { $ref: "#/components/schemas/RetconRequestPascal" }
+
+    # --- Audit ---
+    AuditEvent:
+      type: object
+      required: [id, actor_type, action, result, created_at]
+      properties:
+        id: { type: string }
+        actor_user_id: { type: string }
+        actor_type: { type: string, enum: [USER, SYSTEM, AI, ANONYMOUS] }
+        action: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        story_id: { type: string }
+        chapter_id: { type: string }
+        result: { type: string, enum: [SUCCEEDED, FAILED, DENIED] }
+        correlation_id: { type: string }
+        request_id: { type: string }
+        generation_run_id: { type: string }
+        provenance: { type: object, additionalProperties: true }
+        metadata: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+    AuditEventListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AuditEvent" }
