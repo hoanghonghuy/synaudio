@@ -58,6 +58,28 @@ test('prevents duplicate commit for the same authority identity while in flight'
   assert.ok(state.beginCommit(), 'retry is allowed only after the prior request settles')
 })
 
+test('late settled commit cannot become current again after retrying the same authority identity', () => {
+  const state = createCanonAuthorityState()
+  state.beginSelection({ storyID: 'story-1', chapterID: 'chapter-a', approvedRevisionID: 'rev-a1' }).succeed(branchA, [])
+
+  const first = state.beginCommit()
+  assert.ok(first)
+  first.fail('provider unavailable')
+
+  const retry = state.beginCommit()
+  assert.ok(retry)
+  assert.equal(first.isCurrent(), false)
+  assert.equal(retry.isCurrent(), true)
+
+  first.succeed({ ID: 'stale-version', Status: 'OFFICIAL', SourceContentRevisionID: 'rev-a1' })
+  assert.equal(state.snapshot().committing, true)
+  assert.deepEqual(state.snapshot().versions, [])
+
+  retry.succeed({ ID: 'retry-version', Status: 'OFFICIAL', SourceContentRevisionID: 'rev-a1' })
+  assert.equal(state.snapshot().committing, false)
+  assert.deepEqual(state.snapshot().versions.map((version) => version.ID), ['retry-version'])
+})
+
 test('successful commit updates versions only for exact selected authority', () => {
   const state = createCanonAuthorityState()
   state.beginSelection({ storyID: 'story-1', chapterID: 'chapter-a', approvedRevisionID: 'rev-a1' }).succeed(branchA, [
