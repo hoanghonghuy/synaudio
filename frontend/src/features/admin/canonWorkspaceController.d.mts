@@ -3,7 +3,6 @@ import type { CanonWorkspaceState } from './canonWorkspacePresentation.mjs'
 
 export interface CanonApprovedRevision {
   ID?: string | null
-  [key: string]: unknown
 }
 
 export interface CanonWorkspaceSelection {
