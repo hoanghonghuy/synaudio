@@ -2,6 +2,7 @@ import { canonCommitIdentity } from './canonReadiness.mjs'
 
 export function createCanonAuthorityState() {
   let generation = 0
+  let commitGeneration = 0
   let currentSelection = null
   let activeCommitIdentity = ''
   let state = emptySnapshot()
@@ -28,6 +29,7 @@ export function createCanonAuthorityState() {
 
   function beginSelection({ storyID, chapterID, approvedRevisionID = '' }) {
     generation += 1
+    commitGeneration += 1
     const requestGeneration = generation
     currentSelection = { storyID, chapterID, approvedRevisionID }
     activeCommitIdentity = ''
@@ -65,10 +67,13 @@ export function createCanonAuthorityState() {
     if (!currentSelection.approvedRevisionID || activeCommitIdentity === identity) return null
 
     const requestGeneration = generation
+    commitGeneration += 1
+    const requestCommitGeneration = commitGeneration
     activeCommitIdentity = identity
     state = { ...state, committing: true, error: '' }
 
     const isCurrent = () => requestGeneration === generation
+      && requestCommitGeneration === commitGeneration
       && activeCommitIdentity === identity
       && currentSelection != null
       && canonCommitIdentity({
@@ -100,6 +105,7 @@ export function createCanonAuthorityState() {
 
   function reset() {
     generation += 1
+    commitGeneration += 1
     currentSelection = null
     activeCommitIdentity = ''
     state = emptySnapshot()
