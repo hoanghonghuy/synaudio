@@ -44,7 +44,12 @@ func TestMarkReadyToApplyAfterApproval(t *testing.T) {
 	r, _ := svc.CreateRetconRequest(context.Background(), CreateRetconInput{
 		StoryID: "s1", TargetChapterID: "ch1", Reason: "fix", RequestedBy: "u1",
 	})
-	_, _ = svc.ApproveRetconRequest(context.Background(), r.ID, "u2")
+	if _, err := svc.AnalyzeRetconRequest(context.Background(), r.ID); err != nil {
+		t.Fatalf("analyze retcon: %v", err)
+	}
+	if _, err := svc.ApproveRetconRequest(context.Background(), r.ID, "u2"); err != nil {
+		t.Fatalf("approve retcon: %v", err)
+	}
 
 	ready, err := svc.MarkReadyToApply(context.Background(), r.ID)
 	if err != nil {
@@ -76,8 +81,15 @@ func TestApplyRetconRequestSucceeds(t *testing.T) {
 	r, _ := svc.CreateRetconRequest(context.Background(), CreateRetconInput{
 		StoryID: "s1", TargetChapterID: "ch1", Reason: "fix", RequestedBy: "u1",
 	})
-	_, _ = svc.ApproveRetconRequest(context.Background(), r.ID, "u2")
-	_, _ = svc.MarkReadyToApply(context.Background(), r.ID)
+	if _, err := svc.AnalyzeRetconRequest(context.Background(), r.ID); err != nil {
+		t.Fatalf("analyze retcon: %v", err)
+	}
+	if _, err := svc.ApproveRetconRequest(context.Background(), r.ID, "u2"); err != nil {
+		t.Fatalf("approve retcon: %v", err)
+	}
+	if _, err := svc.MarkReadyToApply(context.Background(), r.ID); err != nil {
+		t.Fatalf("mark ready: %v", err)
+	}
 
 	applied, err := svc.ApplyRetconRequest(context.Background(), r.ID, "u3")
 	if err != nil {

@@ -76,13 +76,13 @@ func (s *Service) CreateRetconRequest(ctx context.Context, in CreateRetconInput)
 	return s.store.CreateRetconRequest(ctx, r)
 }
 
-// ApproveRetconRequest marks a DRAFT or ANALYZING retcon request as APPROVED.
+// ApproveRetconRequest marks an ANALYZING retcon request as APPROVED.
 func (s *Service) ApproveRetconRequest(ctx context.Context, id, approvedBy string) (RetconRequest, error) {
 	r, err := s.store.GetRetconRequest(ctx, id)
 	if err != nil {
 		return RetconRequest{}, err
 	}
-	if r.Status != "DRAFT" && r.Status != "ANALYZING" {
+	if r.Status != "ANALYZING" {
 		return RetconRequest{}, ErrRetconInvalidTransition
 	}
 

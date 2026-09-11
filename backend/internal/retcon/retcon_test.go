@@ -45,6 +45,9 @@ func TestApproveRetconRequest(t *testing.T) {
 	r, _ := svc.CreateRetconRequest(context.Background(), CreateRetconInput{
 		StoryID: "s1", TargetChapterID: "ch1", Reason: "fix", RequestedBy: "u1",
 	})
+	if _, err := svc.AnalyzeRetconRequest(context.Background(), r.ID); err != nil {
+		t.Fatalf("analyze retcon: %v", err)
+	}
 
 	approved, err := svc.ApproveRetconRequest(context.Background(), r.ID, "u2")
 	if err != nil {
