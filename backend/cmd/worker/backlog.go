@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/synaudio/synaudio/backend/internal/platform/db"
+	"github.com/synaudio/synaudio/backend/internal/platform/logging"
 	platformmetrics "github.com/synaudio/synaudio/backend/internal/platform/metrics"
 )
 
@@ -17,10 +18,10 @@ type backlogSnapshot struct {
 	deadLetter int64
 }
 
-func startBacklogSampler(ctx context.Context, pool *pgxpool.Pool, registry *platformmetrics.Registry, log *slog.Logger) {
+func startBacklogSampler(ctx context.Context, database db.DBTX, registry *platformmetrics.Registry, log *slog.Logger) {
 	sample := func() {
-		if err := refreshBacklogMetrics(ctx, pool, registry, time.Now()); err != nil && ctx.Err() == nil {
-			log.Error("backlog metrics refresh failed", "error", err)
+		if err := refreshBacklogMetrics(ctx, database, registry, time.Now()); err != nil && ctx.Err() == nil {
+			log.Error("backlog metrics refresh failed", logging.ErrAttr(err))
 		}
 	}
 
@@ -39,7 +40,7 @@ func startBacklogSampler(ctx context.Context, pool *pgxpool.Pool, registry *plat
 	}()
 }
 
-func refreshBacklogMetrics(ctx context.Context, pool *pgxpool.Pool, registry *platformmetrics.Registry, now time.Time) error {
+func refreshBacklogMetrics(ctx context.Context, database db.DBTX, registry *platformmetrics.Registry, now time.Time) error {
 	samples := []struct {
 		queue string
 		query string
@@ -69,7 +70,7 @@ func refreshBacklogMetrics(ctx context.Context, pool *pgxpool.Pool, registry *pl
 
 	for _, sample := range samples {
 		var snapshot backlogSnapshot
-		if err := pool.QueryRow(ctx, sample.query).Scan(&snapshot.depth, &snapshot.oldest, &snapshot.deadLetter); err != nil {
+		if err := database.QueryRow(ctx, sample.query).Scan(&snapshot.depth, &snapshot.oldest, &snapshot.deadLetter); err != nil {
 			return err
 		}
 		registry.SetBacklog(sample.queue, snapshot.depth, oldestAge(now, snapshot.oldest), snapshot.deadLetter)

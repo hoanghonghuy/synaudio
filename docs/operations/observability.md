@@ -17,6 +17,8 @@ Metrics use bounded labels only. Do not add user IDs, story/chapter/job IDs, raw
 
 API request metrics use the chi route pattern after routing, not the raw request path. Unknown/invalid routes collapse to `unmatched`. Worker loop, result, queue, job-type and error-class labels are explicit allowlists and collapse unknown values to `other`/`UNKNOWN`.
 
+Application logs follow a separate repository-owned redaction and correlation contract documented in `docs/operations/logging.md`. Use structured logs for detailed diagnosis, but keep secrets/private content out of messages and attributes and use the safe logging helpers for errors.
+
 ## Metrics
 
 - `synaudio_api_requests_total{method,route,status_class}`: API traffic and status-class trend.
@@ -32,8 +34,17 @@ API request metrics use the chi route pattern after routing, not the raw request
 - `synaudio_backlog_depth{queue}`: current authoritative pending/retry backlog depth for `generation`, `audit_outbox`, and `email_delivery`.
 - `synaudio_backlog_oldest_age_seconds{queue}`: age of the oldest current pending/retry item for each bounded queue; zero when the backlog is empty.
 - `synaudio_backlog_dead_letter{queue}`: current dead-letter count where the persistence model supports dead-letter state. Generation currently reports zero because terminal generation failure is represented as `FAILED`, not a dead-letter queue.
+- `synaudio_database_pool_acquired_conns{role}`: current acquired PostgreSQL pool connections (`api`, `worker`, or collapsed `other`).
+- `synaudio_database_pool_idle_conns{role}`: current idle pool connections.
+- `synaudio_database_pool_total_conns{role}`: current total pool connections.
+- `synaudio_database_pool_max_conns{role}`: configured pool maximum for the process role.
+- `synaudio_database_pool_canceled_acquires_total{role}`: cumulative acquire attempts canceled by context while waiting for a connection.
+- `synaudio_database_pool_empty_acquires_total{role}`: cumulative acquires that waited because the pool was exhausted.
+- `synaudio_database_pool_empty_acquire_wait_seconds_sum{role}`: cumulative wait time for exhausted-pool acquires.
 
 Backlog gauges are sampled from durable queue tables every 15 seconds. They are current-state gauges, not values inferred from cumulative worker counters.
+
+Database pool gauges are sampled from `pgxpool` statistics every 15 seconds on API and worker metrics listeners. See `database-pool-capacity.md` for the production connection-budget contract and saturation semantics.
 
 ## Minimum alerting/runbook
 
@@ -43,7 +54,8 @@ Backlog gauges are sampled from durable queue tables every 15 seconds. They are 
 4. **Retry pressure**: correlate backlog gauges with sustained growth of `audit_delivery/retrying`, stale-generation `reclaimed`, or loop `failure` counters. Inspect dependency readiness and provider logs.
 5. **API 5xx trend**: compare `status_class="5xx"` request rate against total request rate per bounded route. Investigate route-specific logs and readiness dependencies.
 6. **Generation/provider failures and latency**: alert on sustained increases in `synaudio_generation_jobs_total{outcome="failure"}` and on abnormal mean generation attempt duration derived from duration sum / matching outcome count. Correlate with `synaudio_provider_calls_total` using bounded `failure_class` and `retry_decision` labels. Never add raw provider error text as a metric label; use structured logs for detailed diagnosis.
-7. **Readiness failure**: continue to use `/ready` for dependency gating. Metrics are diagnostic telemetry and do not replace readiness.
+7. **Database pool saturation**: alert when `synaudio_database_pool_acquired_conns` approaches `synaudio_database_pool_max_conns` for a sustained interval, or when `synaudio_database_pool_canceled_acquires_total` / `synaudio_database_pool_empty_acquires_total` grow while latency or worker loop failures increase. Correlate with the connection-budget guidance in `database-pool-capacity.md` before raising per-process `DATABASE_POOL_MAX_CONNS`.
+8. **Readiness failure**: continue to use `/ready` for dependency gating. Metrics are diagnostic telemetry and do not replace readiness.
 
 ## HTTP server timeout contract (application boundary)
 

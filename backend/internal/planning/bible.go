@@ -13,12 +13,12 @@ var (
 
 // StoryBibleVersion is a versioned, relatively-stable Story Bible.
 type StoryBibleVersion struct {
-	ID              string
-	StoryID         string
-	VersionNo       int
-	Content         map[string]any
+	ID               string
+	StoryID          string
+	VersionNo        int
+	Content          map[string]any
 	BasedOnVersionID string
-	CreatedBy       string
+	CreatedBy        string
 }
 
 // Store is the persistence boundary for the planning service.
@@ -62,6 +62,7 @@ type Store interface {
 	ListPlotThreadEvents(ctx context.Context, threadID string) ([]PlotThreadEvent, error)
 
 	CreateCanonBranch(ctx context.Context, b CanonBranch) (CanonBranch, error)
+	GetActiveOfficialCanonBranch(ctx context.Context, storyID string) (CanonBranch, error)
 	NextCanonSequence(ctx context.Context, branchID string) (int, error)
 	CreateCanonVersion(ctx context.Context, v CanonVersion) (CanonVersion, error)
 	ListCanonVersions(ctx context.Context, branchID string) ([]CanonVersion, error)

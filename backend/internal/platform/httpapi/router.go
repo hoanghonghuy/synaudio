@@ -47,10 +47,14 @@ func NewRouter(deps Dependencies) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(WithTrustedClientIP(deps.TrustedProxy))
-	r.Use(middleware.Recoverer)
 	r.Use(LimitRequestBody(DefaultMaxRequestBodyBytes))
 	if deps.Logger != nil {
 		r.Use(WithRequestLogger(deps.Logger))
+	} else {
+		// WithRequestLogger owns panic recovery when logging is enabled so the
+		// recovered request is emitted with the same correlation metadata. Keep
+		// recovery unconditional for tests/minimal compositions that omit Logger.
+		r.Use(middleware.Recoverer)
 	}
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {

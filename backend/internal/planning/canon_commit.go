@@ -14,10 +14,10 @@ type MemoryExtractor interface {
 
 // MemoryExtractionInput is the input for memory extraction.
 type MemoryExtractionInput struct {
-	StoryID         string
-	ChapterID       string
+	StoryID           string
+	ChapterID         string
 	ContentRevisionID string
-	ContentText     string
+	ContentText       string
 }
 
 // ExtractedFact is a fact extracted from content.
@@ -70,13 +70,14 @@ func (s *Service) CommitCanon(ctx context.Context, storyID, branchID, sourceChap
 	}
 
 	version := CanonVersion{
-		ID:              uuid.NewString(),
-		StoryID:         storyID,
-		BranchID:        branchID,
-		SequenceNo:      seq,
-		SourceChapterID: sourceChapterID,
-		Status:          "OFFICIAL",
-		CommittedBy:     committedBy,
+		ID:                      uuid.NewString(),
+		StoryID:                 storyID,
+		BranchID:                branchID,
+		SequenceNo:              seq,
+		SourceChapterID:         sourceChapterID,
+		SourceContentRevisionID: contentRevisionID,
+		Status:                  "OFFICIAL",
+		CommittedBy:             committedBy,
 	}
 
 	created, err := s.store.CreateCanonVersion(ctx, version)

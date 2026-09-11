@@ -8,8 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/synaudio/synaudio/backend/internal/audio"
 	"github.com/synaudio/synaudio/backend/internal/audit"
 	"github.com/synaudio/synaudio/backend/internal/generation"
@@ -34,34 +32,34 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Error("config load failed", "error", err)
+		log.Error("config load failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	emailCfg, err := config.LoadEmail(cfg.AppEnv, cfg.AppPublicURL)
 	if err != nil {
-		log.Error("email config load failed", "error", err)
+		log.Error("email config load failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	accessTokenKeyring, err := config.LoadAccessTokenKeyring(cfg.AppEnv, cfg.AccessTokenSecret, cfg.AccessTokenTTL)
 	if err != nil {
-		log.Error("access-token keyring config failed", "error", err)
+		log.Error("access-token keyring config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 
 	aiProviders, err := providers.BuildAI(cfg)
 	if err != nil {
-		log.Error("AI provider init failed", "error", err)
+		log.Error("AI provider init failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	ttsProvider, err := providers.BuildTTS(cfg)
 	if err != nil {
-		log.Error("TTS provider init failed", "error", err)
+		log.Error("TTS provider init failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 
 	audioProcessorSettings, err := config.LoadAudioProcessorSettings(cfg.AppEnv)
 	if err != nil {
-		log.Error("audio processor config failed", "error", err)
+		log.Error("audio processor config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	var audioProcessor audio.AudioProcessor
@@ -72,7 +70,7 @@ func main() {
 	case config.AudioProcessorFFmpeg:
 		ffmpegProcessor = audio.NewFFmpegProcessor(audioProcessorSettings.Binary)
 		if err := ffmpegProcessor.Validate(); err != nil {
-			log.Error("FFmpeg processor unavailable", "error", err)
+			log.Error("FFmpeg processor unavailable", logging.ErrAttr(err))
 			os.Exit(1)
 		}
 		audioProcessor = ffmpegProcessor
@@ -81,12 +79,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	poolSettings, err := config.LoadDatabasePoolSettings(cfg.AppEnv)
+	if err != nil {
+		log.Error("database pool config failed", logging.ErrAttr(err))
+		os.Exit(1)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL, poolSettings)
 	if err != nil {
-		log.Error("database pool create failed", "error", err)
+		log.Error("database pool create failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	defer pool.Close()
@@ -113,7 +117,7 @@ func main() {
 		RecentAuthWindow:      cfg.RecentAuthWindow,
 	}, accessTokenKeyring.ActiveKeyID, accessTokenKeyring.Keys, accessTokenKeyring.MaxTTL)
 	if err != nil {
-		log.Error("access-token manager init failed", "error", err)
+		log.Error("access-token manager init failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	var authHandler http.Handler = identity.NewAuthHandler(authService)
@@ -122,7 +126,7 @@ func main() {
 		emailStore := pgstore.NewEmailOutboxStore(database)
 		emailService, err := providers.BuildEmail(emailCfg, emailStore)
 		if err != nil {
-			log.Error("email provider init failed", "error", err)
+			log.Error("email provider init failed", logging.ErrAttr(err))
 			os.Exit(1)
 		}
 		identityBoundary := identity.TransactionBoundary(func(parent context.Context, run func(context.Context) error) error {
@@ -138,7 +142,7 @@ func main() {
 	storyStore := pgstore.NewStoryStore(queries)
 	objStorage, err := storage.NewMinIO(cfg)
 	if err != nil {
-		log.Error("storage init failed", "error", err)
+		log.Error("storage init failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	planningStore := pgstore.NewPlanningStore(queries, database)
@@ -207,25 +211,25 @@ func main() {
 
 	authAbuseCfg, err := config.LoadAuthAbuse(cfg.AppEnv)
 	if err != nil {
-		log.Error("auth abuse config failed", "error", err)
+		log.Error("auth abuse config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	if err := config.AuthAbuseProductionRequiresSharedState(cfg.AppEnv, authAbuseCfg.Backend); err != nil {
-		log.Error("auth abuse config failed", "error", err)
+		log.Error("auth abuse config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	trustedProxyCIDRs, err := config.LoadTrustedProxyCIDRs()
 	if err != nil {
-		log.Error("trusted proxy config failed", "error", err)
+		log.Error("trusted proxy config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	if err := config.ValidateTrustedProxyCIDRs(trustedProxyCIDRs); err != nil {
-		log.Error("trusted proxy config failed", "error", err)
+		log.Error("trusted proxy config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	trustedProxy, err := httpapi.ParseTrustedProxyConfig(trustedProxyCIDRs)
 	if err != nil {
-		log.Error("trusted proxy config failed", "error", err)
+		log.Error("trusted proxy config failed", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 
@@ -287,16 +291,17 @@ func main() {
 		RetconHandler:            retconHandler,
 	})
 
+	metrics.StartDatabasePoolSampler(ctx, pool, metricRegistry, config.DatabasePoolRoleAPI, 15*time.Second)
 	metricsServer, err := metrics.NewPrivateServer(os.Getenv("API_METRICS_ADDR"), metricRegistry.Handler())
 	if err != nil {
-		log.Error("metrics config invalid", "error", err)
+		log.Error("metrics config invalid", logging.ErrAttr(err))
 		os.Exit(1)
 	}
 	if metricsServer != nil {
 		go func() {
 			log.Info("api metrics listening", "addr", metricsServer.Addr)
 			if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Error("api metrics server failed", "error", err)
+				log.Error("api metrics server failed", logging.ErrAttr(err))
 				os.Exit(1)
 			}
 		}()
@@ -311,7 +316,7 @@ func main() {
 	go func() {
 		log.Info("api listening", "addr", cfg.HTTPAddr, "env", cfg.AppEnv, "audio_processor", audioProcessorSettings.Mode)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("api server failed", "error", err)
+			log.Error("api server failed", logging.ErrAttr(err))
 			os.Exit(1)
 		}
 	}()

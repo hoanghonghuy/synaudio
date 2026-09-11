@@ -2,6 +2,7 @@ package planning
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -9,7 +10,8 @@ import (
 )
 
 // NewWorkspaceHandler exposes only version-preserving planning mutations needed
-// by Story Planning Studio. Historical versions are never overwritten.
+// by Story Planning Studio plus authoritative read projections used by production flows.
+// Historical versions are never overwritten.
 func NewWorkspaceHandler(svc *Service) http.Handler {
 	h := &workspaceHandler{svc: svc}
 	r := chi.NewRouter()
@@ -17,6 +19,7 @@ func NewWorkspaceHandler(svc *Service) http.Handler {
 	r.Post("/admin/stories/{storyID}/ending/versions", h.createEndingVersion)
 	r.Post("/admin/stories/{storyID}/arcs", h.createArc)
 	r.Post("/admin/stories/{storyID}/characters", h.createCharacter)
+	r.Get("/admin/stories/{storyID}/canon-branches/active-official", h.getActiveOfficialCanonBranch)
 	return r
 }
 
@@ -99,4 +102,17 @@ func (h *workspaceHandler) createCharacter(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+func (h *workspaceHandler) getActiveOfficialCanonBranch(w http.ResponseWriter, r *http.Request) {
+	branch, err := h.svc.GetActiveOfficialCanonBranch(r.Context(), chi.URLParam(r, "storyID"))
+	if err != nil {
+		if errors.Is(err, ErrCanonBranchNotFound) {
+			writeError(w, http.StatusNotFound, "CANON_BRANCH_NOT_FOUND", "active official canon branch not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, branch)
 }

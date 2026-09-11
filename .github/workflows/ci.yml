@@ -66,6 +66,12 @@ jobs:
       - name: Verify sqlc drift gate regression
         working-directory: .
         run: make sqlc-check-regression
+      - name: Verify restore isolation gate regression
+        working-directory: .
+        run: make restore-isolation-regression
+      - name: Verify backup target gate regression
+        working-directory: .
+        run: make backup-target-regression
       - name: Test
         run: go test ./...
       - name: Vet
