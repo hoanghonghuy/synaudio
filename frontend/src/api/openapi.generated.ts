@@ -15,6 +15,7 @@ export const API_OPERATIONS = [
   { method: "GET", path: "/api/v1/admin/chapters/{chapterID}/audio", operationId: "getApiV1AdminChaptersChapteridAudio" },
   { method: "POST", path: "/api/v1/admin/chapters/{chapterID}/audio", operationId: "postApiV1AdminChaptersChapteridAudio" },
   { method: "POST", path: "/api/v1/admin/chapters/{chapterID}/audio/{assetID}/activate", operationId: "postApiV1AdminChaptersChapteridAudioAssetidActivate" },
+  { method: "GET", path: "/api/v1/admin/chapters/{chapterID}/audio/{assetID}/preview-url", operationId: "getApiV1AdminChaptersChapteridAudioAssetidPreviewUrl" },
   { method: "GET", path: "/api/v1/admin/chapters/{chapterID}/content", operationId: "getApiV1AdminChaptersChapteridContent" },
   { method: "POST", path: "/api/v1/admin/chapters/{chapterID}/content", operationId: "postApiV1AdminChaptersChapteridContent" },
   { method: "POST", path: "/api/v1/admin/chapters/{chapterID}/continuity", operationId: "postApiV1AdminChaptersChapteridContinuity" },
@@ -71,6 +72,7 @@ export const API_OPERATIONS = [
   { method: "GET", path: "/api/v1/admin/stories/{storyID}/bible", operationId: "getApiV1AdminStoriesStoryidBible" },
   { method: "POST", path: "/api/v1/admin/stories/{storyID}/bible/versions", operationId: "postApiV1AdminStoriesStoryidBibleVersions" },
   { method: "POST", path: "/api/v1/admin/stories/{storyID}/canon-branches", operationId: "postApiV1AdminStoriesStoryidCanonBranches" },
+  { method: "GET", path: "/api/v1/admin/stories/{storyID}/canon-branches/active-official", operationId: "getApiV1AdminStoriesStoryidCanonBranchesActiveOfficial" },
   { method: "POST", path: "/api/v1/admin/stories/{storyID}/canon-repair", operationId: "postApiV1AdminStoriesStoryidCanonRepair" },
   { method: "GET", path: "/api/v1/admin/stories/{storyID}/chapters", operationId: "getApiV1AdminStoriesStoryidChapters" },
   { method: "POST", path: "/api/v1/admin/stories/{storyID}/chapters", operationId: "postApiV1AdminStoriesStoryidChapters" },
@@ -171,7 +173,7 @@ export interface AdminUserSummary {
   email: string
   email_verified: boolean
   id: string
-  roles: "GUEST" | "USER" | "ADMIN"[]
+  roles: ("GUEST" | "USER" | "ADMIN")[]
   status: "ACTIVE" | "SUSPENDED" | "DEACTIVATED"
 }
 
@@ -786,7 +788,7 @@ export interface MeResponse {
   email_verified: boolean
   id: string
   mfa_enabled: boolean
-  roles: "GUEST" | "USER" | "ADMIN"[]
+  roles: ("GUEST" | "USER" | "ADMIN")[]
   status: string
 }
 
