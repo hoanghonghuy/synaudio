@@ -1,7 +1,8 @@
 # AI Audiobook Platform (Synaudio)
 
-Monorepo triển khai theo `docs/ai-audiobook-spec/spec_final.md` và
-`docs/ai-audiobook-spec/SPEC-AMENDMENT-001-POST-VERIFICATION.md`.
+Monorepo triển khai theo `docs/ai-audiobook-spec/spec_final.md`,
+`docs/ai-audiobook-spec/SPEC-AMENDMENT-001-POST-VERIFICATION.md`, và
+`docs/ai-audiobook-spec/SPEC-AMENDMENT-002-SAME-ORIGIN-PRODUCTION.md`.
 
 ## Current phase
 
@@ -75,6 +76,24 @@ Provider selection is controlled by `AI_MODE` and `TTS_MODE`.
 
 Use `.env.example` as the canonical runtime environment template.
 
+## Production browser/API authority
+
+Synaudio V1 supports one canonical browser origin in production:
+
+```text
+Browser
+  -> https://app.example.com
+      -> frontend SPA
+      -> relative /api/v1/*
+          -> private backend API
+```
+
+Operators must terminate public HTTPS at the trusted web/ingress layer and keep the backend API private behind that same-origin proxy. Browser code must continue to call relative `/api/v1`; do not expose a second public browser API origin or add permissive credentialed CORS as a deployment shortcut.
+
+Cookie-backed refresh/logout remains protected by the repository Origin/CSRF policy even though the canonical browser path is same-origin. `Forwarded` / `X-Forwarded-*` values are trusted only when the immediate peer is configured in `TRUSTED_PROXY_CIDRS`; direct clients must not be able to spoof forwarded HTTPS/host identity. Bearer-authenticated non-browser API clients remain supported independently of browser CORS.
+
+See [`SPEC-AMENDMENT-002-SAME-ORIGIN-PRODUCTION.md`](docs/ai-audiobook-spec/SPEC-AMENDMENT-002-SAME-ORIGIN-PRODUCTION.md) and [`docs/operations/production-deployment.md`](docs/operations/production-deployment.md) for the authoritative contract and rollout checks.
+
 ## Health endpoints
 
 **API (public listener)**
@@ -97,3 +116,4 @@ Provider-agnostic examples: [`deploy/`](deploy/)
 
 1. `docs/ai-audiobook-spec/spec_final.md`
 2. `docs/ai-audiobook-spec/SPEC-AMENDMENT-001-POST-VERIFICATION.md`
+3. `docs/ai-audiobook-spec/SPEC-AMENDMENT-002-SAME-ORIGIN-PRODUCTION.md` — supersedes Amendment 001 browser-origin/CORS wording where they conflict.
