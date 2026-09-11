@@ -7,9 +7,16 @@ import {
   stageStateLabel,
 } from '../src/features/admin/chapterProductionStages.mjs'
 
-test('selection loading is represented across every production stage', () => {
+test('selection loading keeps the legacy six-stage workspace until canon authority is wired', () => {
   const stages = buildChapterProductionStages({ selectionLoading: true })
+  assert.equal(stages.length, 6)
+  assert.ok(stages.every((stage) => stage.state === 'loading'))
+})
+
+test('selection loading includes canon when authoritative canon status is supplied', () => {
+  const stages = buildChapterProductionStages({ selectionLoading: true, canonStatus: 'Đang tải Canon/Memory authority…' })
   assert.equal(stages.length, 7)
+  assert.equal(stages[3].id, 'canon')
   assert.ok(stages.every((stage) => stage.state === 'loading'))
 })
 
