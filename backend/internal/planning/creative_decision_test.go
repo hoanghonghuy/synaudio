@@ -2,6 +2,7 @@ package planning
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -81,6 +82,69 @@ func TestRejectCreativeDecision(t *testing.T) {
 	}
 	if rejected.Status != "REJECTED" {
 		t.Fatalf("expected REJECTED, got %q", rejected.Status)
+	}
+}
+
+func TestCreativeDecisionTerminalStatusCannotBeRewritten(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store)
+
+	selectedDecision, _ := svc.CreateCreativeDecision(context.Background(), CreateCreativeDecisionInput{
+		StoryID: "s1", DecisionType: "PLOT", Question: "Q1", CreatedBy: "creator",
+	})
+	selected, err := svc.SelectCreativeDecision(context.Background(), selectedDecision.ID, "selector")
+	if err != nil {
+		t.Fatalf("select decision: %v", err)
+	}
+	if _, err := svc.RejectCreativeDecision(context.Background(), selected.ID, "attacker", "rewrite"); !errors.Is(err, ErrCreativeDecisionInvalidTransition) {
+		t.Fatalf("expected invalid transition selecting->rejecting, got %v", err)
+	}
+	storedSelected, err := store.GetCreativeDecision(context.Background(), selected.ID)
+	if err != nil {
+		t.Fatalf("get selected decision: %v", err)
+	}
+	if storedSelected.Status != "SELECTED" || storedSelected.SelectedBy != "selector" || storedSelected.RejectionScope != "" {
+		t.Fatalf("selected decision mutated after rejected transition: %#v", storedSelected)
+	}
+
+	rejectedDecision, _ := svc.CreateCreativeDecision(context.Background(), CreateCreativeDecisionInput{
+		StoryID: "s1", DecisionType: "PLOT", Question: "Q2", CreatedBy: "creator",
+	})
+	rejected, err := svc.RejectCreativeDecision(context.Background(), rejectedDecision.ID, "rejector", "future-only")
+	if err != nil {
+		t.Fatalf("reject decision: %v", err)
+	}
+	if _, err := svc.SelectCreativeDecision(context.Background(), rejected.ID, "attacker"); !errors.Is(err, ErrCreativeDecisionInvalidTransition) {
+		t.Fatalf("expected invalid transition rejecting->selecting, got %v", err)
+	}
+	storedRejected, err := store.GetCreativeDecision(context.Background(), rejected.ID)
+	if err != nil {
+		t.Fatalf("get rejected decision: %v", err)
+	}
+	if storedRejected.Status != "REJECTED" || storedRejected.SelectedBy != "rejector" || storedRejected.RejectionScope != "future-only" {
+		t.Fatalf("rejected decision mutated after invalid transition: %#v", storedRejected)
+	}
+}
+
+func TestCreativeDecisionRepeatedTerminalActionIsRejected(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store)
+
+	d, _ := svc.CreateCreativeDecision(context.Background(), CreateCreativeDecisionInput{
+		StoryID: "s1", DecisionType: "PLOT", Question: "Q", CreatedBy: "creator",
+	})
+	if _, err := svc.SelectCreativeDecision(context.Background(), d.ID, "selector"); err != nil {
+		t.Fatalf("select decision: %v", err)
+	}
+	if _, err := svc.SelectCreativeDecision(context.Background(), d.ID, "different-selector"); !errors.Is(err, ErrCreativeDecisionInvalidTransition) {
+		t.Fatalf("expected repeated terminal select to fail, got %v", err)
+	}
+	stored, err := store.GetCreativeDecision(context.Background(), d.ID)
+	if err != nil {
+		t.Fatalf("get decision: %v", err)
+	}
+	if stored.SelectedBy != "selector" {
+		t.Fatalf("terminal provenance changed: got %q", stored.SelectedBy)
 	}
 }
 
