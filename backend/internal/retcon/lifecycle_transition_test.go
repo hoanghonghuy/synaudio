@@ -16,6 +16,14 @@ func TestRetconLifecycleRejectsBackwardAndTerminalTransitions(t *testing.T) {
 		act    func(*Service, string) error
 	}{
 		{
+			name:   "approve draft before analysis",
+			status: "DRAFT",
+			act: func(svc *Service, id string) error {
+				_, err := svc.ApproveRetconRequest(context.Background(), id, "admin-2")
+				return err
+			},
+		},
+		{
 			name:   "analyze approved",
 			status: "APPROVED",
 			act: func(svc *Service, id string) error {
@@ -74,6 +82,9 @@ func TestRetconLifecycleRejectsBackwardAndTerminalTransitions(t *testing.T) {
 			if got.Status != tt.status {
 				t.Fatalf("status mutated to %q, want %q", got.Status, tt.status)
 			}
+			if got.ApprovedBy != "" {
+				t.Fatalf("approved_by mutated to %q on rejected transition", got.ApprovedBy)
+			}
 		})
 	}
 }
@@ -96,6 +107,9 @@ func TestRetconLifecycleAllowsDraftAnalyzeApproveReadyApply(t *testing.T) {
 	if err != nil || ret.Status != "APPROVED" {
 		t.Fatalf("ApproveRetconRequest: status=%q err=%v", ret.Status, err)
 	}
+	if ret.ApprovedBy != "admin-2" {
+		t.Fatalf("ApproveRetconRequest: approvedBy=%q, want admin-2", ret.ApprovedBy)
+	}
 	ret, err = svc.MarkReadyToApply(context.Background(), ret.ID)
 	if err != nil || ret.Status != "READY_TO_APPLY" {
 		t.Fatalf("MarkReadyToApply: status=%q err=%v", ret.Status, err)
@@ -114,6 +128,19 @@ func TestAnalyzeRetconHTTPReturnsConflictForInvalidTransition(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "RETCON_INVALID_TRANSITION") {
+		t.Fatalf("body = %s, want RETCON_INVALID_TRANSITION", rec.Body.String())
+	}
+}
+
+func TestRetconMutationErrorMapsInvalidTransitionToConflict(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	writeRetconMutationError(rec, ErrRetconInvalidTransition)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusConflict, rec.Body.String())
