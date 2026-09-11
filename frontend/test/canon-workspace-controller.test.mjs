@@ -85,6 +85,31 @@ test('commit binds exact authority and refreshes persisted projection before bec
   assert.equal(after.readiness.latestVersion.ID, 'v2')
 })
 
+test('commit uses the approved revision snapshot even if caller mutates its object after load', async () => {
+  const approvedRevision = { ID: 'rev-original' }
+  const calls = []
+  let versions = []
+  const api = {
+    async getActiveOfficialBranch() { return { ID: 'branch-1' } },
+    async listVersions() { return { versions } },
+    async commitApprovedRevision(input) {
+      calls.push(input)
+      versions = [{ ID: 'v1', SequenceNo: 1, Status: 'OFFICIAL', SourceContentRevisionID: input.approvedRevisionID }]
+      return versions[0]
+    },
+  }
+
+  const controller = createCanonWorkspaceController(api)
+  await controller.load({ storyID: 'story-1', chapterID: 'chapter-1', approvedRevision })
+  approvedRevision.ID = 'rev-mutated'
+
+  const state = await controller.commit()
+
+  assert.deepEqual(calls, [{ storyID: 'story-1', branchID: 'branch-1', chapterID: 'chapter-1', approvedRevisionID: 'rev-original' }])
+  assert.equal(state.readiness.state, 'CURRENT')
+  assert.equal(state.readiness.latestVersion.SourceContentRevisionID, 'rev-original')
+})
+
 test('duplicate commit is suppressed while the exact authority mutation is in flight', async () => {
   const pending = deferred()
   let commitCalls = 0
