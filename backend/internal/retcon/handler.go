@@ -46,6 +46,17 @@ func requireAdminActor(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return actorID, true
 }
 
+func writeRetconMutationError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrRetconNotFound):
+		writeError(w, http.StatusNotFound, "RETCON_NOT_FOUND", "retcon not found")
+	case errors.Is(err, ErrRetconInvalidTransition):
+		writeError(w, http.StatusConflict, "RETCON_INVALID_TRANSITION", "retcon lifecycle transition is not allowed")
+	default:
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+	}
+}
+
 func (h *Handler) createRetcon(w http.ResponseWriter, r *http.Request) {
 	var req createRetconRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -123,11 +134,7 @@ func (h *Handler) approveRetcon(w http.ResponseWriter, r *http.Request) {
 	}
 	ret, err := h.svc.ApproveRetconRequest(r.Context(), id, approvedBy)
 	if err != nil {
-		if errors.Is(err, ErrRetconNotFound) {
-			writeError(w, http.StatusNotFound, "RETCON_NOT_FOUND", "retcon not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		writeRetconMutationError(w, err)
 		return
 	}
 
@@ -139,11 +146,7 @@ func (h *Handler) cancelRetcon(w http.ResponseWriter, r *http.Request) {
 
 	ret, err := h.svc.CancelRetconRequest(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, ErrRetconNotFound) {
-			writeError(w, http.StatusNotFound, "RETCON_NOT_FOUND", "retcon not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		writeRetconMutationError(w, err)
 		return
 	}
 
@@ -155,11 +158,7 @@ func (h *Handler) analyzeRetcon(w http.ResponseWriter, r *http.Request) {
 
 	ret, err := h.svc.AnalyzeRetconRequest(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, ErrRetconNotFound) {
-			writeError(w, http.StatusNotFound, "RETCON_NOT_FOUND", "retcon not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		writeRetconMutationError(w, err)
 		return
 	}
 
