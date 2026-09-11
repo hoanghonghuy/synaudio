@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/synaudio/synaudio/backend/internal/platform/httpapi"
@@ -36,6 +37,15 @@ type createRetconRequest struct {
 	RequestedBy     string `json:"requested_by"`
 }
 
+func requireAdminActor(w http.ResponseWriter, r *http.Request) (string, bool) {
+	actorID := strings.TrimSpace(httpapi.AdminActorID(r.Context()))
+	if actorID == "" {
+		writeError(w, http.StatusUnauthorized, "ADMIN_ACTOR_REQUIRED", "authenticated admin actor is required")
+		return "", false
+	}
+	return actorID, true
+}
+
 func (h *Handler) createRetcon(w http.ResponseWriter, r *http.Request) {
 	var req createRetconRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -43,9 +53,9 @@ func (h *Handler) createRetcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedBy := req.RequestedBy
-	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
-		requestedBy = actorID
+	requestedBy, ok := requireAdminActor(w, r)
+	if !ok {
+		return
 	}
 	ret, err := h.svc.CreateRetconRequest(r.Context(), CreateRetconInput{
 		StoryID:         req.StoryID,
@@ -107,9 +117,9 @@ func (h *Handler) approveRetcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	approvedBy := req.ApprovedBy
-	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
-		approvedBy = actorID
+	approvedBy, ok := requireAdminActor(w, r)
+	if !ok {
+		return
 	}
 	ret, err := h.svc.ApproveRetconRequest(r.Context(), id, approvedBy)
 	if err != nil {
@@ -189,9 +199,9 @@ func (h *Handler) applyRetcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appliedBy := req.AppliedBy
-	if actorID := httpapi.AdminActorID(r.Context()); actorID != "" {
-		appliedBy = actorID
+	appliedBy, ok := requireAdminActor(w, r)
+	if !ok {
+		return
 	}
 	ret, err := h.svc.ApplyRetconRequest(r.Context(), id, appliedBy)
 	if err != nil {
