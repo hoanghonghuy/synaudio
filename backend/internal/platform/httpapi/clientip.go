@@ -62,6 +62,8 @@ func (c TrustedProxyConfig) Trusted(peer string) bool {
 
 // WithTrustedClientIP stores a trustworthy client IP on the request context.
 // Forwarded headers are honored only when RemoteAddr is a configured trusted peer.
+// Headers from an untrusted immediate peer are removed before downstream code can
+// use them for scheme/host security decisions.
 func WithTrustedClientIP(cfg TrustedProxyConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -72,9 +74,23 @@ func WithTrustedClientIP(cfg TrustedProxyConfig) func(http.Handler) http.Handler
 					clientIP = forwarded
 					r.RemoteAddr = net.JoinHostPort(forwarded, "0")
 				}
+			} else {
+				stripUntrustedForwardedHeaders(r)
 			}
+
+			if errCode := cookieMutationOriginError(r); errCode != "" {
+				writeError(w, http.StatusForbidden, errCode, "same-origin request required for cookie-authenticated mutation")
+				return
+			}
+
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), clientIPContextKey{}, clientIP)))
 		})
+	}
+}
+
+func stripUntrustedForwardedHeaders(r *http.Request) {
+	for _, name := range []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "X-Real-IP"} {
+		r.Header.Del(name)
 	}
 }
 
