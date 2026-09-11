@@ -16,23 +16,22 @@ const (
 )
 
 type Config struct {
-	AppEnv             string
-	HTTPAddr           string
-	DatabaseURL        string
-	StorageProvider    string
-	StorageEndpoint    string
-	StorageBucket      string
-	StorageAccessKey   string
-	StorageSecretKey   string
-	AIMode             string
-	TTSMode            string
-	GeminiAPIKey       string
-	GeminiTextModel    string
-	GeminiTTSModel     string
-	GeminiTTSVoice     string
-	AppPublicURL       string
-	APIPublicURL       string
-	CORSAllowedOrigins []string
+	AppEnv           string
+	HTTPAddr         string
+	DatabaseURL      string
+	StorageProvider  string
+	StorageEndpoint  string
+	StorageBucket    string
+	StorageAccessKey string
+	StorageSecretKey string
+	AIMode           string
+	TTSMode          string
+	GeminiAPIKey     string
+	GeminiTextModel  string
+	GeminiTTSModel   string
+	GeminiTTSVoice   string
+	AppPublicURL     string
+	APIPublicURL     string
 
 	// AccessTokenSecret is a development-only compatibility input used to seed
 	// the zero-setup local keyring. Production authentication is configured by
@@ -93,7 +92,6 @@ func Load() (Config, error) {
 		GeminiTTSVoice:           strings.TrimSpace(getenv("GEMINI_TTS_VOICE", "Kore")),
 		AppPublicURL:             strings.TrimSpace(os.Getenv("APP_PUBLIC_URL")),
 		APIPublicURL:             strings.TrimSpace(os.Getenv("API_PUBLIC_URL")),
-		CORSAllowedOrigins:       splitCSV(os.Getenv("CORS_ALLOWED_ORIGINS")),
 		AccessTokenSecret:        accessTokenSecret,
 		AccessTokenTTL:           accessTokenTTL,
 		RefreshSessionTTL:        refreshSessionTTL,
@@ -232,16 +230,4 @@ func getenvDuration(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("%s must be a valid duration: %w", key, err)
 	}
 	return value, nil
-}
-
-func splitCSV(raw string) []string {
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }
