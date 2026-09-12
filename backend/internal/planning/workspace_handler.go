@@ -20,6 +20,7 @@ func NewWorkspaceHandler(svc *Service) http.Handler {
 	r.Post("/admin/stories/{storyID}/arcs", h.createArc)
 	r.Post("/admin/stories/{storyID}/characters", h.createCharacter)
 	r.Get("/admin/stories/{storyID}/canon-branches/active-official", h.getActiveOfficialCanonBranch)
+	r.Post("/admin/creative-decisions/{decisionID}/postpone", h.postponeCreativeDecision)
 	return r
 }
 
@@ -102,6 +103,36 @@ func (h *workspaceHandler) createCharacter(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+type postponeCreativeDecisionRequest struct {
+	Reason string `json:"reason"`
+}
+
+func (h *workspaceHandler) postponeCreativeDecision(w http.ResponseWriter, r *http.Request) {
+	decisionID := chi.URLParam(r, "decisionID")
+
+	var req postponeCreativeDecisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	postponedBy, ok := requireCreativeDecisionAdminActor(w, r)
+	if !ok {
+		return
+	}
+	d, err := h.svc.PostponeCreativeDecision(r.Context(), decisionID, postponedBy, req.Reason)
+	if err != nil {
+		if errors.Is(err, ErrCreativeDecisionInvalidTransition) || errors.Is(err, ErrCreativeDecisionNotFound) {
+			writeCreativeDecisionMutationError(w, err)
+			return
+		}
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, d)
 }
 
 func (h *workspaceHandler) getActiveOfficialCanonBranch(w http.ResponseWriter, r *http.Request) {

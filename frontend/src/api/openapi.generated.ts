@@ -40,6 +40,7 @@ export const API_OPERATIONS = [
   { method: "POST", path: "/api/v1/admin/chapters/{chapterID}/safety", operationId: "postApiV1AdminChaptersChapteridSafety" },
   { method: "POST", path: "/api/v1/admin/chapters/{chapterID}/unpublish", operationId: "postApiV1AdminChaptersChapteridUnpublish" },
   { method: "GET", path: "/api/v1/admin/context-snapshots/{snapshotID}", operationId: "getApiV1AdminContextSnapshotsSnapshotid" },
+  { method: "POST", path: "/api/v1/admin/creative-decisions/{decisionID}/postpone", operationId: "postApiV1AdminCreativeDecisionsDecisionidPostpone" },
   { method: "POST", path: "/api/v1/admin/creative-decisions/{decisionID}/reject", operationId: "postApiV1AdminCreativeDecisionsDecisionidReject" },
   { method: "POST", path: "/api/v1/admin/creative-decisions/{decisionID}/select", operationId: "postApiV1AdminCreativeDecisionsDecisionidSelect" },
   { method: "GET", path: "/api/v1/admin/generation-jobs/{jobID}", operationId: "getApiV1AdminGenerationJobsJobid" },
@@ -832,6 +833,10 @@ export interface PlotThreadPascal {
   StoryID?: string
   Summary?: string
   Title?: string
+}
+
+export interface PostponeCreativeDecisionRequest {
+  reason: string
 }
 
 export interface ProgressConflictResponse {

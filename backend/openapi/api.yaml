@@ -1017,6 +1017,36 @@ paths:
               required: true
               schema:
                 type: string
+    /api/v1/admin/creative-decisions/{decisionID}/postpone:
+        parameters:
+            - in: path
+              name: decisionID
+              required: true
+              schema:
+                type: string
+        post:
+            operationId: postApiV1AdminCreativeDecisionsDecisionidPostpone
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PostponeCreativeDecisionRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreativeDecisionPascal'
+                    description: Creative decision postponed
+                "400":
+                    $ref: '#/components/responses/BadRequest'
+                "401":
+                    $ref: '#/components/responses/Unauthenticated'
+                "403":
+                    $ref: '#/components/responses/Forbidden'
+            security:
+                - bearerAuth: []
     /api/v1/admin/creative-decisions/{decisionID}/reject:
         parameters:
             - in: path
@@ -4788,6 +4818,15 @@ components:
                     type: string
                 Title:
                     type: string
+            type: object
+        PostponeCreativeDecisionRequest:
+            properties:
+                reason:
+                    maxLength: 500
+                    minLength: 1
+                    type: string
+            required:
+                - reason
             type: object
         ProgressConflictResponse:
             properties:

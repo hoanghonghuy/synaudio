@@ -202,6 +202,7 @@ var semanticRoutes = map[string]routeDescriptor{
 	"POST /admin/stories/{storyID}/creative-decisions":          {"CREATIVE_DECISION_PROPOSED", "CREATIVE_DECISION", ""},
 	"POST /admin/creative-decisions/{decisionID}/select":        {"CREATIVE_DECISION_APPROVED", "CREATIVE_DECISION", "decisionID"},
 	"POST /admin/creative-decisions/{decisionID}/reject":        {"CREATIVE_DECISION_REJECTED", "CREATIVE_DECISION", "decisionID"},
+	"POST /admin/creative-decisions/{decisionID}/postpone":      {"CREATIVE_DECISION_POSTPONED", "CREATIVE_DECISION", "decisionID"},
 	"POST /admin/chapters/{chapterID}/content":                  {"CHAPTER_GENERATED", "CONTENT_REVISION", ""},
 	"POST /admin/chapters/{chapterID}/approve":                  {"CHAPTER_APPROVED", "CHAPTER", "chapterID"},
 	"POST /admin/chapters/{chapterID}/edit":                     {"CHAPTER_CONTENT_EDITED", "CONTENT_REVISION", ""},
@@ -223,9 +224,9 @@ var semanticRoutes = map[string]routeDescriptor{
 	"POST /admin/chapters/{chapterID}/audio":                    {"AUDIO_ASSET_CREATED", "AUDIO_ASSET", ""},
 	"POST /admin/chapters/{chapterID}/audio/{assetID}/activate": {"AUDIO_ACTIVATED", "AUDIO_ASSET", "assetID"},
 	"POST /admin/chapters/{chapterID}/revision-impact":          {"LISTENER_REVISION_IMPACT_APPLIED", "CHAPTER", "chapterID"},
-	"POST /admin/users/{userID}/roles/admin":                  {"ADMIN_ROLE_GRANTED", "USER", "userID"},
-	"DELETE /admin/users/{userID}/roles/admin":                {"ADMIN_ROLE_REVOKED", "USER", "userID"},
-	"PATCH /admin/users/{userID}/status":                      {"ADMIN_STATUS_CHANGED", "USER", "userID"},
+	"POST /admin/users/{userID}/roles/admin":                    {"ADMIN_ROLE_GRANTED", "USER", "userID"},
+	"DELETE /admin/users/{userID}/roles/admin":                  {"ADMIN_ROLE_REVOKED", "USER", "userID"},
+	"PATCH /admin/users/{userID}/status":                        {"ADMIN_STATUS_CHANGED", "USER", "userID"},
 }
 
 var authRoutes = map[string]routeDescriptor{

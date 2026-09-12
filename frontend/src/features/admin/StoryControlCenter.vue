@@ -8,6 +8,7 @@ import {
   listUsage,
 } from '../../api/client'
 import {
+  postponeCreativeDecision,
   rejectCreativeDecision,
   selectCreativeDecision,
 } from '../../api/creative-decisions'
@@ -31,8 +32,8 @@ const error = ref('')
 const mutationError = ref('')
 const mutationMessage = ref('')
 const pendingDecisionID = ref('')
-const rejectingDecisionID = ref('')
-const rejectionScopes = ref<Record<string, string>>({})
+const decisionForm = ref<{ id: string; action: 'reject' | 'postpone' } | null>(null)
+const decisionNotes = ref<Record<string, string>>({})
 let loadGeneration = 0
 let decisionRefreshGeneration = 0
 let mutationGeneration = 0
@@ -59,6 +60,7 @@ function decisionStatusLabel(status: string) {
     PROPOSED: 'Chờ quyết định',
     SELECTED: 'Đã chọn',
     REJECTED: 'Đã từ chối',
+    POSTPONED: 'Đã hoãn',
   }
   return labels[status] ?? status
 }
@@ -99,14 +101,16 @@ async function load() {
   }
 }
 
-async function runDecisionMutation(decision: CreativeDecision, action: 'select' | 'reject') {
+async function runDecisionMutation(decision: CreativeDecision, action: 'select' | 'reject' | 'postpone') {
   if (pendingDecisionID.value || decision.Status !== 'PROPOSED') return
 
   const expectedStoryID = storyID.value
   const generation = ++mutationGeneration
-  const rejectionScope = rejectionScopes.value[decision.ID]?.trim() ?? ''
-  if (action === 'reject' && !rejectionScope) {
-    mutationError.value = 'Hãy nhập phạm vi/lý do từ chối trước khi xác nhận.'
+  const note = decisionNotes.value[decision.ID]?.trim() ?? ''
+  if (action !== 'select' && !note) {
+    mutationError.value = action === 'reject'
+      ? 'Hãy nhập phạm vi/lý do từ chối trước khi xác nhận.'
+      : 'Hãy nhập lý do hoãn trước khi xác nhận.'
     return
   }
 
@@ -117,15 +121,20 @@ async function runDecisionMutation(decision: CreativeDecision, action: 'select' 
   try {
     if (action === 'select') {
       await selectCreativeDecision(decision.ID)
+    } else if (action === 'reject') {
+      await rejectCreativeDecision(decision.ID, note)
     } else {
-      await rejectCreativeDecision(decision.ID, rejectionScope)
+      await postponeCreativeDecision(decision.ID, note)
     }
 
     if (generation !== mutationGeneration || expectedStoryID !== storyID.value) return
-    mutationMessage.value = action === 'select'
-      ? 'Đã chọn quyết định. Đang đồng bộ trạng thái từ máy chủ.'
-      : 'Đã từ chối quyết định. Đang đồng bộ trạng thái từ máy chủ.'
-    rejectingDecisionID.value = ''
+    const messages = {
+      select: 'Đã chọn quyết định. Đang đồng bộ trạng thái từ máy chủ.',
+      reject: 'Đã từ chối quyết định. Đang đồng bộ trạng thái từ máy chủ.',
+      postpone: 'Đã hoãn quyết định. Đang đồng bộ trạng thái từ máy chủ.',
+    }
+    mutationMessage.value = messages[action]
+    decisionForm.value = null
     await refreshDecisions(expectedStoryID)
   } catch (e) {
     if (generation !== mutationGeneration || expectedStoryID !== storyID.value) return
@@ -140,22 +149,22 @@ async function runDecisionMutation(decision: CreativeDecision, action: 'select' 
   }
 }
 
-function beginReject(decisionID: string) {
+function beginDecisionForm(decisionID: string, action: 'reject' | 'postpone') {
   mutationError.value = ''
   mutationMessage.value = ''
-  rejectingDecisionID.value = decisionID
+  decisionForm.value = { id: decisionID, action }
 }
 
-function cancelReject() {
-  rejectingDecisionID.value = ''
+function cancelDecisionForm() {
+  decisionForm.value = null
   mutationError.value = ''
 }
 
 watch(storyID, () => {
   ++mutationGeneration
   pendingDecisionID.value = ''
-  rejectingDecisionID.value = ''
-  rejectionScopes.value = {}
+  decisionForm.value = null
+  decisionNotes.value = {}
   void load()
 }, { immediate: true })
 </script>
@@ -251,46 +260,62 @@ watch(storyID, () => {
                     {{ pendingDecisionID === d.ID ? 'Đang xử lý…' : 'Chọn quyết định' }}
                   </button>
                   <button
+                    class="decision-button"
+                    type="button"
+                    :disabled="Boolean(pendingDecisionID)"
+                    :aria-expanded="decisionForm?.id === d.ID && decisionForm.action === 'postpone'"
+                    @click="beginDecisionForm(d.ID, 'postpone')"
+                  >
+                    Hoãn…
+                  </button>
+                  <button
                     class="decision-button decision-button-danger"
                     type="button"
                     :disabled="Boolean(pendingDecisionID)"
-                    :aria-expanded="rejectingDecisionID === d.ID"
-                    @click="beginReject(d.ID)"
+                    :aria-expanded="decisionForm?.id === d.ID && decisionForm.action === 'reject'"
+                    @click="beginDecisionForm(d.ID, 'reject')"
                   >
                     Từ chối…
                   </button>
                 </div>
 
                 <form
-                  v-if="d.Status === 'PROPOSED' && rejectingDecisionID === d.ID"
-                  class="reject-form"
-                  @submit.prevent="runDecisionMutation(d, 'reject')"
+                  v-if="d.Status === 'PROPOSED' && decisionForm?.id === d.ID"
+                  class="decision-form"
+                  @submit.prevent="runDecisionMutation(d, decisionForm.action)"
                 >
-                  <label :for="`reject-scope-${d.ID}`">Phạm vi / lý do từ chối</label>
+                  <label :for="`decision-note-${d.ID}`">
+                    {{ decisionForm.action === 'reject' ? 'Phạm vi / lý do từ chối' : 'Lý do hoãn' }}
+                  </label>
                   <textarea
-                    :id="`reject-scope-${d.ID}`"
-                    v-model="rejectionScopes[d.ID]"
+                    :id="`decision-note-${d.ID}`"
+                    v-model="decisionNotes[d.ID]"
                     rows="3"
                     maxlength="500"
                     required
                     :disabled="Boolean(pendingDecisionID)"
-                    placeholder="Mô tả rõ quyết định này bị từ chối vì sao hoặc phạm vi cần tránh."
+                    :placeholder="decisionForm.action === 'reject'
+                      ? 'Mô tả rõ quyết định này bị từ chối vì sao hoặc phạm vi cần tránh.'
+                      : 'Nêu rõ vì sao quyết định này nên được hoãn để người vận hành có ngữ cảnh khi xem lại.'"
                   />
-                  <div class="reject-form-actions">
+                  <div class="decision-form-actions">
                     <button
-                      class="decision-button decision-button-danger"
+                      class="decision-button"
+                      :class="{ 'decision-button-danger': decisionForm.action === 'reject' }"
                       type="submit"
-                      :disabled="Boolean(pendingDecisionID) || !rejectionScopes[d.ID]?.trim()"
+                      :disabled="Boolean(pendingDecisionID) || !decisionNotes[d.ID]?.trim()"
                     >
-                      {{ pendingDecisionID === d.ID ? 'Đang từ chối…' : 'Xác nhận từ chối' }}
+                      {{ pendingDecisionID === d.ID
+                        ? 'Đang xử lý…'
+                        : decisionForm.action === 'reject' ? 'Xác nhận từ chối' : 'Xác nhận hoãn' }}
                     </button>
-                    <button class="decision-button" type="button" :disabled="Boolean(pendingDecisionID)" @click="cancelReject">
+                    <button class="decision-button" type="button" :disabled="Boolean(pendingDecisionID)" @click="cancelDecisionForm">
                       Hủy
                     </button>
                   </div>
                 </form>
 
-                <p v-else-if="d.Status === 'SELECTED' || d.Status === 'REJECTED'" class="terminal-note">
+                <p v-else-if="d.Status === 'SELECTED' || d.Status === 'REJECTED' || d.Status === 'POSTPONED'" class="terminal-note">
                   Trạng thái cuối — không thể mở lại từ màn hình này.
                 </p>
               </li>
@@ -372,12 +397,13 @@ watch(storyID, () => {
   opacity: 0.9;
 }
 
-.decision-status-rejected {
+.decision-status-rejected,
+.decision-status-postponed {
   opacity: 0.75;
 }
 
 .decision-actions,
-.reject-form-actions {
+.decision-form-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -401,7 +427,7 @@ watch(storyID, () => {
 }
 
 .decision-button:focus-visible,
-.reject-form textarea:focus-visible {
+.decision-form textarea:focus-visible {
   outline: 3px solid currentColor;
   outline-offset: 2px;
 }
@@ -415,7 +441,7 @@ watch(storyID, () => {
   font-weight: 650;
 }
 
-.reject-form {
+.decision-form {
   display: grid;
   gap: 0.5rem;
   margin-top: 1rem;
@@ -424,11 +450,11 @@ watch(storyID, () => {
   border-radius: 0.75rem;
 }
 
-.reject-form label {
+.decision-form label {
   font-weight: 650;
 }
 
-.reject-form textarea {
+.decision-form textarea {
   width: 100%;
   min-height: 5.5rem;
   resize: vertical;
@@ -449,7 +475,7 @@ watch(storyID, () => {
   }
 
   .decision-actions,
-  .reject-form-actions {
+  .decision-form-actions {
     display: grid;
     grid-template-columns: 1fr;
   }

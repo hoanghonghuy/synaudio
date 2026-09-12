@@ -760,6 +760,11 @@ components:
       properties:
         based_on_revision_id: { type: string }
         requested_by: { type: string }
+    PostponeCreativeDecisionRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
     RejectContentRequest:
       type: object
       properties:
