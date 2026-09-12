@@ -835,6 +835,10 @@ export interface PlotThreadPascal {
   Title?: string
 }
 
+export interface PostponeCreativeDecisionRequest {
+  reason: string
+}
+
 export interface ProgressConflictResponse {
   error: ErrorBody
   progress: ListeningProgressPascal
