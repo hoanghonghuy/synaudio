@@ -1,0 +1,59 @@
+name: Fix task 149 postpone persistence
+
+on:
+  push:
+    branches:
+      - task/149-creative-decision-postpone
+    paths:
+      - .github/workflows/fix-postpone-persistence-task149.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: task/149-creative-decision-postpone
+          fetch-depth: 0
+      - name: Persist revisit condition through PostgreSQL store
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          query = Path('backend/db/queries/planning.sql')
+          text = query.read_text()
+          old = '''    rejection_scope = $5,\n    selected_by = $6,\n'''
+          new = '''    rejection_scope = $5,\n    revisit_condition = $6,\n    selected_by = $7,\n'''
+          if old not in text:
+              raise SystemExit('creative decision query target not found')
+          query.write_text(text.replace(old, new, 1))
+
+          store = Path('backend/internal/platform/pgstore/planning.go')
+          text = store.read_text()
+          old = '''func (s *PlanningStore) UpdateCreativeDecision(ctx context.Context, d planning.CreativeDecision) (planning.CreativeDecision, error) {\n\trow, err := s.q.UpdateCreativeDecision(ctx, db.UpdateCreativeDecisionParams{\n'''
+          new = '''func (s *PlanningStore) UpdateCreativeDecision(ctx context.Context, d planning.CreativeDecision) (planning.CreativeDecision, error) {\n\trevisitCondition, _ := json.Marshal(d.RevisitCondition)\n\trow, err := s.q.UpdateCreativeDecision(ctx, db.UpdateCreativeDecisionParams{\n'''
+          if old not in text:
+              raise SystemExit('planning store function target not found')
+          text = text.replace(old, new, 1)
+          old = '''\t\tRejectionScope:     toText(d.RejectionScope),\n\t\tSelectedBy:         toUUID(d.SelectedBy),\n'''
+          new = '''\t\tRejectionScope:     toText(d.RejectionScope),\n\t\tRevisitCondition:   revisitCondition,\n\t\tSelectedBy:         toUUID(d.SelectedBy),\n'''
+          if old not in text:
+              raise SystemExit('planning store params target not found')
+          store.write_text(text.replace(old, new, 1))
+          PY
+          gofmt -w backend/internal/platform/pgstore/planning.go
+      - name: Regenerate sqlc
+        run: make sqlc
+      - name: Verify sqlc is clean
+        run: git diff --check
+      - name: Commit fix and remove temporary workflow
+        run: |
+          rm .github/workflows/fix-postpone-persistence-task149.yml
+          git config user.name 'SYNAUDIO-A'
+          git config user.email '111640702+hoanghonghuy@users.noreply.github.com'
+          git add backend/db/queries/planning.sql backend/internal/platform/pgstore/planning.go backend/internal/platform/db .github/workflows/fix-postpone-persistence-task149.yml
+          git commit -m 'fix: persist creative decision postpone context'
+          git push origin HEAD:task/149-creative-decision-postpone
