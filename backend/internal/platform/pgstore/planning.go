@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/synaudio/synaudio/backend/internal/platform/db"
 	"github.com/synaudio/synaudio/backend/internal/planning"
+	"github.com/synaudio/synaudio/backend/internal/platform/db"
 )
 
 // PlanningStore implements planning.Store backed by PostgreSQL via sqlc.
@@ -350,8 +350,8 @@ func (s *PlanningStore) GetFact(ctx context.Context, id string) (planning.StoryF
 
 func (s *PlanningStore) UpdateFact(ctx context.Context, f planning.StoryFact) (planning.StoryFact, error) {
 	row, err := s.q.UpdateFact(ctx, db.UpdateFactParams{
-		ID:              toUUID(f.ID),
-		Status:          f.Status,
+		ID:               toUUID(f.ID),
+		Status:           f.Status,
 		SupersedesFactID: toUUID(f.SupersedesFactID),
 	})
 	if err != nil {
@@ -442,16 +442,16 @@ func (s *PlanningStore) NextCanonSequence(ctx context.Context, branchID string) 
 
 func (s *PlanningStore) CreateCanonVersion(ctx context.Context, v planning.CanonVersion) (planning.CanonVersion, error) {
 	row, err := s.q.CreateCanonVersion(ctx, db.CreateCanonVersionParams{
-		ID:                       toUUID(v.ID),
-		StoryID:                  toUUID(v.StoryID),
-		BranchID:                 toUUID(v.BranchID),
-		SequenceNo:               int32(v.SequenceNo),
-		ParentVersionID:          toUUID(v.ParentVersionID),
-		SourceChapterID:          toUUID(v.SourceChapterID),
-		SourceContentRevisionID:  toUUID(v.SourceContentRevisionID),
+		ID:                         toUUID(v.ID),
+		StoryID:                    toUUID(v.StoryID),
+		BranchID:                   toUUID(v.BranchID),
+		SequenceNo:                 int32(v.SequenceNo),
+		ParentVersionID:            toUUID(v.ParentVersionID),
+		SourceChapterID:            toUUID(v.SourceChapterID),
+		SourceContentRevisionID:    toUUID(v.SourceContentRevisionID),
 		SourceProvisionalVersionID: toUUID(v.SourceProvisionalVersionID),
-		Status:                   v.Status,
-		CommittedBy:              toUUID(v.CommittedBy),
+		Status:                     v.Status,
+		CommittedBy:                toUUID(v.CommittedBy),
 	})
 	if err != nil {
 		return planning.CanonVersion{}, err
@@ -621,12 +621,14 @@ func (s *PlanningStore) ListCreativeDecisions(ctx context.Context, storyID strin
 }
 
 func (s *PlanningStore) UpdateCreativeDecision(ctx context.Context, d planning.CreativeDecision) (planning.CreativeDecision, error) {
+	revisitCondition, _ := json.Marshal(d.RevisitCondition)
 	row, err := s.q.UpdateCreativeDecision(ctx, db.UpdateCreativeDecisionParams{
 		ID:                 toUUID(d.ID),
 		Status:             d.Status,
 		SelectedOptionID:   toUUID(d.SelectedOptionID),
 		CustomSelectedText: toText(d.CustomSelectedText),
 		RejectionScope:     toText(d.RejectionScope),
+		RevisitCondition:   revisitCondition,
 		SelectedBy:         toUUID(d.SelectedBy),
 	})
 	if err != nil {
@@ -750,10 +752,10 @@ func toArcVersion(row db.StoryArcVersion) planning.ArcVersion {
 
 func toCharacter(row db.Character) planning.Character {
 	return planning.Character{
-		ID:                     fromUUID(row.ID),
-		StoryID:                fromUUID(row.StoryID),
-		CanonicalName:          row.CanonicalName,
-		Importance:             row.Importance,
+		ID:                      fromUUID(row.ID),
+		StoryID:                 fromUUID(row.StoryID),
+		CanonicalName:           row.CanonicalName,
+		Importance:              row.Importance,
 		CurrentProfileVersionID: fromUUID(row.CurrentProfileVersionID),
 	}
 }
@@ -844,16 +846,16 @@ func toCanonBranch(row db.CanonBranch) planning.CanonBranch {
 
 func toCanonVersion(row db.CanonVersion) planning.CanonVersion {
 	return planning.CanonVersion{
-		ID:              fromUUID(row.ID),
-		StoryID:         fromUUID(row.StoryID),
-		BranchID:        fromUUID(row.BranchID),
-		SequenceNo:      int(row.SequenceNo),
-		ParentVersionID: fromUUID(row.ParentVersionID),
-		SourceChapterID: fromUUID(row.SourceChapterID),
-		SourceContentRevisionID: fromUUID(row.SourceContentRevisionID),
+		ID:                         fromUUID(row.ID),
+		StoryID:                    fromUUID(row.StoryID),
+		BranchID:                   fromUUID(row.BranchID),
+		SequenceNo:                 int(row.SequenceNo),
+		ParentVersionID:            fromUUID(row.ParentVersionID),
+		SourceChapterID:            fromUUID(row.SourceChapterID),
+		SourceContentRevisionID:    fromUUID(row.SourceContentRevisionID),
 		SourceProvisionalVersionID: fromUUID(row.SourceProvisionalVersionID),
-		Status:          row.Status,
-		CommittedBy:     fromUUID(row.CommittedBy),
+		Status:                     row.Status,
+		CommittedBy:                fromUUID(row.CommittedBy),
 	}
 }
 

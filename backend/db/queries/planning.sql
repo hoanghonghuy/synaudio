@@ -343,7 +343,8 @@ SET status = $2,
     selected_option_id = $3,
     custom_selected_text = $4,
     rejection_scope = $5,
-    selected_by = $6,
+    revisit_condition = $6,
+    selected_by = $7,
     selected_at = CASE WHEN $2 = 'SELECTED' THEN NOW() ELSE selected_at END,
     applied_at = CASE WHEN $2 = 'APPLIED' THEN NOW() ELSE applied_at END
 WHERE id = $1
