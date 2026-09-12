@@ -1017,6 +1017,28 @@ paths:
               required: true
               schema:
                 type: string
+    /api/v1/admin/creative-decisions/{decisionID}/postpone:
+        parameters:
+            - in: path
+              name: decisionID
+              required: true
+              schema:
+                type: string
+        post:
+            operationId: postApiV1AdminCreativeDecisionsDecisionidPostpone
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RejectContentRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreativeDecisionPascal'
+                    description: Creative decision postponed
     /api/v1/admin/creative-decisions/{decisionID}/reject:
         parameters:
             - in: path
