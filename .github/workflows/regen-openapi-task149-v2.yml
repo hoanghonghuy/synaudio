@@ -1,0 +1,63 @@
+name: Regenerate task 149 OpenAPI v2
+
+on:
+  push:
+    branches:
+      - task/149-creative-decision-postpone
+    paths:
+      - .github/workflows/regen-openapi-task149-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: task/149-creative-decision-postpone
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.26.6'
+          cache-dependency-path: backend/go.sum
+      - name: Add dedicated request schema and standard admin responses
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          schemas = Path('backend/openapi/schemas.yaml')
+          text = schemas.read_text()
+          if '    PostponeCreativeDecisionRequest:\n' not in text:
+              marker = '    RejectContentRequest:\n'
+              block = '''    PostponeCreativeDecisionRequest:\n      type: object\n      required: [reason]\n      properties:\n        reason: { type: string, minLength: 1, maxLength: 500 }\n'''
+              if marker not in text:
+                  raise SystemExit('RejectContentRequest marker not found')
+              schemas.write_text(text.replace(marker, block + marker, 1))
+
+          api = Path('backend/openapi/api.yaml')
+          text = api.read_text()
+          security_marker = '''                    description: Creative decision postponed\n    /api/v1/admin/creative-decisions/{decisionID}/reject:\n'''
+          if security_marker in text:
+              replacement = '''                    description: Creative decision postponed\n                "400":\n                    $ref: '#/components/responses/BadRequest'\n                "401":\n                    $ref: '#/components/responses/Unauthenticated'\n                "403":\n                    $ref: '#/components/responses/Forbidden'\n            security:\n                - bearerAuth: []\n    /api/v1/admin/creative-decisions/{decisionID}/reject:\n'''
+              api.write_text(text.replace(security_marker, replacement, 1))
+          elif '/api/v1/admin/creative-decisions/{decisionID}/postpone:' not in text:
+              raise SystemExit('postpone path missing')
+          PY
+      - name: Regenerate contracts
+        working-directory: backend
+        run: |
+          REGEN_OPENAPI=1 go test ./openapi -run TestRegenerateAPIContract
+          REGEN_OPENAPI_FRONTEND=1 go test ./openapi -run TestRegenerateFrontendContract
+      - name: Verify generated contract
+        working-directory: backend
+        run: go test ./openapi
+      - name: Commit generated contract and remove temporary workflow
+        run: |
+          rm .github/workflows/regen-openapi-task149-v2.yml
+          git config user.name 'SYNAUDIO-A'
+          git config user.email '111640702+hoanghonghuy@users.noreply.github.com'
+          git add backend/openapi/api.yaml backend/openapi/schemas.yaml frontend/src/api/openapi.generated.ts .github/workflows/regen-openapi-task149-v2.yml
+          git commit -m 'contract: define creative decision postpone request'
+          git push origin HEAD:task/149-creative-decision-postpone
