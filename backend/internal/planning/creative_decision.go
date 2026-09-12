@@ -3,6 +3,7 @@ package planning
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -118,6 +119,33 @@ func (s *Service) RejectCreativeDecision(ctx context.Context, id, rejectedBy, sc
 	d.Status = "REJECTED"
 	d.RejectionScope = scope
 	d.SelectedBy = rejectedBy
+
+	return s.store.UpdateCreativeDecision(ctx, d)
+}
+
+// PostponeCreativeDecision marks a PROPOSED decision as POSTPONED while
+// preserving its historical decision payload. POSTPONED is terminal in V1;
+// a future resume/reopen workflow must be defined explicitly rather than
+// rewriting this record in place.
+func (s *Service) PostponeCreativeDecision(ctx context.Context, id, postponedBy, reason string) (CreativeDecision, error) {
+	d, err := s.store.GetCreativeDecision(ctx, id)
+	if err != nil {
+		return CreativeDecision{}, err
+	}
+	if d.Status != "PROPOSED" {
+		return CreativeDecision{}, ErrCreativeDecisionInvalidTransition
+	}
+
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return CreativeDecision{}, errors.New("postpone reason must not be empty")
+	}
+
+	d.Status = "POSTPONED"
+	// The existing selected_by column is the persisted actor/provenance field for
+	// Creative Decision resolution actions. Status disambiguates the action.
+	d.SelectedBy = postponedBy
+	d.RevisitCondition = map[string]any{"reason": reason}
 
 	return s.store.UpdateCreativeDecision(ctx, d)
 }
