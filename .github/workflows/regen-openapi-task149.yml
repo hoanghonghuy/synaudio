@@ -1,0 +1,50 @@
+name: Regenerate task 149 OpenAPI
+
+on:
+  push:
+    branches:
+      - task/149-creative-decision-postpone
+    paths:
+      - .github/workflows/regen-openapi-task149.yml
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: task/149-creative-decision-postpone
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.26.6'
+          cache-dependency-path: backend/go.sum
+      - name: Add postpone path stub
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('backend/openapi/api.yaml')
+          text = path.read_text()
+          target = '    /api/v1/admin/creative-decisions/{decisionID}/select:\n'
+          if '/api/v1/admin/creative-decisions/{decisionID}/postpone:' not in text:
+              block = '''    /api/v1/admin/creative-decisions/{decisionID}/postpone:\n        parameters:\n            - in: path\n              name: decisionID\n              required: true\n              schema:\n                type: string\n        post:\n            operationId: postApiV1AdminCreativeDecisionsDecisionidPostpone\n'''
+              if target not in text:
+                  raise SystemExit('select marker not found')
+              path.write_text(text.replace(target, block + target, 1))
+          PY
+      - name: Regenerate contracts
+        working-directory: backend
+        run: |
+          REGEN_OPENAPI=1 go test ./openapi -run TestRegenerateAPIContract
+          REGEN_OPENAPI_FRONTEND=1 go test ./openapi -run TestRegenerateFrontendContract
+      - name: Commit generated contract and remove temporary workflow
+        run: |
+          rm .github/workflows/regen-openapi-task149.yml
+          git config user.name 'SYNAUDIO-A'
+          git config user.email '111640702+hoanghonghuy@users.noreply.github.com'
+          git add backend/openapi/api.yaml frontend/src/api/openapi.generated.ts .github/workflows/regen-openapi-task149.yml
+          git commit -m 'contract: regenerate creative decision postpone API'
+          git push origin HEAD:task/149-creative-decision-postpone
