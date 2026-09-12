@@ -214,12 +214,12 @@ func adminPolicyFor(method, route string) adminRoutePolicy {
 
 	if hasPrefix(route, "/admin/creative-decisions") {
 		if hasSuffix(route, "/reject") {
-			return adminRoutePolicy{Permission: "CREATIVE_DECISION_REJECT"}
+			return adminRoutePolicy{Permission: "CREATIVE_DECISION_REJECT", RecentAuth: true}
 		}
 		if hasSuffix(route, "/postpone") {
-			return adminRoutePolicy{Permission: "CREATIVE_DECISION_POSTPONE"}
+			return adminRoutePolicy{Permission: "CREATIVE_DECISION_POSTPONE", RecentAuth: true}
 		}
-		return adminRoutePolicy{Permission: "CREATIVE_DECISION_RESOLVE"}
+		return adminRoutePolicy{Permission: "CREATIVE_DECISION_RESOLVE", RecentAuth: true}
 	}
 
 	if hasPrefix(route, "/admin/plot-threads") || hasPrefix(route, "/admin/attention") {
