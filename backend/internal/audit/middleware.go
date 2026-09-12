@@ -361,6 +361,10 @@ func (w *bufferedResponse) flushTo(dst http.ResponseWriter) {
 			dst.Header().Add(key, value)
 		}
 	}
-	dst.WriteHeader(w.status)
+	status := w.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	dst.WriteHeader(status)
 	_, _ = dst.Write(w.body.Bytes())
 }
