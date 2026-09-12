@@ -14,3 +14,10 @@ export function rejectCreativeDecision(decisionID: string, scope: string): Promi
     body: JSON.stringify({ scope }),
   })
 }
+
+export function postponeCreativeDecision(decisionID: string, reason: string): Promise<CreativeDecision> {
+  return authenticatedRequest<CreativeDecision>(`/admin/creative-decisions/${decisionID}/postpone`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
