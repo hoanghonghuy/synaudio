@@ -123,7 +123,7 @@ onMounted(load)
     </div>
 
     <!-- Cảnh báo bắt buộc kích hoạt MFA cho Admin -->
-    <div v-if="auth.isAdmin && !auth.user?.mfa_enabled" class="admin-mfa-banner panel" role="alert">
+    <div v-if="auth.isAdmin && auth.user?.admin_mfa_required !== false && !auth.user?.mfa_enabled" class="admin-mfa-banner panel" role="alert">
       <div class="admin-mfa-body">
         <div class="admin-mfa-badge">Bảo Mật Bắt Buộc</div>
         <h2>Kích hoạt xác thực hai yếu tố (MFA)</h2>
@@ -150,7 +150,7 @@ onMounted(load)
           <p>{{ error }}</p>
           <div class="status-actions">
             <RouterLink
-              v-if="securityState?.needsMfaSetup || (auth.isAdmin && !auth.user?.mfa_enabled)"
+              v-if="securityState?.needsMfaSetup || (auth.isAdmin && auth.user?.admin_mfa_required !== false && !auth.user?.mfa_enabled)"
               class="primary-link"
               to="/account/security"
             >

@@ -40,3 +40,29 @@ func TestSMTPEmailRequiresTrustedRuntimeConfiguration(t *testing.T) {
 		t.Fatalf("unexpected smtp config: mode=%q port=%q", cfg.Mode, cfg.SMTPPort)
 	}
 }
+
+func TestTerminalEmailModeInDevelopment(t *testing.T) {
+	clearEmailEnv(t)
+	t.Setenv("EMAIL_MODE", "terminal")
+	t.Setenv("EMAIL_PAYLOAD_SECRET", "test-email-payload-secret-that-is-long-enough")
+
+	cfg, err := LoadEmail(EnvDevelopment, "http://localhost:5173")
+	if err != nil {
+		t.Fatalf("load terminal email config in development: %v", err)
+	}
+	if cfg.Mode != EmailModeTerminal {
+		t.Fatalf("expected mode %q, got %q", EmailModeTerminal, cfg.Mode)
+	}
+}
+
+func TestTerminalEmailModeRejectedInProduction(t *testing.T) {
+	clearEmailEnv(t)
+	t.Setenv("EMAIL_MODE", "terminal")
+	t.Setenv("EMAIL_PAYLOAD_SECRET", "test-email-payload-secret-that-is-long-enough")
+
+	_, err := LoadEmail(EnvProduction, "https://app.example.com")
+	if err == nil || !strings.Contains(err.Error(), "EMAIL_MODE=smtp") {
+		t.Fatalf("expected production to reject EMAIL_MODE=terminal, got: %v", err)
+	}
+}
+

@@ -87,6 +87,8 @@ services:
       - REFRESH_SESSION_TTL=720h
       - RECENT_AUTH_WINDOW=10m
       - TRUSTED_PROXY_CIDRS=0.0.0.0/0,::/0
+      - EMAIL_MODE=${EMAIL_MODE:-terminal}
+      - ADMIN_MFA_REQUIRED=${ADMIN_MFA_REQUIRED:-true}
     ports:
       - "${SYNAUDIO_API_PORT:-18080}:8080"
     depends_on:
@@ -125,6 +127,7 @@ services:
       - ACCESS_TOKEN_TTL=15m
       - REFRESH_SESSION_TTL=720h
       - RECENT_AUTH_WINDOW=10m
+      - EMAIL_MODE=${EMAIL_MODE:-terminal}
     depends_on:
       postgres:
         condition: service_healthy

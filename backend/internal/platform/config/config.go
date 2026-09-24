@@ -44,6 +44,7 @@ type Config struct {
 
 	AllowRemoteDatabaseInDev bool
 	AllowRemoteStorageInDev  bool
+	AdminMFARequired         bool
 }
 
 func Load() (Config, error) {
@@ -75,6 +76,18 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	adminMFARequired := true
+	if raw := strings.TrimSpace(os.Getenv("ADMIN_MFA_REQUIRED")); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("ADMIN_MFA_REQUIRED must be a boolean: %w", err)
+		}
+		adminMFARequired = parsed
+	}
+	if appEnv == EnvProduction && !adminMFARequired {
+		return Config{}, fmt.Errorf("ADMIN_MFA_REQUIRED=false is not allowed in production")
+	}
+
 	cfg := Config{
 		AppEnv:                   appEnv,
 		HTTPAddr:                 getenv("HTTP_ADDR", ":8080"),
@@ -99,6 +112,7 @@ func Load() (Config, error) {
 		RecentAuthWindow:         recentAuthWindow,
 		AllowRemoteDatabaseInDev: getenvBool("ALLOW_REMOTE_DATABASE_IN_DEV", false),
 		AllowRemoteStorageInDev:  getenvBool("ALLOW_REMOTE_STORAGE_IN_DEV", false),
+		AdminMFARequired:         adminMFARequired,
 	}
 
 	if cfg.DatabaseURL == "" {

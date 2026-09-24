@@ -376,3 +376,38 @@ func TestRecoveryReAuthConcurrentAllowsAtMostOneAssurance(t *testing.T) {
 		t.Fatalf("expected exactly one assured session, got %d", assured)
 	}
 }
+
+func TestAdminRoleGrantsPrivilegedCapabilityWhenMFANotRequired(t *testing.T) {
+	store := newPrivilegedSecurityFakeStore()
+	svc := identity.NewAuthService(store, identity.WithAuthSettings(identity.AuthSettings{
+		AdminMFARequired:    false,
+		AdminMFARequiredSet: true,
+	}))
+	u, err := svc.Register(context.Background(), "admin-nomfa@example.com", "correct password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkEmailVerified(context.Background(), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.GrantRole(context.Background(), u.ID, identity.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := svc.Login(context.Background(), u.Email, "correct password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	access, err := svc.IssueAccessToken(sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/stories", nil)
+	req.Header.Set("Authorization", "Bearer "+access.Token)
+
+	allowed, err := svc.ResolveAdmin(context.Background(), req)
+	if err != nil || !allowed {
+		t.Fatalf("expected ResolveAdmin to succeed without MFA when AdminMFARequired=false, got allowed=%v err=%v", allowed, err)
+	}
+}
+

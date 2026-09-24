@@ -10,6 +10,8 @@ import (
 const (
 	EmailModeDisabled = "disabled"
 	EmailModeSMTP     = "smtp"
+	EmailModeTerminal = "terminal"
+	EmailModeConsole  = "console"
 )
 
 type EmailConfig struct {
@@ -50,8 +52,8 @@ func LoadEmail(appEnv, appPublicURL string) (EmailConfig, error) {
 		}
 		cfg.SMTPTimeout = value
 	}
-	if cfg.Mode != EmailModeDisabled && cfg.Mode != EmailModeSMTP {
-		return EmailConfig{}, errors.New("EMAIL_MODE must be disabled or smtp")
+	if cfg.Mode != EmailModeDisabled && cfg.Mode != EmailModeSMTP && cfg.Mode != EmailModeTerminal && cfg.Mode != EmailModeConsole {
+		return EmailConfig{}, errors.New("EMAIL_MODE must be disabled, smtp, or terminal")
 	}
 	if strings.EqualFold(appEnv, EnvProduction) && cfg.Mode != EmailModeSMTP {
 		return EmailConfig{}, errors.New("EMAIL_MODE=smtp is required in production")
@@ -60,10 +62,22 @@ func LoadEmail(appEnv, appPublicURL string) (EmailConfig, error) {
 		return cfg, nil
 	}
 	if cfg.AppPublicURL == "" {
-		return EmailConfig{}, errors.New("APP_PUBLIC_URL is required when transactional email is enabled")
+		if !strings.EqualFold(appEnv, EnvProduction) {
+			cfg.AppPublicURL = "http://localhost:5173"
+		} else {
+			return EmailConfig{}, errors.New("APP_PUBLIC_URL is required when transactional email is enabled")
+		}
 	}
 	if len(cfg.PayloadSecret) < 32 {
-		return EmailConfig{}, errors.New("EMAIL_PAYLOAD_SECRET must be at least 32 bytes")
+		if !strings.EqualFold(appEnv, EnvProduction) {
+			cfg.PayloadSecret = "development-only-email-payload-secret-at-least-32-bytes"
+		} else {
+			return EmailConfig{}, errors.New("EMAIL_PAYLOAD_SECRET must be at least 32 bytes")
+		}
+	}
+	if cfg.Mode == EmailModeTerminal || cfg.Mode == EmailModeConsole {
+		cfg.Mode = EmailModeTerminal
+		return cfg, nil
 	}
 	if cfg.SMTPHost == "" || cfg.SMTPFrom == "" {
 		return EmailConfig{}, errors.New("SMTP_HOST and SMTP_FROM are required when EMAIL_MODE=smtp")

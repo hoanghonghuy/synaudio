@@ -135,6 +135,8 @@ type AuthSettings struct {
 	RefreshSessionTTL     time.Duration
 	RefreshSessionIdleTTL time.Duration
 	RecentAuthWindow      time.Duration
+	AdminMFARequired      bool
+	AdminMFARequiredSet   bool
 	Now                   func() time.Time
 }
 
@@ -160,6 +162,10 @@ func WithAuthSettings(settings AuthSettings) AuthOption {
 		if settings.RecentAuthWindow > 0 {
 			s.settings.RecentAuthWindow = settings.RecentAuthWindow
 		}
+		if settings.AdminMFARequiredSet {
+			s.settings.AdminMFARequired = settings.AdminMFARequired
+			s.settings.AdminMFARequiredSet = true
+		}
 	}
 }
 
@@ -176,6 +182,8 @@ func NewAuthService(store Store, opts ...AuthOption) *AuthService {
 		RefreshSessionTTL:     30 * 24 * time.Hour,
 		RefreshSessionIdleTTL: 7 * 24 * time.Hour,
 		RecentAuthWindow:      10 * time.Minute,
+		AdminMFARequired:      true,
+		AdminMFARequiredSet:   true,
 		Now:                   time.Now,
 	}
 	s := &AuthService{store: store, settings: settings}

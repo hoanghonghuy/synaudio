@@ -72,7 +72,7 @@ WHERE id = (
     LIMIT 1
 )
 RETURNING id::text, purpose, recipient_email, encrypted_payload, attempt_count, max_attempts,
-          (last_error = '` + smtpDispatchStartedMarker + `') AS dispatch_started`, now, staleBefore)
+          COALESCE(last_error = '` + smtpDispatchStartedMarker + `', false) AS dispatch_started`, now, staleBefore)
 
 	var item notification.OutboxItem
 	if err := row.Scan(&item.ID, &item.Purpose, &item.RecipientEmail, &item.EncryptedPayload, &item.AttemptCount, &item.MaxAttempts, &item.DispatchStarted); err != nil {

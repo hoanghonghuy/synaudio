@@ -11,6 +11,10 @@ func BuildEmail(cfg config.EmailConfig, store notification.OutboxStore) (*notifi
 	if cfg.Mode == config.EmailModeDisabled {
 		return nil, nil
 	}
+	if cfg.Mode == config.EmailModeTerminal {
+		sender := notification.NewTerminalSender(nil)
+		return notification.NewService(store, sender, cfg.PayloadSecret, cfg.AppPublicURL)
+	}
 	if cfg.Mode != config.EmailModeSMTP {
 		return nil, fmt.Errorf("unsupported EMAIL_MODE %q", cfg.Mode)
 	}

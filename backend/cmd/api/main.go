@@ -115,6 +115,8 @@ func main() {
 		RefreshSessionTTL:     cfg.RefreshSessionTTL,
 		RefreshSessionIdleTTL: cfg.RefreshSessionIdleTTL,
 		RecentAuthWindow:      cfg.RecentAuthWindow,
+		AdminMFARequired:      cfg.AdminMFARequired,
+		AdminMFARequiredSet:   true,
 	}, accessTokenKeyring.ActiveKeyID, accessTokenKeyring.Keys, accessTokenKeyring.MaxTTL)
 	if err != nil {
 		log.Error("access-token manager init failed", logging.ErrAttr(err))

@@ -52,6 +52,7 @@ export interface AuthUser {
   email_verified: boolean
   roles: string[]
   mfa_enabled: boolean
+  admin_mfa_required?: boolean
 }
 
 export interface Chapter {

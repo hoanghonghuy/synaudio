@@ -134,3 +134,49 @@ func TestLoadRejectsShortAccessTokenSecret(t *testing.T) {
 		t.Fatalf("expected short access token secret rejection, got %v", err)
 	}
 }
+
+func TestAdminMFARequiredConfig(t *testing.T) {
+	// Dev default: true
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("DATABASE_URL", "postgres://synaudio:synaudio@localhost:5432/synaudio?sslmode=disable")
+	t.Setenv("STORAGE_PROVIDER", "minio")
+	t.Setenv("STORAGE_ENDPOINT", "http://localhost:9000")
+	t.Setenv("STORAGE_BUCKET", "synaudio")
+	t.Setenv("ADMIN_MFA_REQUIRED", "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("unexpected dev load error: %v", err)
+	}
+	if !cfg.AdminMFARequired {
+		t.Fatal("expected AdminMFARequired to default to true in development")
+	}
+
+	// Dev explicit false
+	t.Setenv("ADMIN_MFA_REQUIRED", "false")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("unexpected dev load error with ADMIN_MFA_REQUIRED=false: %v", err)
+	}
+	if cfg.AdminMFARequired {
+		t.Fatal("expected AdminMFARequired to be false when configured false in development")
+	}
+
+	// Production explicit false -> must be rejected
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("DATABASE_URL", "postgres://user:pass@ep-prod-123.neon.tech/synaudio?sslmode=require")
+	t.Setenv("STORAGE_PROVIDER", "r2")
+	t.Setenv("STORAGE_ENDPOINT", "https://accountid.r2.cloudflarestorage.com")
+	t.Setenv("STORAGE_BUCKET", "synaudio-prod")
+	t.Setenv("STORAGE_ACCESS_KEY", "key")
+	t.Setenv("STORAGE_SECRET_KEY", "secret")
+	t.Setenv("AI_MODE", "gemini")
+	t.Setenv("TTS_MODE", "gemini")
+	t.Setenv("ADMIN_MFA_REQUIRED", "false")
+
+	_, err = config.Load()
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "mfa") {
+		t.Fatalf("expected production to reject ADMIN_MFA_REQUIRED=false, got err: %v", err)
+	}
+}
+

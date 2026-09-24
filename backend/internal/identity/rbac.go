@@ -55,6 +55,9 @@ func (s *AuthService) privilegedPrincipal(ctx context.Context, r *http.Request) 
 	if !admin {
 		return principal, user, ErrForbidden
 	}
+	if !s.settings.AdminMFARequired {
+		return principal, user, nil
+	}
 	securityStore, ok := s.store.(mfaSecurityStore)
 	if !ok {
 		return principal, user, errors.New("privileged security persistence not configured")
@@ -102,6 +105,9 @@ func (s *AuthService) RequireRecentAuth(ctx context.Context, r *http.Request) er
 	principal, _, err := s.privilegedPrincipal(ctx, r)
 	if err != nil {
 		return err
+	}
+	if !s.settings.AdminMFARequired {
+		return nil
 	}
 	return s.requireSessionRecentAuth(ctx, principal)
 }

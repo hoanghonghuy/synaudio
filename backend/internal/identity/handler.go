@@ -145,6 +145,7 @@ func (h *AuthHandler) me(w http.ResponseWriter, r *http.Request) {
 		"id": user.ID, "email": user.Email, "status": user.Status,
 		"email_verified": user.EmailVerifiedAt != "", "roles": roles,
 		"mfa_enabled": mfaEnabled,
+		"admin_mfa_required": h.svc.settings.AdminMFARequired,
 	})
 }
 
