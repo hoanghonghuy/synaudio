@@ -180,3 +180,37 @@ func TestAdminMFARequiredConfig(t *testing.T) {
 	}
 }
 
+func TestLoadOpenAIConfig(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("DATABASE_URL", "postgres://synaudio:synaudio@localhost:5432/synaudio?sslmode=disable")
+	t.Setenv("STORAGE_PROVIDER", "minio")
+	t.Setenv("STORAGE_ENDPOINT", "http://localhost:9000")
+	t.Setenv("STORAGE_BUCKET", "synaudio")
+	t.Setenv("STORAGE_ACCESS_KEY", "minio")
+	t.Setenv("STORAGE_SECRET_KEY", "minio123")
+	t.Setenv("ALLOW_REMOTE_DATABASE_IN_DEV", "false")
+	t.Setenv("ALLOW_REMOTE_STORAGE_IN_DEV", "false")
+	t.Setenv("AI_MODE", "openai")
+	t.Setenv("OPENAI_BASE_URL", "https://yuhh-9router.duckdns.org/v1")
+	t.Setenv("OPENAI_API_KEY", "sk-d21f2272f14871ca-gizpjq-e919334a")
+	t.Setenv("OPENAI_MODEL", "code")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("expected config to load, got %v", err)
+	}
+	if cfg.AIMode != "openai" {
+		t.Fatalf("expected AIMode=openai, got %q", cfg.AIMode)
+	}
+	if cfg.OpenAIBaseURL != "https://yuhh-9router.duckdns.org/v1" {
+		t.Fatalf("expected OpenAIBaseURL, got %q", cfg.OpenAIBaseURL)
+	}
+	if cfg.OpenAIAPIKey != "sk-d21f2272f14871ca-gizpjq-e919334a" {
+		t.Fatalf("expected OpenAIAPIKey, got %q", cfg.OpenAIAPIKey)
+	}
+	if cfg.OpenAIModel != "code" {
+		t.Fatalf("expected OpenAIModel=code, got %q", cfg.OpenAIModel)
+	}
+}
+
+

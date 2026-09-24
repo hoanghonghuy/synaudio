@@ -41,6 +41,13 @@ func BuildAI(cfg config.Config) (AISet, error) {
 		}
 		adapter := &geminiAI{client: client}
 		return AISet{Architect: adapter, MemoryExtractor: adapter, TextAI: adapter}, nil
+	case "openai", "openai-compatible":
+		client, err := newOpenAIClient(cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel)
+		if err != nil {
+			return AISet{}, fmt.Errorf("configure openai AI provider: %w", err)
+		}
+		adapter := &openAIAI{client: client}
+		return AISet{Architect: adapter, MemoryExtractor: adapter, TextAI: adapter}, nil
 	default:
 		return AISet{}, fmt.Errorf("unsupported AI_MODE %q", cfg.AIMode)
 	}

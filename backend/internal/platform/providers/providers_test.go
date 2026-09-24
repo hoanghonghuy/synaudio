@@ -53,6 +53,33 @@ func TestBuildAIConstructsGeminiWithoutNetworkCall(t *testing.T) {
 	}
 }
 
+func TestBuildAIConstructsOpenAIWithoutNetworkCall(t *testing.T) {
+	set, err := BuildAI(config.Config{
+		AIMode:        "openai",
+		OpenAIBaseURL: "https://example.com/v1",
+		OpenAIAPIKey:  "test-key",
+		OpenAIModel:   "gpt-4o",
+	})
+	if err != nil {
+		t.Fatalf("build OpenAI AI: %v", err)
+	}
+	if set.Architect == nil || set.MemoryExtractor == nil || set.TextAI == nil {
+		t.Fatal("expected all OpenAI AI ports to be configured")
+	}
+}
+
+func TestBuildAIRejectsMissingOpenAIModel(t *testing.T) {
+	_, err := BuildAI(config.Config{
+		AIMode:        "openai",
+		OpenAIBaseURL: "https://example.com/v1",
+		OpenAIAPIKey:  "test-key",
+		OpenAIModel:   "",
+	})
+	if err == nil {
+		t.Fatal("expected missing OpenAI model to fail")
+	}
+}
+
 func TestBuildTTSRejectsUnsupportedMode(t *testing.T) {
 	if _, err := BuildTTS(config.Config{TTSMode: "other"}); err == nil {
 		t.Fatal("expected unsupported TTS mode to fail")

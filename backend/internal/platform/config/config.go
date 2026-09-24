@@ -30,6 +30,9 @@ type Config struct {
 	GeminiTextModel  string
 	GeminiTTSModel   string
 	GeminiTTSVoice   string
+	OpenAIBaseURL    string
+	OpenAIAPIKey     string
+	OpenAIModel      string
 	AppPublicURL     string
 	APIPublicURL     string
 
@@ -103,6 +106,9 @@ func Load() (Config, error) {
 		GeminiTextModel:          strings.TrimSpace(getenv("GEMINI_TEXT_MODEL", "gemini-3.7-flash")),
 		GeminiTTSModel:           strings.TrimSpace(getenv("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")),
 		GeminiTTSVoice:           strings.TrimSpace(getenv("GEMINI_TTS_VOICE", "Kore")),
+		OpenAIBaseURL:            strings.TrimRight(strings.TrimSpace(getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")), "/"),
+		OpenAIAPIKey:             strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		OpenAIModel:              strings.TrimSpace(getenv("OPENAI_MODEL", "gpt-4o")),
 		AppPublicURL:             strings.TrimSpace(os.Getenv("APP_PUBLIC_URL")),
 		APIPublicURL:             strings.TrimSpace(os.Getenv("API_PUBLIC_URL")),
 		AccessTokenSecret:        accessTokenSecret,
@@ -147,6 +153,10 @@ func (c Config) validate() error {
 	}
 	if c.RecentAuthWindow <= 0 {
 		return fmt.Errorf("RECENT_AUTH_WINDOW must be positive")
+	}
+
+	if (c.AIMode == "openai" || c.AIMode == "openai-compatible") && c.OpenAIModel == "" {
+		return fmt.Errorf("OPENAI_MODEL is required when AI_MODE=%s", c.AIMode)
 	}
 
 	if c.AppEnv == EnvDevelopment {
