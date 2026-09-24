@@ -446,12 +446,14 @@ watch(storyID, () => {
   gap: 0.5rem;
   margin-top: 1rem;
   padding: 0.9rem;
-  border: 1px solid currentColor;
-  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
 }
 
 .decision-form label {
   font-weight: 650;
+  color: var(--ink);
 }
 
 .decision-form textarea {
@@ -460,7 +462,10 @@ watch(storyID, () => {
   resize: vertical;
   box-sizing: border-box;
   padding: 0.75rem;
-  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
   font: inherit;
 }
 

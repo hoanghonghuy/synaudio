@@ -536,12 +536,12 @@ onMounted(loadWorkspace)
 <style scoped>
 .planning-studio { display: grid; gap: 1.5rem; }
 .planning-summary { display: grid; gap: .75rem; margin: 0; }
-.planning-summary > div { display: grid; grid-template-columns: minmax(9rem, .35fr) 1fr; gap: 1rem; padding-block: .75rem; border-bottom: 1px solid var(--border, #d9d9d9); }
+.planning-summary > div { display: grid; grid-template-columns: minmax(9rem, .35fr) 1fr; gap: 1rem; padding-block: .75rem; border-bottom: 1px solid var(--line); }
 .planning-summary dt { font-weight: 700; }
 .planning-summary dd { margin: 0; overflow-wrap: anywhere; }
 .action-row, .cover-form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1rem; }
 .readiness-list { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
-.readiness-list li { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem; border: 1px solid var(--border, #d9d9d9); border-radius: .5rem; }
+.readiness-list li { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .5rem; }
 .planning-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .planning-form label, .foundation-form label, .artifact-card label { display: grid; gap: .4rem; font-weight: 600; }
 .planning-form input, .planning-form textarea, .foundation-form textarea, .artifact-card input, .artifact-card textarea, .artifact-card select, .inline-json-form textarea { width: 100%; box-sizing: border-box; }
@@ -549,7 +549,7 @@ onMounted(loadWorkspace)
 .check-field { display: flex !important; align-items: center; gap: .5rem !important; }
 .foundation-form, .inline-json-form { display: grid; gap: .75rem; margin-bottom: 1.25rem; }
 .artifact-grid { margin-block: 1rem; }
-.artifact-card { min-width: 0; display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--border, #d9d9d9); border-radius: .65rem; }
+.artifact-card { min-width: 0; display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--line); border-radius: .65rem; }
 .planning-subsection { display: grid; gap: .75rem; margin-top: 1.5rem; }
 @media (max-width: 760px) {
   .planning-form { grid-template-columns: 1fr; }

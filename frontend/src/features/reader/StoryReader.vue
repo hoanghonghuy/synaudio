@@ -54,6 +54,18 @@ const progressLabel = computed(() => {
   return ''
 })
 
+const currentChapterIndex = computed(() =>
+  chapters.value.findIndex((c) => c.ID === activeChapter.value?.ID),
+)
+const prevChapter = computed(() =>
+  currentChapterIndex.value > 0 ? chapters.value[currentChapterIndex.value - 1] : null,
+)
+const nextChapter = computed(() =>
+  currentChapterIndex.value >= 0 && currentChapterIndex.value < chapters.value.length - 1
+    ? chapters.value[currentChapterIndex.value + 1]
+    : null,
+)
+
 function ownsCurrentAudio() {
   return Boolean(activeChapter.value && audioChapterID.value === activeChapter.value.ID)
 }
@@ -466,6 +478,26 @@ onBeforeUnmount(() => {
           <article v-else-if="content" class="prose" aria-label="Nội dung chương">
             <p v-for="(para, i) in content.content_text.split(/\n+/)" :key="i">{{ para }}</p>
           </article>
+
+          <nav v-if="prevChapter || nextChapter" class="reader-footer-nav" aria-label="Chuyển chương">
+            <button
+              v-if="prevChapter"
+              type="button"
+              class="reader-nav-btn prev"
+              @click="selectChapter(prevChapter)"
+            >
+              ← Chương {{ prevChapter.ChapterNumber }}: {{ prevChapter.Title }}
+            </button>
+            <div v-else class="nav-spacer"></div>
+            <button
+              v-if="nextChapter"
+              type="button"
+              class="reader-nav-btn next"
+              @click="selectChapter(nextChapter)"
+            >
+              Chương {{ nextChapter.ChapterNumber }}: {{ nextChapter.Title }} →
+            </button>
+          </nav>
         </div>
       </div>
     </template>
@@ -514,6 +546,52 @@ onBeforeUnmount(() => {
 .prose { max-width: 76ch; font-family: var(--font-reading); font-size: 1.05rem; line-height: 1.78; overflow-wrap: anywhere; }
 .prose p { margin: 0 0 1.1em; }
 
+.reader-footer-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.reader-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0.65rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 160ms ease;
+  box-shadow: var(--shadow);
+}
+
+.reader-nav-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-soft);
+  transform: translateY(-1px);
+}
+
+.reader-nav-btn.next {
+  margin-left: auto;
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.nav-spacer {
+  flex: 1;
+}
+
 @media (max-width: 1024px) {
   .reader-layout { grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 18px; }
   .chapter-nav { position: static; max-height: none; }
@@ -533,10 +611,10 @@ onBeforeUnmount(() => {
     z-index: 25;
     padding: 16px;
     border-radius: var(--radius-lg);
-    background: rgba(255, 255, 255, 0.97);
+    background: rgba(251, 249, 245, 0.96);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 24px rgba(35, 28, 22, 0.08);
   }
   .audio-heading-row { margin-bottom: 4px; }
   .player-primary { display: grid; grid-template-columns: auto auto auto; justify-content: center; gap: 16px; }
@@ -544,6 +622,8 @@ onBeforeUnmount(() => {
   .timeline-row { grid-template-columns: max-content minmax(0, 1fr) max-content; }
   .player-secondary { align-items: center; justify-content: space-between; }
   .prose { font-size: 1.08rem; line-height: 1.82; padding: 12px 0; }
+  .reader-footer-nav { flex-direction: column; align-items: stretch; }
+  .reader-nav-btn { width: 100%; justify-content: center; text-align: center; }
 }
 
 @media (max-width: 430px) {

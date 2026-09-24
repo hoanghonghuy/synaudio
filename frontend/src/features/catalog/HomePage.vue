@@ -41,6 +41,16 @@ function selectSort(sortVal: string) {
   load()
 }
 
+function statusLabel(status: Story['status']) {
+  const map: Record<string, string> = {
+    ACTIVE: 'Đang phát hành',
+    COMPLETED: 'Hoàn thành',
+    DRAFT: 'Bản thảo',
+    ARCHIVED: 'Lưu trữ',
+  }
+  return map[status] || status
+}
+
 onMounted(load)
 </script>
 
@@ -158,6 +168,7 @@ onMounted(load)
         <RouterLink :to="`/stories/${s.id}`" class="story-card-link" :aria-label="s.title">
           <div class="story-card-cover" aria-hidden="true">
             <span class="cover-letter">{{ s.title.slice(0, 1).toUpperCase() }}</span>
+            <span class="cover-seal-mark" aria-hidden="true">音</span>
             <div class="cover-play-badge">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -166,7 +177,7 @@ onMounted(load)
           </div>
           <div class="story-card-content">
             <div class="story-card-meta">
-              <span class="badge badge-subtle">{{ s.status }}</span>
+              <span class="badge badge-accent">{{ statusLabel(s.status) }}</span>
             </div>
             <h3 class="story-title">{{ s.title }}</h3>
             <p class="desc">{{ s.description || 'Một câu chuyện đang chờ bạn khám phá.' }}</p>

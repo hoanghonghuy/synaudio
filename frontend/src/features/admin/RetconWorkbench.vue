@@ -210,7 +210,7 @@ onMounted(() => { void loadList() })
 <style scoped>
 .retcon-workbench { max-width: 1180px; margin: 0 auto; }
 .retcon-layout { display: grid; grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.6fr); gap: 1rem; align-items: start; }
-.retcon-list, .retcon-detail, .retcon-empty, .retcon-feedback { border: 1px solid var(--border, #d7dbe2); border-radius: 14px; background: var(--surface, #fff); }
+.retcon-list, .retcon-detail, .retcon-empty, .retcon-feedback { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .retcon-list { display: grid; gap: .5rem; padding: .65rem; max-height: 72vh; overflow: auto; }
 .retcon-list-item { min-height: 72px; width: 100%; text-align: left; padding: .8rem; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; }
 .retcon-list-item:hover, .retcon-list-item.active { border-color: currentColor; }
@@ -224,7 +224,7 @@ onMounted(() => { void loadList() })
 .retcon-fields > div { min-width: 0; padding: .8rem; border-radius: 10px; background: color-mix(in srgb, currentColor 5%, transparent); }
 .retcon-fields dt { font-size: .78rem; font-weight: 700; text-transform: uppercase; opacity: .65; }
 .retcon-fields dd { margin: .3rem 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-.retcon-actions { display: flex; flex-wrap: wrap; gap: .6rem; border-top: 1px solid var(--border, #d7dbe2); padding-top: 1rem; }
+.retcon-actions { display: flex; flex-wrap: wrap; gap: .6rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .retcon-actions button, .retcon-feedback button { min-height: 44px; padding: .65rem .9rem; border-radius: 10px; border: 1px solid currentColor; background: transparent; cursor: pointer; }
 .retcon-actions button:disabled { opacity: .55; cursor: wait; }
 .retcon-actions .destructive { font-weight: 700; }

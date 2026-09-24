@@ -42,18 +42,18 @@ const showActions = computed(() => showCommitAction.value || view.value.canRetry
 </template>
 
 <style scoped>
-.canon-panel { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--border-color, #d8d8d8); border-radius: 16px; background: var(--surface-color, #fff); }
+.canon-panel { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .canon-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .canon-heading h3, .canon-heading p, .canon-summary, .canon-detail { margin: 0; }
 .eyebrow { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.68; }
-.canon-badge { flex: 0 0 auto; max-width: 48%; padding: 5px 9px; border: 1px solid currentColor; border-radius: 999px; font-size: 0.72rem; font-weight: 750; text-align: center; overflow-wrap: anywhere; }
+.canon-badge { flex: 0 0 auto; max-width: 48%; padding: 5px 9px; border: 1px solid currentColor; border-radius: var(--radius-full); font-size: 0.72rem; font-weight: 750; text-align: center; overflow-wrap: anywhere; }
 .canon-summary { font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; }
 .canon-detail { line-height: 1.5; opacity: 0.78; overflow-wrap: anywhere; }
 .canon-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.canon-actions button { min-height: 44px; padding: 10px 14px; border-radius: 10px; font: inherit; font-weight: 700; cursor: pointer; }
+.canon-actions button { min-height: 44px; padding: 10px 14px; border-radius: var(--radius-md); font: inherit; font-weight: 700; cursor: pointer; }
 .canon-actions button:disabled { cursor: not-allowed; opacity: 0.55; }
-.canon-primary { border: 1px solid transparent; background: var(--accent-color, #315efb); color: #fff; }
-.canon-secondary { border: 1px solid var(--border-color, #c8c8c8); background: transparent; color: inherit; }
+.canon-primary { border: 1px solid transparent; background: var(--accent); color: var(--surface); box-shadow: var(--shadow-seal); }
+.canon-secondary { border: 1px solid var(--line); background: transparent; color: inherit; }
 .canon-actions button:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
 .canon-current { opacity: 0.82; }
 .canon-blocked { font-weight: 800; }

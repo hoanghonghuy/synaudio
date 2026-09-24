@@ -71,6 +71,7 @@ onMounted(load)
       <div class="detail-hero">
         <div class="detail-art" aria-hidden="true">
           <span class="detail-art-letter">{{ story.title.slice(0, 1).toUpperCase() }}</span>
+          <span class="detail-art-seal">文</span>
         </div>
         <div class="detail-copy">
           <div class="meta" aria-label="Trạng thái truyện">
@@ -117,7 +118,10 @@ onMounted(load)
         </p>
         <ol v-else class="chapter-list">
           <li v-for="chapter in chapters" :key="chapter.ID" class="chapter-row">
-            <RouterLink class="chapter-row-link" :to="`/stories/${story.id}/read`">
+            <RouterLink
+              class="chapter-row-link"
+              :to="{ path: `/stories/${story.id}/read`, query: { chapter: chapter.ID } }"
+            >
               <span class="chapter-number" aria-hidden="true">
                 {{ String(chapter.ChapterNumber).padStart(2, '0') }}
               </span>
