@@ -165,11 +165,11 @@ pre { max-width: 100%; margin: 0; padding: var(--space-md); overflow: auto; bord
 .panel, .admin-list-panel, .create-form, .security-card, .review-sidebar, .review-main, .retcon-list, .retcon-detail, .retcon-empty, .retcon-feedback, .chapter-panel, .pipeline-panel { border: 1px solid var(--line); border-radius: var(--radius-lg); background: linear-gradient(145deg, rgba(27, 36, 49, 0.95), rgba(13, 18, 26, 0.96)); box-shadow: var(--shadow); }
 .panel { padding: var(--space-lg); }
 
-input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="number"], input[type="datetime-local"], select, textarea { width: 100%; min-height: 48px; padding: 0.7rem 0.9rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(7, 10, 15, 0.68); color: var(--ink); transition: 180ms ease; }
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]), select, textarea { width: 100%; min-height: 48px; padding: 0.72rem 0.95rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(7, 10, 15, 0.72); color: var(--ink); font-size: 0.88rem; font-family: inherit; box-sizing: border-box; transition: 180ms ease; }
 input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 input:hover, select:hover, textarea:hover { border-color: var(--line-strong); }
-input:focus, select:focus, textarea:focus { border-color: var(--accent-border); background: rgba(9, 13, 19, 0.94); box-shadow: 0 0 0 4px var(--accent-soft); outline: none; }
-textarea { min-height: 7rem; line-height: 1.65; resize: vertical; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent-border); background: rgba(9, 13, 19, 0.96); box-shadow: 0 0 0 4px var(--accent-soft); outline: none; }
+textarea { min-height: 6.5rem; line-height: 1.65; resize: vertical; }
 
 button, .primary-link, .primary-btn-cta, .secondary-link, .secondary-button, .control-link, .auth-primary-link, .track-play-btn, .reader-nav-btn, .action-link { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 0.45rem; border-radius: var(--radius-full); font-weight: 800; cursor: pointer; transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
 button:hover:not(:disabled), .primary-link:hover, .primary-btn-cta:hover, .secondary-link:hover, .secondary-button:hover, .control-link:hover, .auth-primary-link:hover, .track-play-btn:hover, .reader-nav-btn:hover, .action-link:hover { transform: translateY(-1px); }
@@ -320,7 +320,10 @@ button:not([class]):hover:not(:disabled) { border-color: var(--accent-border); b
 .auth-mode-btn, .reauth-mode-toggle button { min-height: 42px; flex: 1; border-radius: var(--radius-full); background: transparent; color: var(--muted); font-size: 0.82rem; font-weight: 800; cursor: pointer; }
 .auth-mode-btn.active, .reauth-mode-toggle button.active { background: var(--surface-raised); color: var(--accent-strong); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28); }
 .auth-form { display: grid; gap: var(--space-md); }
-.auth-form label, .create-form label, .planning-form label, .foundation-form label, .artifact-card label { display: grid; gap: var(--space-xs); color: var(--ink-medium); font-size: 0.8rem; font-weight: 750; }
+.auth-form label, .create-form label, .planning-form label, .foundation-form label, .artifact-card label, .reject-form label { display: flex; flex-direction: column; gap: var(--space-xs); color: var(--ink-medium); font-size: 0.8rem; font-weight: 750; }
+.create-form label > span, .auth-form label > span, .planning-form label > span, .foundation-form label > span, .artifact-card label > span { display: flex; align-items: center; gap: 0.35rem; }
+.required, span[aria-hidden="true"] { color: var(--accent); font-weight: 800; display: inline-block; }
+.create-form button[type="submit"] { width: 100%; min-height: 48px; font-size: 0.92rem; }
 .auth-submit-btn, .auth-form button:not(.text-button), .auth-form button[type="submit"] { width: 100%; min-height: 50px; font-size: 0.95rem; }
 .auth-links { display: grid; gap: var(--space-sm); margin-top: var(--space-lg); text-align: center; }
 .auth-links a { color: var(--accent); font-size: 0.84rem; font-weight: 750; }
@@ -364,9 +367,9 @@ button:not([class]):hover:not(:disabled) { border-color: var(--accent-border); b
 .story-row-actions .control-link { min-height: 38px; padding: 0 0.75rem; font-size: 0.74rem; }
 .create-form { display: grid; gap: var(--space-md); }
 .create-form h2 { margin: 0; }
-.create-form fieldset { display: grid; gap: var(--space-md); min-width: 0; margin: 0; padding: var(--space-md); border: 1px solid var(--line); border-radius: var(--radius-md); }
-.create-form legend { padding: 0 var(--space-xs); color: var(--ink-medium); font-size: 0.75rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
-.row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); }
+.create-form fieldset { display: grid; gap: var(--space-md); min-width: 0; margin: 0; padding: var(--space-md); border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(0, 0, 0, 0.16); }
+.create-form legend { padding: 0 var(--space-xs); color: var(--accent); font-size: 0.72rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-md); }
 .story-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
 .story-table { width: 100%; min-width: 640px; border-collapse: collapse; color: var(--ink-medium); font-size: 0.82rem; }
 .story-table th, .story-table td { padding: 0.9rem 1rem; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }

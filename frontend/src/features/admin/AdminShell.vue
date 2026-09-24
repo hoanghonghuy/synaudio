@@ -221,12 +221,12 @@ onMounted(load)
         </div>
 
         <label for="story-title">
-          Tiêu đề <span aria-hidden="true">*</span>
-          <input id="story-title" v-model="form.title" required />
+          <span>Tiêu đề <span class="required" aria-hidden="true">*</span></span>
+          <input id="story-title" v-model="form.title" type="text" required placeholder="Nhập tên truyện..." />
         </label>
         <label for="story-description">
-          Mô tả
-          <textarea id="story-description" v-model="form.description" rows="3"></textarea>
+          <span>Mô tả</span>
+          <textarea id="story-description" v-model="form.description" rows="3" placeholder="Tóm tắt ngắn gọn nội dung truyện..."></textarea>
         </label>
         <p class="field-help">
           Người tạo: {{ auth.user?.email ?? 'tài khoản admin hiện tại' }}. Hệ thống tự ghi nhận từ phiên đăng nhập.
@@ -236,11 +236,11 @@ onMounted(load)
           <legend>Chính sách / âm thanh</legend>
           <div class="row">
             <label for="minimum-audio-duration">
-              Thời lượng tối thiểu (giây)
+              <span>Thời lượng tối thiểu (giây)</span>
               <input id="minimum-audio-duration" v-model.number="form.minimum_audio_duration_sec" type="number" min="0" />
             </label>
             <label for="target-audio-duration">
-              Thời lượng mục tiêu (giây)
+              <span>Thời lượng mục tiêu (giây)</span>
               <input id="target-audio-duration" v-model.number="form.target_audio_duration_sec" type="number" min="0" />
             </label>
           </div>
@@ -250,16 +250,16 @@ onMounted(load)
           <legend>Nội dung</legend>
           <div class="row">
             <label for="content-origin">
-              Nguồn nội dung
-              <input id="content-origin" v-model="form.content_origin" />
+              <span>Nguồn nội dung</span>
+              <input id="content-origin" v-model="form.content_origin" type="text" placeholder="Sáng tác / AI..." />
             </label>
             <label for="story-language">
-              Ngôn ngữ
-              <input id="story-language" v-model="form.language" />
+              <span>Ngôn ngữ</span>
+              <input id="story-language" v-model="form.language" type="text" placeholder="vi" />
             </label>
             <label for="narration-language">
-              Ngôn ngữ kể chuyện
-              <input id="narration-language" v-model="form.narration_language" />
+              <span>Ngôn ngữ kể chuyện</span>
+              <input id="narration-language" v-model="form.narration_language" type="text" placeholder="vi-VN" />
             </label>
           </div>
         </fieldset>

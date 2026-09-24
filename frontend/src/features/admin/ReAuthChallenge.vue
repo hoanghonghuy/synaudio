@@ -111,7 +111,7 @@ async function submit() {
 
       <form class="auth-form mfa-form" @submit.prevent="submit">
         <label v-if="mode === 'totp'" for="reauth-totp">
-          Mã 6 chữ số
+          <span>Mã 6 chữ số</span>
           <input
             id="reauth-totp"
             v-model="code"
@@ -124,7 +124,7 @@ async function submit() {
           />
         </label>
         <label v-else for="reauth-recovery">
-          Mã khôi phục
+          <span>Mã khôi phục</span>
           <input id="reauth-recovery" v-model="recoveryCode" type="text" autocomplete="off" required />
         </label>
 

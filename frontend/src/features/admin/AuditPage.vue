@@ -135,11 +135,11 @@ onMounted(load)
 
       <div class="row">
         <label>
-          Action
-          <input v-model.trim="filters.action" placeholder="CHAPTER_APPROVED" />
+          <span>Action</span>
+          <input v-model.trim="filters.action" type="text" placeholder="CHAPTER_APPROVED" />
         </label>
         <label>
-          Kết quả
+          <span>Kết quả</span>
           <select v-model="filters.result">
             <option value="">Tất cả</option>
             <option value="SUCCEEDED">Succeeded</option>
@@ -148,49 +148,49 @@ onMounted(load)
           </select>
         </label>
         <label>
-          Actor user ID
-          <input v-model.trim="filters.actor_id" placeholder="UUID" />
+          <span>Actor user ID</span>
+          <input v-model.trim="filters.actor_id" type="text" placeholder="UUID" />
         </label>
       </div>
 
       <div class="row">
         <label>
-          Resource type
-          <input v-model.trim="filters.resource_type" placeholder="STORY / CONTENT_REVISION" />
+          <span>Resource type</span>
+          <input v-model.trim="filters.resource_type" type="text" placeholder="STORY / CONTENT_REVISION" />
         </label>
         <label>
-          Resource ID
-          <input v-model.trim="filters.resource_id" />
+          <span>Resource ID</span>
+          <input v-model.trim="filters.resource_id" type="text" placeholder="ID" />
         </label>
         <label>
-          Story ID
-          <input v-model.trim="filters.story_id" placeholder="UUID" />
+          <span>Story ID</span>
+          <input v-model.trim="filters.story_id" type="text" placeholder="UUID" />
         </label>
         <label>
-          Chapter ID
-          <input v-model.trim="filters.chapter_id" placeholder="UUID" />
+          <span>Chapter ID</span>
+          <input v-model.trim="filters.chapter_id" type="text" placeholder="UUID" />
         </label>
       </div>
 
       <div class="row">
         <label>
-          Generation run ID
-          <input v-model.trim="filters.run_id" placeholder="UUID" />
+          <span>Generation run ID</span>
+          <input v-model.trim="filters.run_id" type="text" placeholder="UUID" />
         </label>
         <label>
-          Correlation ID
-          <input v-model.trim="filters.correlation_id" placeholder="request / trace correlation" />
+          <span>Correlation ID</span>
+          <input v-model.trim="filters.correlation_id" type="text" placeholder="request / trace correlation" />
         </label>
         <label>
-          Từ thời điểm
+          <span>Từ thời điểm</span>
           <input v-model="filters.from" type="datetime-local" />
         </label>
         <label>
-          Đến thời điểm
+          <span>Đến thời điểm</span>
           <input v-model="filters.to" type="datetime-local" />
         </label>
         <label>
-          Giới hạn
+          <span>Giới hạn</span>
           <input v-model.number="filters.limit" type="number" min="1" max="500" />
         </label>
       </div>

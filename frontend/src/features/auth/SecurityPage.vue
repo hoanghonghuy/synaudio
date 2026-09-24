@@ -221,7 +221,7 @@ onMounted(async () => {
             <p class="field-help">Không chia sẻ secret key. Bạn chỉ thấy key này trong bước thiết lập hiện tại.</p>
           </div>
           <label for="mfa-code">
-            2. Nhập mã 6 chữ số
+            <span>2. Nhập mã 6 chữ số</span>
             <input id="mfa-code" v-model="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required />
           </label>
           <p v-if="error" class="status-state error" role="alert">{{ error }}</p>

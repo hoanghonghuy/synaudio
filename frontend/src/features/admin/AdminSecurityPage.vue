@@ -214,11 +214,11 @@ onMounted(loadUsers)
 
       <div class="row">
         <label>
-          Từ khóa
-          <input v-model.trim="filters.q" placeholder="email hoặc tên hiển thị" />
+          <span>Từ khóa</span>
+          <input v-model.trim="filters.q" type="text" placeholder="email hoặc tên hiển thị" />
         </label>
         <label>
-          Trạng thái
+          <span>Trạng thái</span>
           <select v-model="filters.status">
             <option value="">Tất cả</option>
             <option value="ACTIVE">Đang hoạt động</option>
@@ -227,7 +227,7 @@ onMounted(loadUsers)
           </select>
         </label>
         <label>
-          Giới hạn
+          <span>Giới hạn</span>
           <input v-model.number="filters.limit" type="number" min="1" max="100" />
         </label>
       </div>
