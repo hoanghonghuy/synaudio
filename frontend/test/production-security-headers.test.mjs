@@ -44,3 +44,8 @@ test('HTTP-only frontend container does not falsely claim HSTS ownership', () =>
   assert.match(nginx, /listen 8080;/)
   assert.doesNotMatch(nginx, /add_header\s+Strict-Transport-Security/i)
 })
+
+test('nginx configures dynamic DNS resolver for container upstream resiliency', () => {
+  assert.match(nginx, /resolver\s+127\.0\.0\.11\s+valid=\d+s/)
+  assert.match(nginx, /proxy_pass\s+\$backend_upstream;/)
+})
