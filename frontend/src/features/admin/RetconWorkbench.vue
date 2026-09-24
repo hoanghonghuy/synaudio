@@ -212,24 +212,26 @@ onMounted(() => { void loadList() })
 .retcon-layout { display: grid; grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.6fr); gap: 1rem; align-items: start; }
 .retcon-list, .retcon-detail, .retcon-empty, .retcon-feedback { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .retcon-list { display: grid; gap: .5rem; padding: .65rem; max-height: 72vh; overflow: auto; }
-.retcon-list-item { min-height: 72px; width: 100%; text-align: left; padding: .8rem; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; }
-.retcon-list-item:hover, .retcon-list-item.active { border-color: currentColor; }
-.retcon-list-item:focus-visible, .retcon-actions button:focus-visible, .retcon-feedback button:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
+.retcon-list-item { min-height: 72px; width: 100%; text-align: left; padding: .8rem; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; cursor: pointer; transition: all 150ms ease; }
+.retcon-list-item:hover, .retcon-list-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.retcon-list-item:focus-visible, .retcon-actions button:focus-visible, .retcon-feedback button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .retcon-list-title { display: block; font-weight: 700; overflow-wrap: anywhere; }
 .retcon-list-meta, .retcon-id { display: block; margin-top: .25rem; font-size: .85rem; opacity: .72; overflow-wrap: anywhere; word-break: break-word; }
 .retcon-detail { padding: 1rem; min-width: 0; }
 .retcon-detail-header { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; }
-.retcon-status { flex: none; padding: .4rem .7rem; border: 1px solid currentColor; border-radius: 999px; font-size: .82rem; font-weight: 700; }
+.retcon-status { flex: none; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-soft); color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
 .retcon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
-.retcon-fields > div { min-width: 0; padding: .8rem; border-radius: 10px; background: color-mix(in srgb, currentColor 5%, transparent); }
+.retcon-fields > div { min-width: 0; padding: .8rem; border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--surface-soft); }
 .retcon-fields dt { font-size: .78rem; font-weight: 700; text-transform: uppercase; opacity: .65; }
 .retcon-fields dd { margin: .3rem 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .retcon-actions { display: flex; flex-wrap: wrap; gap: .6rem; border-top: 1px solid var(--line); padding-top: 1rem; }
-.retcon-actions button, .retcon-feedback button { min-height: 44px; padding: .65rem .9rem; border-radius: 10px; border: 1px solid currentColor; background: transparent; cursor: pointer; }
+.retcon-actions button, .retcon-feedback button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .6rem 1.25rem; border-radius: var(--radius-full); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-family: var(--font-heading); font-size: 0.92rem; font-weight: 600; cursor: pointer; transition: all 160ms ease; box-shadow: var(--shadow); }
+.retcon-actions button:hover:not(:disabled), .retcon-feedback button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--surface-soft); }
 .retcon-actions button:disabled { opacity: .55; cursor: wait; }
-.retcon-actions .destructive { font-weight: 700; }
-.retcon-feedback { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; padding: .8rem; margin: .8rem 0; overflow-wrap: anywhere; }
-.retcon-feedback.error { border-width: 2px; }
+.retcon-actions .destructive { border-color: rgba(178, 58, 43, 0.35); background: transparent; color: var(--danger); font-weight: 650; box-shadow: none; }
+.retcon-actions .destructive:hover:not(:disabled) { border-color: var(--danger); background: rgba(178, 58, 43, 0.08); color: var(--danger); }
+.retcon-feedback { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; padding: .8rem; margin: .8rem 0; overflow-wrap: anywhere; border-radius: var(--radius-md); }
+.retcon-feedback.error { border-width: 2px; border-color: var(--danger); background: rgba(178, 58, 43, 0.08); }
 .retcon-empty { padding: 1rem; }
 @media (max-width: 820px) {
   .retcon-layout { grid-template-columns: 1fr; }

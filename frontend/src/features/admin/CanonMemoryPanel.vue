@@ -50,11 +50,13 @@ const showActions = computed(() => showCommitAction.value || view.value.canRetry
 .canon-summary { font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; }
 .canon-detail { line-height: 1.5; opacity: 0.78; overflow-wrap: anywhere; }
 .canon-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.canon-actions button { min-height: 44px; padding: 10px 14px; border-radius: var(--radius-md); font: inherit; font-weight: 700; cursor: pointer; }
+.canon-actions button { min-height: 44px; padding: 10px 18px; border-radius: var(--radius-full); font: inherit; font-weight: 700; cursor: pointer; transition: all 160ms ease; }
 .canon-actions button:disabled { cursor: not-allowed; opacity: 0.55; }
 .canon-primary { border: 1px solid transparent; background: var(--accent); color: var(--surface); box-shadow: var(--shadow-seal); }
-.canon-secondary { border: 1px solid var(--line); background: transparent; color: inherit; }
-.canon-actions button:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+.canon-primary:hover:not(:disabled) { background: var(--accent-strong); }
+.canon-secondary { border: 1px solid var(--line); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.canon-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--surface-soft); }
+.canon-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .canon-current { opacity: 0.82; }
 .canon-blocked { font-weight: 800; }
 @media (max-width: 640px) {

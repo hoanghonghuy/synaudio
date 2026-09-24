@@ -252,7 +252,7 @@ watch(storyID, () => {
 
                 <div v-if="d.Status === 'PROPOSED'" class="decision-actions" :aria-busy="pendingDecisionID === d.ID">
                   <button
-                    class="decision-button"
+                    class="decision-button decision-button-primary"
                     type="button"
                     :disabled="Boolean(pendingDecisionID)"
                     @click="runDecisionMutation(d, 'select')"
@@ -260,7 +260,7 @@ watch(storyID, () => {
                     {{ pendingDecisionID === d.ID ? 'Đang xử lý…' : 'Chọn quyết định' }}
                   </button>
                   <button
-                    class="decision-button"
+                    class="decision-button decision-button-secondary"
                     type="button"
                     :disabled="Boolean(pendingDecisionID)"
                     :aria-expanded="decisionForm?.id === d.ID && decisionForm.action === 'postpone'"
@@ -301,7 +301,7 @@ watch(storyID, () => {
                   <div class="decision-form-actions">
                     <button
                       class="decision-button"
-                      :class="{ 'decision-button-danger': decisionForm.action === 'reject' }"
+                      :class="decisionForm.action === 'reject' ? 'decision-button-danger' : 'decision-button-primary'"
                       type="submit"
                       :disabled="Boolean(pendingDecisionID) || !decisionNotes[d.ID]?.trim()"
                     >
@@ -309,7 +309,7 @@ watch(storyID, () => {
                         ? 'Đang xử lý…'
                         : decisionForm.action === 'reject' ? 'Xác nhận từ chối' : 'Xác nhận hoãn' }}
                     </button>
-                    <button class="decision-button" type="button" :disabled="Boolean(pendingDecisionID)" @click="cancelDecisionForm">
+                    <button class="decision-button decision-button-secondary" type="button" :disabled="Boolean(pendingDecisionID)" @click="cancelDecisionForm">
                       Hủy
                     </button>
                   </div>
@@ -393,13 +393,37 @@ watch(storyID, () => {
   flex: 0 0 auto;
 }
 
-.decision-status-selected {
-  opacity: 0.9;
+.decision-status {
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.decision-status-rejected,
+.decision-status-proposed {
+  background: rgba(184, 107, 27, 0.08);
+  color: var(--amber);
+  border: 1px solid rgba(184, 107, 27, 0.28);
+}
+
+.decision-status-selected {
+  background: var(--ink-pine-soft);
+  color: var(--ink-pine);
+  border: 1px solid rgba(46, 62, 55, 0.25);
+}
+
+.decision-status-rejected {
+  background: rgba(178, 58, 43, 0.08);
+  color: var(--danger);
+  border: 1px solid rgba(178, 58, 43, 0.25);
+}
+
 .decision-status-postponed {
-  opacity: 0.75;
+  background: var(--surface-soft);
+  color: var(--muted);
+  border: 1px solid var(--line);
 }
 
 .decision-actions,
@@ -407,45 +431,85 @@ watch(storyID, () => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+  align-items: center;
   margin-top: 1rem;
 }
 
 .decision-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 44px;
   min-width: 44px;
-  padding: 0.65rem 0.9rem;
-  border: 1px solid currentColor;
-  border-radius: 0.6rem;
-  background: transparent;
-  color: inherit;
-  font: inherit;
+  padding: 0.6rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-heading);
+  font-size: 0.92rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 160ms ease;
+  box-shadow: var(--shadow);
 }
 
 .decision-button:hover:not(:disabled) {
-  filter: brightness(1.08);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-soft);
 }
 
-.decision-button:focus-visible,
-.decision-form textarea:focus-visible {
-  outline: 3px solid currentColor;
+.decision-button:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .decision-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+  box-shadow: none;
+}
+
+.decision-button-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: var(--shadow-seal);
+}
+
+.decision-button-primary:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: #fff;
+}
+
+.decision-button-secondary {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .decision-button-danger {
+  border-color: rgba(178, 58, 43, 0.35);
+  background: transparent;
+  color: var(--danger);
   font-weight: 650;
+  box-shadow: none;
+}
+
+.decision-button-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: rgba(178, 58, 43, 0.08);
+  color: var(--danger);
 }
 
 .decision-form {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.75rem;
   margin-top: 1rem;
-  padding: 0.9rem;
+  padding: 1.1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface-soft);
@@ -461,12 +525,20 @@ watch(storyID, () => {
   min-height: 5.5rem;
   resize: vertical;
   box-sizing: border-box;
-  padding: 0.75rem;
+  padding: 0.75rem 0.95rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--ink);
-  font: inherit;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.decision-form textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(178, 58, 43, 0.18);
+  outline: none;
 }
 
 .terminal-note,
