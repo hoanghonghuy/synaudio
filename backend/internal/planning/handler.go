@@ -81,7 +81,7 @@ func (h *Handler) generateFoundation(w http.ResponseWriter, r *http.Request) {
 		CreatedBy: createdBy,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL", "internal error")
+		writeError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
 		return
 	}
 

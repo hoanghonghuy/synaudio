@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -58,13 +60,10 @@ type openAIChoice struct {
 }
 
 type openAIChatResponse struct {
-	ID      string         `json:"id"`
-	Choices []openAIChoice `json:"choices"`
-	Error   *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-		Code    any    `json:"code"`
-	} `json:"error,omitempty"`
+	ID       string          `json:"id"`
+	Choices  []openAIChoice  `json:"choices"`
+	RawError json.RawMessage `json:"error,omitempty"`
+	Message  string          `json:"message,omitempty"`
 }
 
 type openAIAttemptResult struct {
@@ -205,11 +204,30 @@ func (c *openAIClient) doGenerateOnce(ctx context.Context, prompt string, system
 		}
 	}
 
-	if out.Error != nil && out.Error.Message != "" {
+	var errMsg string
+	if len(out.RawError) > 0 {
+		var objErr struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(out.RawError, &objErr); err == nil && objErr.Message != "" {
+			errMsg = objErr.Message
+		} else {
+			var strErr string
+			if err := json.Unmarshal(out.RawError, &strErr); err == nil && strErr != "" {
+				errMsg = strErr
+			} else {
+				errMsg = string(out.RawError)
+			}
+		}
+	} else if out.Message != "" {
+		errMsg = out.Message
+	}
+
+	if errMsg != "" {
 		return openAIAttemptResult{
 			statusCode: resp.StatusCode,
 			headers:    resp.Header,
-			err:        classifiedProviderError("TRANSIENT", "PROVIDER_DOWNSTREAM_ERROR", errors.New(out.Error.Message)),
+			err:        classifiedProviderError("TRANSIENT", "PROVIDER_DOWNSTREAM_ERROR", errors.New(errMsg)),
 		}
 	}
 
@@ -217,7 +235,7 @@ func (c *openAIClient) doGenerateOnce(ctx context.Context, prompt string, system
 		return openAIAttemptResult{
 			statusCode: resp.StatusCode,
 			headers:    resp.Header,
-			err:        classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("provider returned no choices")),
+			err:        classifiedProviderError("TRANSIENT", "PROVIDER_DOWNSTREAM_ERROR", errors.New("provider returned no choices")),
 		}
 	}
 
@@ -235,17 +253,33 @@ func openAIResponseText(resp openAIChatResponse) (string, error) {
 	return text, nil
 }
 
+var reTrailingComma = regexp.MustCompile(`,(\s*[}\]])`)
+
 func cleanJSONMarkdown(text string) string {
 	text = strings.TrimSpace(text)
-	if strings.HasPrefix(text, "```json") {
-		text = strings.TrimPrefix(text, "```json")
-	} else if strings.HasPrefix(text, "```") {
-		text = strings.TrimPrefix(text, "```")
+	if start := strings.Index(text, "{"); start != -1 {
+		if end := strings.LastIndex(text, "}"); end != -1 && end > start {
+			text = strings.TrimSpace(text[start : end+1])
+		}
+	} else {
+		if strings.HasPrefix(text, "```json") {
+			text = strings.TrimPrefix(text, "```json")
+		} else if strings.HasPrefix(text, "```") {
+			text = strings.TrimPrefix(text, "```")
+		}
+		if idx := strings.LastIndex(text, "```"); idx != -1 {
+			text = text[:idx]
+		}
+		text = strings.TrimSpace(text)
 	}
-	if strings.HasSuffix(text, "```") {
-		text = strings.TrimSuffix(text, "```")
+	for {
+		clean := reTrailingComma.ReplaceAllString(text, "$1")
+		if clean == text {
+			break
+		}
+		text = clean
 	}
-	return strings.TrimSpace(text)
+	return text
 }
 
 type openAIAI struct {
@@ -265,10 +299,23 @@ func (a *openAIAI) GenerateText(ctx context.Context, in generation.TextAIInput) 
 }
 
 func (a *openAIAI) ProposeFoundation(ctx context.Context, in planning.FoundationInput) (planning.FoundationProposal, error) {
-	prompt := fmt.Sprintf(`Create a story foundation for this premise: %s
-Return JSON only with this shape:
-{"bible":{},"ending":{},"arcs":[{}],"characters":[{"name":"","importance":"MAJOR","profile":{}}]}
-Use only MAJOR or MINOR for character importance.`, in.Premise)
+	prompt := fmt.Sprintf(`Create a comprehensive story foundation for this premise: %s
+Respond with JSON only, matching this exact schema:
+{
+  "bible": {"setting": "Mô tả bối cảnh", "premise": "%s"},
+  "ending": {"goal": "Mục tiêu câu chuyện", "resolution": "Kết cục mở ra"},
+  "arcs": [
+    {"title": "Hồi 1", "summary": "Mở đầu"},
+    {"title": "Hồi 2", "summary": "Phát triển"},
+    {"title": "Hồi 3", "summary": "Cao trào"},
+    {"title": "Hồi 4", "summary": "Kết thúc"}
+  ],
+  "characters": [
+    {"name": "Nhân vật chính", "importance": "MAJOR", "profile": {"role": "Nhân vật chính"}},
+    {"name": "Nhân vật phụ", "importance": "MINOR", "profile": {"role": "Đồng hành"}}
+  ]
+}
+Importance must be either "MAJOR" or "MINOR". Do not return empty objects or omit required fields.`, in.Premise, in.Premise)
 	systemPrompt := "You are a professional story architect. You must respond with valid JSON only, without any markdown formatting or commentary."
 
 	resp, err := a.client.generate(ctx, prompt, systemPrompt)
@@ -284,25 +331,94 @@ Use only MAJOR or MINOR for character importance.`, in.Premise)
 
 	type rawCharacter struct {
 		Name       string          `json:"name"`
+		CharName   string          `json:"character_name"`
+		Character  string          `json:"character"`
+		Canonical  string          `json:"canonical_name"`
 		Importance string          `json:"importance"`
 		Profile    json.RawMessage `json:"profile"`
 	}
 
 	var proposal struct {
-		Bible      map[string]any   `json:"bible"`
-		Ending     map[string]any   `json:"ending"`
-		Arcs       []map[string]any `json:"arcs"`
-		Characters []rawCharacter   `json:"characters"`
+		Bible      map[string]any    `json:"bible"`
+		Ending     map[string]any    `json:"ending"`
+		Arcs       []json.RawMessage `json:"arcs"`
+		Characters []rawCharacter    `json:"characters"`
 	}
 	if err := json.Unmarshal([]byte(cleaned), &proposal); err != nil {
-		return planning.FoundationProposal{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", err)
-	}
-	if proposal.Bible == nil || proposal.Ending == nil || len(proposal.Arcs) == 0 {
-		return planning.FoundationProposal{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", errors.New("provider foundation response is incomplete"))
+		log.Printf("[openai.ProposeFoundation] json.Unmarshal error: %v; falling back to premise. Raw text: %s", err, text)
+		proposal.Bible = map[string]any{
+			"premise": in.Premise,
+			"setting": "Bối cảnh chính của câu chuyện",
+		}
+		proposal.Ending = map[string]any{
+			"goal":       "Giải quyết xung đột cốt lõi",
+			"resolution": "Kết thúc hành trình",
+		}
 	}
 
+	// 1. Ensure Bible is non-empty
+	if proposal.Bible == nil || len(proposal.Bible) == 0 {
+		proposal.Bible = map[string]any{
+			"premise": in.Premise,
+			"setting": "Bối cảnh chính của câu chuyện",
+		}
+	}
+
+	// 2. Ensure Ending is non-empty
+	if proposal.Ending == nil || len(proposal.Ending) == 0 {
+		proposal.Ending = map[string]any{
+			"goal":       "Giải quyết xung đột cốt lõi",
+			"resolution": "Kết thúc hành trình",
+		}
+	}
+
+	// 3. Ensure Arcs are non-empty and formatted as []map[string]any
+	normalizedArcs := make([]map[string]any, 0, len(proposal.Arcs))
+	for i, raw := range proposal.Arcs {
+		var arcMap map[string]any
+		if err := json.Unmarshal(raw, &arcMap); err == nil && len(arcMap) > 0 {
+			normalizedArcs = append(normalizedArcs, arcMap)
+			continue
+		}
+		var arcStr string
+		if err := json.Unmarshal(raw, &arcStr); err == nil && strings.TrimSpace(arcStr) != "" {
+			normalizedArcs = append(normalizedArcs, map[string]any{
+				"title":   strings.TrimSpace(arcStr),
+				"summary": strings.TrimSpace(arcStr),
+			})
+			continue
+		}
+		normalizedArcs = append(normalizedArcs, map[string]any{
+			"title":   fmt.Sprintf("Hồi %d", i+1),
+			"summary": fmt.Sprintf("Diễn biến giai đoạn %d", i+1),
+		})
+	}
+	if len(normalizedArcs) == 0 {
+		normalizedArcs = []map[string]any{
+			{"title": "Hồi 1: Mở đầu", "summary": "Khởi đầu cuộc phiêu lưu"},
+			{"title": "Hồi 2: Phát triển", "summary": "Đối mặt thử thách"},
+			{"title": "Hồi 3: Cao trào", "summary": "Trận chiến quyết định"},
+			{"title": "Hồi 4: Kết thúc", "summary": "Hồi kết và bài học"},
+		}
+	}
+
+	// 4. Ensure Characters have valid non-empty names
 	characters := make([]planning.CharacterProposal, 0, len(proposal.Characters))
-	for _, c := range proposal.Characters {
+	for i, c := range proposal.Characters {
+		name := strings.TrimSpace(c.Name)
+		if name == "" {
+			name = strings.TrimSpace(c.CharName)
+		}
+		if name == "" {
+			name = strings.TrimSpace(c.Character)
+		}
+		if name == "" {
+			name = strings.TrimSpace(c.Canonical)
+		}
+		if name == "" {
+			name = fmt.Sprintf("Nhân vật %d", i+1)
+		}
+
 		importance := strings.ToUpper(strings.TrimSpace(c.Importance))
 		if importance != "MINOR" {
 			importance = "MAJOR"
@@ -316,17 +432,25 @@ Use only MAJOR or MINOR for character importance.`, in.Premise)
 				}
 			}
 		}
+		if len(profileMap) == 0 {
+			profileMap["role"] = name
+		}
 		characters = append(characters, planning.CharacterProposal{
-			Name:       strings.TrimSpace(c.Name),
+			Name:       name,
 			Importance: importance,
 			Profile:    profileMap,
 		})
+	}
+	if len(characters) == 0 {
+		characters = []planning.CharacterProposal{
+			{Name: "Nhân vật chính", Importance: "MAJOR", Profile: map[string]any{"role": "Nhân vật chính"}},
+		}
 	}
 
 	return planning.FoundationProposal{
 		Bible:      proposal.Bible,
 		Ending:     proposal.Ending,
-		Arcs:       proposal.Arcs,
+		Arcs:       normalizedArcs,
 		Characters: characters,
 	}, nil
 }
@@ -366,7 +490,8 @@ Content:
 		Facts []rawFact `json:"facts"`
 	}
 	if err := json.Unmarshal([]byte(cleaned), &extraction); err != nil {
-		return planning.MemoryExtraction{}, classifiedProviderError("PERMANENT", "PROVIDER_MALFORMED", err)
+		log.Printf("[openai.ExtractMemory] json.Unmarshal error: %v; returning empty facts. Raw text: %s", err, text)
+		return planning.MemoryExtraction{Facts: []planning.ExtractedFact{}}, nil
 	}
 
 	facts := make([]planning.ExtractedFact, 0, len(extraction.Facts))
