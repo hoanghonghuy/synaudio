@@ -37,6 +37,9 @@ const isBuffering = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const playbackRate = ref(1)
+const volume = ref(0.9)
+const sleepTimer = ref<'off' | '15' | '30' | '60'>('off')
+const chapterDrawerOpen = ref(false)
 const progressState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const chapterSelection = createLatestChapterSelectionGuard()
 const progressWriteIntervalMs = 15_000
@@ -44,6 +47,7 @@ const playbackRates = [0.75, 1, 1.25, 1.5, 1.75, 2]
 let lastProgressWriteAt = 0
 let progressWrite: Promise<void> = Promise.resolve()
 let progressStateTimer: number | undefined
+let sleepTimerID: number | undefined
 let activeSelectionMayCommit: () => boolean = () => false
 
 const playbackPercent = computed(() => duration.value > 0 ? Math.min(100, (currentTime.value / duration.value) * 100) : 0)
@@ -98,6 +102,7 @@ async function loadChapters() {
 }
 
 async function selectChapter(chapter: Chapter) {
+  chapterDrawerOpen.value = false
   persistCurrentPosition(true)
   const mayCommit = chapterSelection.begin(chapter.ID)
   activeSelectionMayCommit = mayCommit
@@ -252,12 +257,31 @@ function changePlaybackRate(value: unknown) {
   if (audioEl.value && ownsCurrentAudio()) audioEl.value.playbackRate = rate
 }
 
+function changeVolume(value: unknown) {
+  const next = Number(value)
+  volume.value = Number.isFinite(next) ? Math.min(1, Math.max(0, next)) : 0.9
+  if (audioEl.value) audioEl.value.volume = volume.value
+}
+
+function setSleepTimer(value: string) {
+  if (sleepTimerID) window.clearTimeout(sleepTimerID)
+  sleepTimerID = undefined
+  sleepTimer.value = value === '15' || value === '30' || value === '60' ? value : 'off'
+  if (sleepTimer.value === 'off') return
+  sleepTimerID = window.setTimeout(() => {
+    audioEl.value?.pause()
+    sleepTimer.value = 'off'
+    sleepTimerID = undefined
+  }, Number(sleepTimer.value) * 60_000)
+}
+
 function onLoadedMetadata() {
   const el = audioEl.value
   if (!el || !ownsCurrentAudio()) return
   duration.value = Number.isFinite(el.duration) ? el.duration : 0
   currentTime.value = el.currentTime
   el.playbackRate = playbackRate.value
+  el.volume = volume.value
 }
 
 function onTimeUpdate() {
@@ -318,6 +342,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   persistCurrentPosition(true)
   if (progressStateTimer) window.clearTimeout(progressStateTimer)
+  if (sleepTimerID) window.clearTimeout(sleepTimerID)
   window.removeEventListener('pagehide', onPageHide)
 })
 </script>
@@ -327,8 +352,9 @@ onBeforeUnmount(() => {
     <RouterLink class="back-link" :to="`/stories/${storyID}`">← Về chi tiết truyện</RouterLink>
     <div class="reader-head">
       <div>
-        <p class="eyebrow">Đọc & nghe · Synaudio</p>
+        <p class="eyebrow">Synaudio / immersive listening</p>
         <h1>{{ activeChapter?.Title || 'Chọn một chương để bắt đầu' }}</h1>
+        <p class="reader-story-context">Đọc cùng nhịp kể chuyện. Tiến độ sẽ được lưu tự động trên thiết bị của bạn.</p>
       </div>
       <button
         class="fav-btn"
@@ -350,14 +376,21 @@ onBeforeUnmount(() => {
     <p v-else-if="chapters.length === 0" class="note">Chưa có chương nào được xuất bản.</p>
 
     <template v-else>
+      <button class="chapter-drawer-toggle" type="button" :aria-expanded="chapterDrawerOpen" @click="chapterDrawerOpen = !chapterDrawerOpen">
+        <span><span class="drawer-toggle-dot" aria-hidden="true"></span> Danh sách chương</span>
+        <span>{{ chapters.length }} chương · {{ chapterDrawerOpen ? 'Đóng' : 'Mở' }}</span>
+      </button>
       <div class="reader-layout">
-        <nav class="chapter-nav" aria-labelledby="chapter-nav-heading">
+        <nav class="chapter-nav" :class="{ 'drawer-open': chapterDrawerOpen }" aria-labelledby="chapter-nav-heading">
           <div class="chapter-nav-heading">
             <div>
-              <p class="eyebrow">Thư viện</p>
+              <p class="eyebrow">Playlist</p>
               <h2 id="chapter-nav-heading">Các chương</h2>
             </div>
-            <span class="chapter-count">{{ chapters.length }}</span>
+            <div class="chapter-nav-meta">
+              <span class="chapter-count">{{ chapters.length }}</span>
+              <button class="drawer-close" type="button" aria-label="Đóng danh sách chương" @click="chapterDrawerOpen = false">×</button>
+            </div>
           </div>
           <div class="chapter-nav-list">
             <button
@@ -384,7 +417,7 @@ onBeforeUnmount(() => {
           <section class="audio-section" aria-labelledby="audio-heading">
             <div class="audio-heading-row">
               <div>
-                <p class="eyebrow">Audiobook player</p>
+                <p class="eyebrow">Now playing · chapter {{ activeChapter.ChapterNumber }}</p>
                 <h2 id="audio-heading">Nghe chương này</h2>
               </div>
               <span v-if="progressLabel" class="save-state" role="status" aria-live="polite">{{ progressLabel }}</span>
@@ -415,7 +448,7 @@ onBeforeUnmount(() => {
                 <button class="play-button" type="button" :aria-label="isPlaying ? 'Tạm dừng' : 'Phát audio'" @click="togglePlayback">
                   {{ isPlaying ? '❚❚' : '▶' }}
                 </button>
-                <button class="skip-button" type="button" aria-label="Tua tới 30 giây" @click="seekBy(30)">+30s</button>
+                <button class="skip-button" type="button" aria-label="Tua tới 15 giây" @click="seekBy(15)">+15s</button>
                 <div class="now-playing">
                   <strong>{{ activeChapter.Title }}</strong>
                   <span>{{ isBuffering ? 'Đang tải audio…' : isPlaying ? 'Đang phát' : 'Sẵn sàng nghe' }}</span>
@@ -442,6 +475,27 @@ onBeforeUnmount(() => {
                   <span>Tốc độ</span>
                   <select :value="playbackRate" aria-label="Tốc độ phát" @change="changePlaybackRate(($event.target as HTMLSelectElement).value)">
                     <option v-for="rate in playbackRates" :key="rate" :value="rate">{{ rate }}×</option>
+                  </select>
+                </label>
+                <label class="volume-control">
+                  <span aria-hidden="true">◖</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    :value="volume"
+                    aria-label="Âm lượng"
+                    @input="changeVolume(($event.target as HTMLInputElement).value)"
+                  >
+                </label>
+                <label class="sleep-control">
+                  <span>Hẹn giờ</span>
+                  <select :value="sleepTimer" aria-label="Hẹn giờ tắt" @change="setSleepTimer(($event.target as HTMLSelectElement).value)">
+                    <option value="off">Tắt</option>
+                    <option value="15">15 phút</option>
+                    <option value="30">30 phút</option>
+                    <option value="60">60 phút</option>
                   </select>
                 </label>
                 <span class="player-progress-text">{{ Math.round(playbackPercent) }}% chương</span>
@@ -513,7 +567,7 @@ onBeforeUnmount(() => {
 .reader-layout { display: grid; grid-template-columns: minmax(230px, 290px) minmax(0, 1fr); gap: 24px; align-items: start; }
 .chapter-nav { position: sticky; top: 20px; border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px; max-height: calc(100vh - 40px); overflow: hidden; background: var(--surface); }
 .chapter-nav-heading h2 { margin: 3px 0 0; }
-.chapter-count { min-width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 700; }
+.chapter-count { min-width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent-strong); font-weight: 700; }
 .chapter-nav-list { display: grid; gap: 8px; margin-top: 14px; max-height: calc(100vh - 130px); overflow: auto; padding-right: 4px; }
 .chapter-tab { min-height: 56px; width: 100%; display: grid; gap: 4px; text-align: left; padding: 11px 12px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; color: inherit; cursor: pointer; }
 .chapter-tab:hover { background: var(--surface-soft); }
@@ -522,13 +576,13 @@ onBeforeUnmount(() => {
 .chapter-current { font-weight: 800; color: var(--accent-strong); }
 .reader-body { min-width: 0; display: grid; gap: 18px; }
 .loading-line { min-height: 24px; }
-.audio-section { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px; display: grid; gap: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.audio-section { border: 1px solid var(--accent-border); border-radius: var(--radius-lg); padding: 20px; display: grid; gap: 16px; background: radial-gradient(circle at 82% 12%, rgba(242, 181, 107, 0.14), transparent 16rem), var(--surface); box-shadow: var(--shadow-lg); }
 .audio-heading-row h2 { margin: 3px 0 0; }
 .save-state { font-size: 13px; font-weight: 700; color: var(--muted); }
 .native-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .player-shell { display: grid; gap: 18px; }
 .player-primary { justify-content: flex-start; }
-.play-button, .skip-button, .fav-btn, .error-actions button { min-width: 44px; min-height: 44px; border-radius: 999px; border: 1px solid var(--accent); background: transparent; color: var(--accent-strong); cursor: pointer; }
+.play-button, .skip-button, .fav-btn, .error-actions button { min-width: 44px; min-height: 44px; border-radius: var(--radius-full); border: 1px solid var(--accent); background: transparent; color: var(--accent-strong); cursor: pointer; }
 .play-button { width: 58px; height: 58px; font-size: 22px; background: var(--accent); color: var(--surface); }
 .skip-button { padding: 0 12px; font-weight: 800; }
 .now-playing { min-width: 0; display: grid; gap: 3px; }
@@ -540,7 +594,7 @@ onBeforeUnmount(() => {
 .rate-control select { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-full); padding: 0 14px; background: var(--surface); color: var(--ink); }
 .player-placeholder { min-height: 112px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--surface-soft); }
 .relisten-notice, .status-state { border-radius: var(--radius-md); padding: 14px 16px; }
-.relisten-notice { display: grid; gap: 4px; border: 1px solid rgba(184, 107, 27, 0.25); border-left: 4px solid var(--amber); background: rgba(184, 107, 27, 0.08); color: var(--ink); }
+.relisten-notice { display: grid; gap: 4px; border: 1px solid var(--accent-border); border-left: 4px solid var(--amber); background: var(--accent-soft); color: var(--ink); }
 .error-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .error-actions button { padding: 0 16px; border-radius: var(--radius-full); }
 .prose { max-width: 76ch; font-family: var(--font-reading); font-size: 1.05rem; line-height: 1.78; overflow-wrap: anywhere; }
@@ -611,7 +665,7 @@ onBeforeUnmount(() => {
     z-index: 25;
     padding: 16px;
     border-radius: var(--radius-lg);
-    background: rgba(251, 249, 245, 0.96);
+    background: rgba(16, 21, 29, 0.96);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     box-shadow: 0 8px 24px rgba(35, 28, 22, 0.08);

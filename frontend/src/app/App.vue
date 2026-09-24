@@ -39,19 +39,20 @@ async function signOut() {
           <span class="brand-text">Synaudio</span>
         </RouterLink>
 
-        <!-- Desktop Navigation -->
         <nav id="main-navigation" class="main-nav desktop-only" aria-label="Điều hướng chính">
           <RouterLink to="/">Khám phá</RouterLink>
           <template v-if="auth.isAuthenticated">
             <RouterLink to="/library">Thư viện</RouterLink>
-            <RouterLink v-if="auth.isAdmin" class="nav-cta" to="/admin">Studio</RouterLink>
-            <RouterLink to="/account/security">Bảo mật</RouterLink>
+            <RouterLink v-if="auth.isAdmin" class="nav-cta" to="/admin">Creator Studio</RouterLink>
+            <RouterLink class="account-menu-link" to="/account/security" aria-label="Mở cài đặt tài khoản">
+              <span class="account-avatar" aria-hidden="true">{{ auth.user?.email.slice(0, 1).toUpperCase() }}</span>
+              <span class="account-menu-copy"><strong>{{ auth.user?.email }}</strong><small>Tài khoản</small></span>
+            </RouterLink>
             <button class="nav-sign-out" type="button" @click="signOut">Đăng xuất</button>
           </template>
           <RouterLink v-else class="nav-login-btn" to="/auth">Đăng nhập</RouterLink>
         </nav>
 
-        <!-- Mobile Topbar Actions -->
         <div class="mobile-top-actions">
           <RouterLink v-if="!auth.isAuthenticated" class="mobile-login-pill" to="/auth">Đăng nhập</RouterLink>
           <button v-else class="mobile-logout-icon" type="button" aria-label="Đăng xuất" title="Đăng xuất" @click="signOut">
@@ -71,7 +72,6 @@ async function signOut() {
       <RouterView />
     </main>
 
-    <!-- Mobile Bottom Navigation Bar (App-like Mobile First) -->
     <nav class="bottom-nav" aria-label="Điều hướng ứng dụng">
       <RouterLink to="/" class="bottom-nav-item" exact-active-class="active">
         <svg class="bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

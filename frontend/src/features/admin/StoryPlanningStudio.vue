@@ -31,6 +31,7 @@ import {
 } from '../../api/client'
 import { isExplicitNotFound, resolveAdminSecurityState } from '../../api/http-error'
 import { useAuthStore } from '../../stores/auth'
+import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
 import type {
   ActivationReadiness,
   EndingPlanVersion,
@@ -352,6 +353,7 @@ onMounted(loadWorkspace)
 
 <template>
   <section class="page admin planning-studio">
+    <AdminWorkspaceNav :storyID="storyID" />
     <div class="section-heading">
       <div>
         <p class="eyebrow">Studio / Story Planning</p>

@@ -13,6 +13,7 @@ const password = ref('')
 const submitting = ref(false)
 const error = ref('')
 const success = ref('')
+const showPassword = ref(false)
 
 const isRegister = computed(() => mode.value === 'register')
 
@@ -28,6 +29,7 @@ function setMode(nextMode: 'login' | 'register') {
   error.value = ''
   success.value = ''
   password.value = ''
+  showPassword.value = false
   void router.replace({ query: nextMode === 'register' ? { mode: nextMode } : {} })
 }
 
@@ -61,6 +63,10 @@ async function submit() {
     <RouterLink class="back-link" to="/">← Về khám phá</RouterLink>
 
     <div class="auth-panel">
+      <div class="auth-brand-lockup" aria-hidden="true">
+        <span class="auth-brand-orb">S</span>
+        <span><strong>Synaudio</strong><small>audio stories for curious minds</small></span>
+      </div>
       <!-- Segmented Tab Toggle for Mobile -->
       <div class="auth-mode-toggle" role="tablist" aria-label="Lựa chọn thao tác tài khoản">
         <button
@@ -96,11 +102,11 @@ async function submit() {
           <input id="auth-email" v-model="email" type="email" autocomplete="email" required />
         </label>
         <label for="auth-password">
-          Mật khẩu
+          <span class="field-label-row"><span>Mật khẩu</span><button class="field-toggle" type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Ẩn' : 'Hiện' }}</button></span>
           <input
             id="auth-password"
             v-model="password"
-            type="password"
+            :type="showPassword ? 'text' : 'password'"
             :autocomplete="isRegister ? 'new-password' : 'current-password'"
             required
           />

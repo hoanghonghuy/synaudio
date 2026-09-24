@@ -5,6 +5,7 @@ import { getAuditEvent, listAuditEvents, type AuditFilters } from '../../api/cli
 import { resolveAdminSecurityState } from '../../api/http-error'
 import type { AuditEvent } from '../../api/types'
 import { useAuthStore } from '../../stores/auth'
+import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
 
 const auth = useAuthStore()
 const events = ref<AuditEvent[]>([])
@@ -115,6 +116,7 @@ onMounted(load)
 
 <template>
   <section class="page admin">
+    <AdminWorkspaceNav />
     <RouterLink class="back-link" to="/admin">← Về Studio</RouterLink>
     <p class="eyebrow">Studio / Governance</p>
     <h1>Audit & Provenance</h1>

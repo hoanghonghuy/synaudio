@@ -13,6 +13,7 @@ import {
 } from '../../api/client'
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
 import { useAuthStore } from '../../stores/auth'
+import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -211,6 +212,7 @@ onMounted(load)
 
 <template>
   <section class="page content-review">
+    <AdminWorkspaceNav :storyID="storyID" />
     <RouterLink class="back-link" :to="`/admin/stories/${storyID}/control`">← Về trung tâm điều khiển</RouterLink>
 
     <header class="review-heading">

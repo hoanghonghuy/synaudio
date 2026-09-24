@@ -18,6 +18,7 @@ import type {
   ThreadInactivity,
   UsageRecord,
 } from '../../api/types'
+import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
 
 const route = useRoute()
 const storyID = computed(() => String(route.params.storyID ?? ''))
@@ -171,6 +172,7 @@ watch(storyID, () => {
 
 <template>
   <section class="page control-center">
+    <AdminWorkspaceNav :storyID="storyID" />
     <RouterLink class="back-link" to="/admin">← Về quản lý truyện</RouterLink>
     <p class="eyebrow">Story Control Center</p>
     <h1>Trung tâm điều khiển truyện</h1>
@@ -403,21 +405,21 @@ watch(storyID, () => {
 }
 
 .decision-status-proposed {
-  background: rgba(184, 107, 27, 0.08);
+  background: var(--accent-soft);
   color: var(--amber);
-  border: 1px solid rgba(184, 107, 27, 0.28);
+  border: 1px solid var(--accent-border);
 }
 
 .decision-status-selected {
   background: var(--ink-pine-soft);
   color: var(--ink-pine);
-  border: 1px solid rgba(46, 62, 55, 0.25);
+  border: 1px solid var(--ink-pine);
 }
 
 .decision-status-rejected {
-  background: rgba(178, 58, 43, 0.08);
+  background: var(--error-container);
   color: var(--danger);
-  border: 1px solid rgba(178, 58, 43, 0.25);
+  border: 1px solid var(--danger);
 }
 
 .decision-status-postponed {
@@ -474,7 +476,7 @@ watch(storyID, () => {
 .decision-button-primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--bg);
   font-weight: 700;
   box-shadow: var(--shadow-seal);
 }
@@ -482,7 +484,7 @@ watch(storyID, () => {
 .decision-button-primary:hover:not(:disabled) {
   border-color: var(--accent-strong);
   background: var(--accent-strong);
-  color: #fff;
+  color: var(--bg);
 }
 
 .decision-button-secondary {
@@ -492,7 +494,7 @@ watch(storyID, () => {
 }
 
 .decision-button-danger {
-  border-color: rgba(178, 58, 43, 0.35);
+  border-color: var(--danger);
   background: transparent;
   color: var(--danger);
   font-weight: 650;
@@ -501,7 +503,7 @@ watch(storyID, () => {
 
 .decision-button-danger:hover:not(:disabled) {
   border-color: var(--danger);
-  background: rgba(178, 58, 43, 0.08);
+  background: var(--error-container);
   color: var(--danger);
 }
 
@@ -537,7 +539,7 @@ watch(storyID, () => {
 
 .decision-form textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(178, 58, 43, 0.18);
+  box-shadow: 0 0 0 3px var(--error-container);
   outline: none;
 }
 

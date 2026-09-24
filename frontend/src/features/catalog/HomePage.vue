@@ -62,16 +62,20 @@ onMounted(load)
           <svg class="eyebrow-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10"></circle>
           </svg>
-          Sách nói AI Tiếng Việt
+          <span>Âm thanh kể chuyện thế hệ mới</span>
         </p>
-        <h1>Mỗi câu chuyện là một hành trình lắng nghe.</h1>
+        <h1>Chạm play. Bước vào một thế giới khác.</h1>
         <p class="lede">
-          Không gian truyện nói chất lượng cao, đồng hành cùng bạn mọi lúc mọi nơi trên mọi thiết bị.
+          Khám phá những câu chuyện được tạo nên để nghe sâu, đọc chậm và nhớ lâu — từ những phút rảnh đến những đêm không ngủ.
         </p>
+        <div class="hero-stat-row" aria-label="Điểm nổi bật của Synaudio">
+          <div><strong>24/7</strong><span>chuyện để nghe</span></div>
+          <div><strong>AI + người</strong><span>kể chuyện giàu cảm xúc</span></div>
+          <div><strong>1 nơi</strong><span>nghe, đọc, lưu lại</span></div>
+        </div>
       </div>
     </div>
 
-    <!-- Search & Filter Bar -->
     <div class="search-section">
       <form class="searchbar" role="search" @submit.prevent="load">
         <div class="search-input-wrap">
@@ -79,19 +83,12 @@ onMounted(load)
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <input
-            id="story-search"
-            v-model="q"
-            type="search"
-            placeholder="Tìm truyện, tác giả, nội dung…"
-            autocomplete="off"
-          />
+          <input id="story-search" v-model="q" type="search" placeholder="Tìm theo tên truyện, chủ đề…" autocomplete="off" />
           <button v-if="q" type="button" class="search-clear-btn" aria-label="Xóa từ khóa" @click="q = ''; load()">×</button>
         </div>
-        <button type="submit" class="search-submit-btn" :disabled="loading">Tìm</button>
+        <button type="submit" class="search-submit-btn" :disabled="loading">{{ loading ? 'Đang tìm…' : 'Tìm truyện' }}</button>
       </form>
 
-      <!-- Horizontal Scrollable Genre Chips -->
       <div class="filter-chips-row" role="region" aria-label="Lọc theo thể loại">
         <button
           type="button"
@@ -113,7 +110,6 @@ onMounted(load)
         </button>
       </div>
 
-      <!-- Quick Sort Row -->
       <div class="sort-chips-row" role="region" aria-label="Sắp xếp">
         <span class="sort-label">Sắp xếp:</span>
         <button
@@ -144,8 +140,11 @@ onMounted(load)
     </div>
 
     <div class="section-heading">
-      <h2>Danh sách truyện</h2>
-      <span class="muted">{{ stories.length }} tác phẩm{{ isSearching ? ' phù hợp' : '' }}</span>
+      <div>
+        <p class="eyebrow">Tuyển tập hôm nay</p>
+        <h2>Chuyện đang chờ bạn</h2>
+      </div>
+      <span class="count-label">{{ stories.length }} tác phẩm{{ isSearching ? ' phù hợp' : '' }}</span>
     </div>
 
     <p v-if="loading" class="status-state" role="status" aria-live="polite">
@@ -164,7 +163,7 @@ onMounted(load)
     </div>
 
     <ul v-else class="story-grid catalog-results" :class="{ 'search-mode': isSearching }">
-      <li v-for="s in stories" :key="s.id" class="story-card">
+      <li v-for="(s, index) in stories" :key="s.id" class="story-card">
         <RouterLink :to="`/stories/${s.id}`" class="story-card-link" :aria-label="s.title">
           <div class="story-card-cover" aria-hidden="true">
             <span class="cover-letter">{{ s.title.slice(0, 1).toUpperCase() }}</span>
@@ -178,13 +177,12 @@ onMounted(load)
           <div class="story-card-content">
             <div class="story-card-meta">
               <span class="badge badge-accent">{{ statusLabel(s.status) }}</span>
+              <span v-if="index < 3" class="badge">Đề xuất</span>
             </div>
             <h3 class="story-title">{{ s.title }}</h3>
             <p class="desc">{{ s.description || 'Một câu chuyện đang chờ bạn khám phá.' }}</p>
             <div class="story-card-action">
-              <span class="read-link">
-                Khám phá ngay <span aria-hidden="true">→</span>
-              </span>
+              <span class="read-link">Khám phá ngay <span aria-hidden="true">→</span></span>
             </div>
           </div>
         </RouterLink>

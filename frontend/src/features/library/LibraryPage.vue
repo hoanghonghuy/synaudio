@@ -8,6 +8,7 @@ const library = ref<ListenerLibrary | null>(null)
 const loading = ref(true)
 const error = ref('')
 const removingStoryID = ref('')
+const activeTab = ref<'overview' | 'saved' | 'history'>('overview')
 
 function resumeTo(item: LibraryItem) {
   return {
@@ -73,7 +74,19 @@ onMounted(loadLibrary)
     </div>
 
     <template v-else-if="library">
-      <article v-if="library.continue_listening" class="library-hero panel">
+      <nav class="library-tabs" aria-label="Các khu vực trong thư viện">
+        <button type="button" :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">
+          Tổng quan
+        </button>
+        <button type="button" :class="{ active: activeTab === 'saved' }" @click="activeTab = 'saved'">
+          Đã lưu <span>{{ library.favorites.length }}</span>
+        </button>
+        <button type="button" :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">
+          Lịch sử nghe
+        </button>
+      </nav>
+
+      <article v-if="activeTab === 'overview' && library.continue_listening" class="library-hero panel">
         <div class="library-hero-art" aria-hidden="true">
           <span class="hero-art-letter">{{ library.continue_listening.story_title.slice(0, 1).toUpperCase() }}</span>
           <span class="hero-art-pulse">▶</span>
@@ -98,14 +111,14 @@ onMounted(loadLibrary)
           </div>
         </div>
       </article>
-      <div v-else class="status-state continue-empty">
+      <div v-else-if="activeTab === 'overview'" class="status-state continue-empty">
         <div class="empty-icon" aria-hidden="true">🎧</div>
         <strong>Chưa có nội dung đang nghe dở.</strong>
         <p>Mở một tác phẩm trong kho truyện và bắt đầu nghe để tiến độ tự động xuất hiện ở đây.</p>
         <RouterLink class="primary-link" to="/">Khám phá kho truyện</RouterLink>
       </div>
 
-      <section class="library-section" aria-labelledby="favorites-heading">
+      <section v-if="activeTab !== 'history'" class="library-section" aria-labelledby="favorites-heading">
         <div class="section-heading">
           <div class="section-heading-text">
             <h2 id="favorites-heading">Yêu thích</h2>
@@ -143,7 +156,7 @@ onMounted(loadLibrary)
         <p v-else class="empty-inline-note">Chưa có truyện nào trong danh sách yêu thích.</p>
       </section>
 
-      <section class="library-section" aria-labelledby="recent-heading">
+      <section v-if="activeTab !== 'saved'" class="library-section" aria-labelledby="recent-heading">
         <div class="section-heading">
           <div class="section-heading-text">
             <h2 id="recent-heading">Nghe gần đây</h2>
@@ -174,7 +187,7 @@ onMounted(loadLibrary)
         <p v-else class="empty-inline-note">Chưa có lịch sử nghe gần đây.</p>
       </section>
 
-      <section class="library-section" aria-labelledby="completed-heading">
+      <section v-if="activeTab !== 'saved'" class="library-section" aria-labelledby="completed-heading">
         <div class="section-heading">
           <div class="section-heading-text">
             <h2 id="completed-heading">Đã hoàn thành</h2>

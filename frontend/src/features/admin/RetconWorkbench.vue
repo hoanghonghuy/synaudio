@@ -20,6 +20,7 @@ import {
   type RetconAction,
 } from './retconPresentation.mjs'
 import { createRetconSelectionGuard } from './retconSelectionGuard.mjs'
+import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
 
 const route = useRoute()
 const storyID = computed(() => String(route.params.storyID ?? ''))
@@ -133,6 +134,7 @@ onMounted(() => { void loadList() })
 
 <template>
   <section class="page retcon-workbench">
+    <AdminWorkspaceNav :storyID="storyID" />
     <RouterLink class="back-link" :to="`/admin/stories/${storyID}/control`">← Về Story Control Center</RouterLink>
     <p class="eyebrow">Retcon Governance</p>
     <h1>Workbench thay đổi lịch sử</h1>
@@ -228,10 +230,10 @@ onMounted(() => { void loadList() })
 .retcon-actions button, .retcon-feedback button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .6rem 1.25rem; border-radius: var(--radius-full); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-family: var(--font-heading); font-size: 0.92rem; font-weight: 600; cursor: pointer; transition: all 160ms ease; box-shadow: var(--shadow); }
 .retcon-actions button:hover:not(:disabled), .retcon-feedback button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--surface-soft); }
 .retcon-actions button:disabled { opacity: .55; cursor: wait; }
-.retcon-actions .destructive { border-color: rgba(178, 58, 43, 0.35); background: transparent; color: var(--danger); font-weight: 650; box-shadow: none; }
-.retcon-actions .destructive:hover:not(:disabled) { border-color: var(--danger); background: rgba(178, 58, 43, 0.08); color: var(--danger); }
+.retcon-actions .destructive { border-color: var(--danger); background: transparent; color: var(--danger); font-weight: 650; box-shadow: none; }
+.retcon-actions .destructive:hover:not(:disabled) { border-color: var(--danger); background: var(--error-container); color: var(--danger); }
 .retcon-feedback { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; padding: .8rem; margin: .8rem 0; overflow-wrap: anywhere; border-radius: var(--radius-md); }
-.retcon-feedback.error { border-width: 2px; border-color: var(--danger); background: rgba(178, 58, 43, 0.08); }
+.retcon-feedback.error { border-width: 2px; border-color: var(--danger); background: var(--error-container); }
 .retcon-empty { padding: 1rem; }
 @media (max-width: 820px) {
   .retcon-layout { grid-template-columns: 1fr; }

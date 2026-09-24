@@ -17,6 +17,7 @@ import {
 import { withPrivilegedRetry, type PrivilegedAssuranceReason } from '../../api/privileged-request'
 import type { AdminUserSummary, UserAccountStatus } from '../../api/types'
 import ReAuthChallenge from './ReAuthChallenge.vue'
+import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
 
 const users = ref<AdminUserSummary[]>([])
 const selected = ref<AdminUserSummary | null>(null)
@@ -194,6 +195,7 @@ onMounted(loadUsers)
 
 <template>
   <section class="page admin">
+    <AdminWorkspaceNav />
     <RouterLink class="back-link" to="/admin">← Về Studio</RouterLink>
     <p class="eyebrow">Studio / Governance</p>
     <h1>Quản lý bảo mật người dùng</h1>

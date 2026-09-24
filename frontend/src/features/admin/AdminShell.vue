@@ -6,6 +6,7 @@ import type { PrivilegedAssuranceReason } from '../../api/privileged-request'
 import type { Story } from '../../api/types'
 import { useAuthStore } from '../../stores/auth'
 import ReAuthChallenge from './ReAuthChallenge.vue'
+import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
 
 const auth = useAuthStore()
 const stories = ref<Story[]>([])
@@ -113,6 +114,7 @@ onMounted(load)
 
 <template>
   <section class="page admin">
+    <AdminWorkspaceNav />
     <p class="eyebrow">Studio / Quản lý truyện</p>
     <h1>Quản lý truyện</h1>
     <p class="page-intro">Khởi tạo và theo dõi những câu chuyện đang được xây dựng trong Synaudio.</p>
