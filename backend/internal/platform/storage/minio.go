@@ -73,9 +73,26 @@ func parseStorageEndpoint(raw string) (endpoint string, secure bool, host string
 	return u.Host, u.Scheme == "https", u.Hostname(), nil
 }
 
+func contentTypeForKey(key string) string {
+	switch {
+	case strings.HasSuffix(key, ".mp3"):
+		return "audio/mpeg"
+	case strings.HasSuffix(key, ".wav"):
+		return "audio/wav"
+	case strings.HasSuffix(key, ".ogg"):
+		return "audio/ogg"
+	case strings.HasSuffix(key, ".json"):
+		return "application/json"
+	default:
+		return "application/octet-stream"
+	}
+}
+
 // Put stores data at the given object key.
 func (m *MinIO) Put(ctx context.Context, key string, data []byte) error {
-	_, err := m.client.PutObject(ctx, m.bucket, key, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{})
+	_, err := m.client.PutObject(ctx, m.bucket, key, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
+		ContentType: contentTypeForKey(key),
+	})
 	if err != nil {
 		return fmt.Errorf("put object %q: %w", key, err)
 	}
@@ -150,7 +167,9 @@ func (m *MinIO) UploadFile(ctx context.Context, key, path string) (int64, error)
 		return 0, fmt.Errorf("upload file %q is empty", path)
 	}
 
-	if _, err := m.client.PutObject(ctx, m.bucket, key, f, info.Size(), minio.PutObjectOptions{}); err != nil {
+	if _, err := m.client.PutObject(ctx, m.bucket, key, f, info.Size(), minio.PutObjectOptions{
+		ContentType: contentTypeForKey(key),
+	}); err != nil {
 		return 0, fmt.Errorf("put object %q from file: %w", key, err)
 	}
 	return info.Size(), nil

@@ -24,6 +24,7 @@ const deleting = ref(false)
 const sessionsLoading = ref(false)
 const error = ref('')
 const success = ref('')
+const secretCopied = ref(false)
 
 const mfaEnabled = computed(() => auth.user?.mfa_enabled ?? false)
 const hasRecoveryCodes = computed(() => recoveryCodes.value.length > 0)
@@ -36,6 +37,7 @@ async function beginSetup() {
     const response = await setupTOTP()
     secret.value = response.secret
     code.value = ''
+    secretCopied.value = false
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Không thể bắt đầu thiết lập MFA.'
   } finally {
@@ -52,6 +54,7 @@ async function confirmSetup() {
     recoveryCodes.value = response.recovery_codes
     secret.value = ''
     code.value = ''
+    secretCopied.value = false
     if (auth.user) auth.user.mfa_enabled = true
     success.value = 'MFA đã được bật cho tài khoản của bạn.'
   } catch (e) {
@@ -140,6 +143,16 @@ async function requestDeletion() {
   }
 }
 
+async function copySecret() {
+  if (!secret.value) return
+  try {
+    await navigator.clipboard?.writeText(secret.value)
+    secretCopied.value = true
+  } catch {
+    secretCopied.value = false
+  }
+}
+
 function copyRecoveryCodes() {
   void navigator.clipboard?.writeText(recoveryCodes.value.join('\n'))
 }
@@ -216,8 +229,20 @@ onMounted(async () => {
         <form v-if="secret" class="auth-form mfa-form" @submit.prevent="confirmSetup">
           <div class="instruction-block">
             <h3>1. Thêm tài khoản vào ứng dụng</h3>
-            <p>Nhập thủ công secret key này vào ứng dụng xác thực của bạn:</p>
-            <code class="totp-secret" aria-label="Secret key để thiết lập MFA">{{ secret }}</code>
+            <div class="totp-setup-grid">
+              <div class="totp-qr-card" role="img" aria-label="Khu vực mã QR cho ứng dụng xác thực">
+                <div class="totp-qr-placeholder" aria-hidden="true"><span>QR</span></div>
+                <strong>Quét mã QR</strong>
+                <small>API hiện chỉ cung cấp secret thủ công.</small>
+              </div>
+              <div class="totp-manual-key">
+                <p>Hoặc nhập thủ công secret key:</p>
+                <div class="totp-secret-row">
+                  <code class="totp-secret" aria-label="Secret key để thiết lập MFA">{{ secret }}</code>
+                  <button class="secondary-button" type="button" @click="copySecret">{{ secretCopied ? 'Đã sao chép' : 'Sao chép' }}</button>
+                </div>
+              </div>
+            </div>
             <p class="field-help">Không chia sẻ secret key. Bạn chỉ thấy key này trong bước thiết lập hiện tại.</p>
           </div>
           <label for="mfa-code">

@@ -45,6 +45,7 @@ import {
 } from './chapterProductionStages.mjs'
 import {
   createAudioPreviewState,
+  formatAudioPreviewError,
   previewAssetForChapter,
   type AudioPreviewSnapshot,
 } from './audioPreviewState.mjs'
@@ -77,6 +78,8 @@ const error = ref('')
 const chapterSelection = createLatestSelectionGuard()
 const previewState = createAudioPreviewState()
 const audioPreview = ref<AudioPreviewSnapshot>(previewState.snapshot())
+const previewPlaybackError = ref('')
+const previewBuffering = ref(false)
 const canonController = createCanonWorkspaceController(createCanonApiBoundary(authenticatedRequest))
 const canonState = ref<CanonWorkspaceState>(canonController.snapshot())
 
@@ -213,12 +216,16 @@ const primaryStage = computed(() => getPrimaryProductionStage(productionStages.v
 
 function resetAudioPreview() {
   audioPreview.value = previewState.reset()
+  previewPlaybackError.value = ''
+  previewBuffering.value = false
 }
 
 async function loadAudioPreview() {
   const chapter = activeChapter.value
   const asset = previewAsset.value
   if (!chapter || !asset || selectionLoading.value) return
+  previewPlaybackError.value = ''
+  previewBuffering.value = false
   const request = previewState.begin(chapter.ID, asset.ID)
   audioPreview.value = previewState.snapshot()
   try {
@@ -227,6 +234,25 @@ async function loadAudioPreview() {
   } catch (e) {
     audioPreview.value = request.fail(e instanceof Error ? e.message : 'Không thể tải URL preview audio.')
   }
+}
+
+function onPreviewLoadStart() {
+  if (audioPreview.value.status === 'ready') previewBuffering.value = true
+}
+
+function onPreviewPlaying() {
+  previewBuffering.value = false
+  previewPlaybackError.value = ''
+}
+
+function onPreviewCanPlay() {
+  previewBuffering.value = false
+}
+
+function onPreviewError(event: Event) {
+  previewBuffering.value = false
+  const mediaError = (event.target as HTMLMediaElement | null)?.error
+  previewPlaybackError.value = formatAudioPreviewError(mediaError)
 }
 
 async function loadAudioProjections(chapterID: string) {
@@ -457,8 +483,27 @@ onMounted(load)
               <p>{{ audioPreview.error }}</p><button class="preview-button" type="button" @click="loadAudioPreview">Retry preview</button>
             </div>
             <div v-else-if="audioPreview.status === 'ready'" class="preview-player">
-              <audio :key="`${audioPreview.chapterID}:${audioPreview.assetID}:${audioPreview.url}`" :src="audioPreview.url" controls preload="metadata">Trình duyệt của bạn không hỗ trợ audio player.</audio>
-              <button class="preview-button secondary" type="button" @click="loadAudioPreview">Refresh preview URL</button>
+              <div class="preview-player-header">
+                <span class="preview-format">{{ previewAsset.MimeType || 'Audio' }}</span>
+                <span v-if="previewBuffering" class="preview-buffering" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Đang tải…</span>
+              </div>
+              <audio
+                :key="`${audioPreview.chapterID}:${audioPreview.assetID}:${audioPreview.url}`"
+                :src="audioPreview.url"
+                controls
+                preload="metadata"
+                @loadstart="onPreviewLoadStart"
+                @waiting="previewBuffering = true"
+                @stalled="previewBuffering = true"
+                @playing="onPreviewPlaying"
+                @canplay="onPreviewCanPlay"
+                @error="onPreviewError"
+              >Trình duyệt của bạn không hỗ trợ audio player.</audio>
+              <div v-if="previewPlaybackError" class="preview-error" role="alert">
+                <p>{{ previewPlaybackError }}</p>
+                <button class="preview-button" type="button" @click="loadAudioPreview">Thử lại</button>
+              </div>
+              <button class="preview-button secondary" type="button" @click="loadAudioPreview">Làm mới URL preview</button>
             </div>
           </template>
         </section>
@@ -524,7 +569,7 @@ onMounted(load)
 .stage-copy { min-width: 0; }.stage-copy p { margin: 8px 0 0; line-height: 1.45; overflow-wrap: anywhere; }.blocker-copy { font-weight: 650; }
 .stage-loading, .state-loading, .stage-waiting, .state-waiting { opacity: .72; }.stage-blocked, .state-blocked, .stage-failed, .state-failed { border-style: dashed; }
 .canon-workspace-panel { margin-top: 20px; }
-.preview-panel { margin-top: 20px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }.preview-copy { line-height: 1.5; }.preview-player { display: grid; gap: 12px; }.preview-player audio { width: 100%; min-height: 44px; }.preview-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 18px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; transition: all 160ms ease; box-shadow: var(--shadow); }.preview-button:hover:not(:disabled), .preview-button:focus-visible { border-color: var(--accent); color: var(--accent); background: var(--surface-soft); }.preview-button:disabled { opacity: .5; cursor: not-allowed; }.preview-button.secondary { justify-self: start; }.preview-error { border-left: 3px solid var(--danger); border-radius: var(--radius-md); background: var(--error-container); padding: 12px 16px; }.preview-error p { color: var(--danger); font-weight: 650; margin: 0 0 8px; }
+.preview-panel { margin-top: 20px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }.preview-copy { line-height: 1.5; }.preview-player { display: grid; gap: 12px; }.preview-player-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; }.preview-format { color: var(--muted); font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }.preview-buffering { display: inline-flex; align-items: center; color: var(--accent-strong); font-size: 12px; font-weight: 700; }.preview-buffering .spinner { width: 14px; height: 14px; margin-right: 6px; }.preview-player audio { width: 100%; min-height: 44px; border-radius: var(--radius-md); }.preview-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 18px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; transition: all 160ms ease; box-shadow: var(--shadow); }.preview-button:hover:not(:disabled), .preview-button:focus-visible { border-color: var(--accent); color: var(--accent); background: var(--surface-soft); }.preview-button:disabled { opacity: .5; cursor: not-allowed; }.preview-button.secondary { justify-self: start; }.preview-error { border-left: 3px solid var(--danger); border-radius: var(--radius-md); background: var(--error-container); padding: 12px 16px; }.preview-error p { color: var(--danger); font-weight: 650; margin: 0 0 8px; }
 .action-panel { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); }.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }.actions button, .action-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 18px; border-radius: var(--radius-full); font: inherit; font-weight: 600; transition: all 160ms ease; }.actions button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; box-shadow: var(--shadow); }.actions button:hover:not(:disabled), .actions button:focus-visible, .action-link:focus-visible { border-color: var(--accent); color: var(--accent); background: var(--surface-soft); }.actions button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }.actions button.primary-action { font-weight: 700; background: var(--accent); border-color: var(--accent); color: var(--bg); box-shadow: var(--shadow-seal); }.actions button.primary-action:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--bg); }.action-progress, .page-status { font-weight: 650; }
 .technical-details { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }.technical-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }.detail-grid { display: grid; gap: 8px; }.detail-grid p { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; margin: 0; }.detail-grid span { overflow-wrap: anywhere; }
 .empty-state { opacity: .72; }.error { color: var(--danger); font-weight: 650; }.eyebrow { margin: 0 0 5px; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }

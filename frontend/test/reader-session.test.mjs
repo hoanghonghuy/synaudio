@@ -4,7 +4,9 @@ import test from 'node:test'
 import {
   createLatestChapterSelectionGuard,
   formatPlaybackTime,
+  normalizeVolume,
   normalizePlaybackRate,
+  toggleMuteState,
 } from '../src/features/reader/readerSession.mjs'
 
 test('latest chapter selection invalidates stale async completions', () => {
@@ -39,5 +41,20 @@ test('playback time is stable for empty and long-form durations', () => {
   assert.equal(formatPlaybackTime(Number.NaN), '0:00')
   assert.equal(formatPlaybackTime(-1), '0:00')
   assert.equal(formatPlaybackTime(65.8), '1:05')
-  assert.equal(formatPlaybackTime(3661), '61:01')
+  assert.equal(formatPlaybackTime(3661), '1:01:01')
+})
+
+test('volume values stay safe for the media element', () => {
+  assert.equal(normalizeVolume(0.45), 0.45)
+  assert.equal(normalizeVolume(-1), 0)
+  assert.equal(normalizeVolume(2), 1)
+  assert.equal(normalizeVolume('invalid'), 0.9)
+})
+
+test('mute state remembers the last audible volume and restores it', () => {
+  const muted = toggleMuteState(false, 0.65, 0.9)
+  assert.deepEqual(muted, { muted: true, volume: 0, lastAudibleVolume: 0.65 })
+
+  const restored = toggleMuteState(true, 0, muted.lastAudibleVolume)
+  assert.deepEqual(restored, { muted: false, volume: 0.65, lastAudibleVolume: 0.65 })
 })

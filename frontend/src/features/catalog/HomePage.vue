@@ -13,6 +13,7 @@ const q = ref('')
 const genre = ref('')
 const sort = ref('')
 const isSearching = computed(() => Boolean(q.value || genre.value || sort.value))
+const heroListenPath = computed(() => stories.value[0] ? `/stories/${stories.value[0].id}/read` : '#catalog-results')
 
 async function load() {
   loading.value = true
@@ -68,6 +69,15 @@ onMounted(load)
         <p class="lede">
           Khám phá những câu chuyện được tạo nên để nghe sâu, đọc chậm và nhớ lâu — từ những phút rảnh đến những đêm không ngủ.
         </p>
+        <div class="hero-cta-row">
+          <RouterLink class="primary-btn-cta" :to="heroListenPath">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            {{ stories.length ? 'Nghe ngay' : 'Khám phá bộ sưu tập' }}
+          </RouterLink>
+          <a class="hero-secondary-link" href="#catalog-results">Xem các tuyển tập <span aria-hidden="true">↓</span></a>
+        </div>
         <div class="hero-stat-row" aria-label="Điểm nổi bật của Synaudio">
           <div><strong>24/7</strong><span>chuyện để nghe</span></div>
           <div><strong>AI + người</strong><span>kể chuyện giàu cảm xúc</span></div>
@@ -139,7 +149,7 @@ onMounted(load)
       </div>
     </div>
 
-    <div class="section-heading">
+    <div id="catalog-results" class="section-heading">
       <div>
         <p class="eyebrow">Tuyển tập hôm nay</p>
         <h2>Chuyện đang chờ bạn</h2>

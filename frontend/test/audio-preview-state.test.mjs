@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createAudioPreviewState, previewAssetForChapter } from '../src/features/admin/audioPreviewState.mjs'
+import {
+  createAudioPreviewState,
+  formatAudioPreviewError,
+  previewAssetForChapter,
+} from '../src/features/admin/audioPreviewState.mjs'
 
 test('preview state rejects stale completion after chapter or asset selection changes', () => {
   const preview = createAudioPreviewState()
@@ -59,4 +63,15 @@ test('preview asset selection never promotes foreign, non-ready, or stale asset 
   assert.equal(previewAssetForChapter({ activeChapterID: 'chapter-1', activeAudio: active, latestReadyAudio: null }), active)
   assert.equal(previewAssetForChapter({ activeChapterID: 'chapter-1', activeAudio: { ...active, Status: 'PROCESSING' }, latestReadyAudio: null }), null)
   assert.equal(previewAssetForChapter({ activeChapterID: 'chapter-1', activeAudio: null, latestReadyAudio: { ...ready, ChapterID: 'chapter-2' } }), null)
+})
+
+test('preview playback errors are friendly and never expose an empty browser message', () => {
+  assert.equal(
+    formatAudioPreviewError(new Error('network interrupted')),
+    'Không thể phát audio preview. network interrupted',
+  )
+  assert.equal(
+    formatAudioPreviewError({ message: '   ' }),
+    'Không thể phát audio preview. Hãy thử lại.',
+  )
 })

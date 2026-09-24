@@ -12,7 +12,9 @@ import type { Chapter, ChapterContent } from '../../api/types'
 import {
   createLatestChapterSelectionGuard,
   formatPlaybackTime,
+  normalizeVolume,
   normalizePlaybackRate,
+  toggleMuteState,
 } from './readerSession.mjs'
 
 const route = useRoute()
@@ -38,6 +40,8 @@ const currentTime = ref(0)
 const duration = ref(0)
 const playbackRate = ref(1)
 const volume = ref(0.9)
+const isMuted = ref(false)
+const lastAudibleVolume = ref(0.9)
 const sleepTimer = ref<'off' | '15' | '30' | '60'>('off')
 const chapterDrawerOpen = ref(false)
 const progressState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -228,27 +232,29 @@ async function togglePlayback() {
   audioError.value = ''
   try {
     if (el.paused) {
+      isBuffering.value = true
       await el.play()
     } else {
       el.pause()
     }
-  } catch (e) {
-    audioError.value = e instanceof Error ? e.message : 'Không thể bắt đầu phát audio.'
+  } catch {
+    isBuffering.value = false
+    audioError.value = 'Không thể bắt đầu phát audio. Hãy thử lại hoặc kiểm tra kết nối mạng.'
     isPlaying.value = false
   }
 }
 
-function seekTo(value: number) {
+function seekTo(value: number, persist = false) {
   const el = audioEl.value
   if (!el || !ownsCurrentAudio() || !Number.isFinite(value)) return
   const next = Math.max(0, Math.min(value, duration.value || value))
   el.currentTime = next
   currentTime.value = next
-  persistCurrentPosition(true)
+  if (persist) persistCurrentPosition(true)
 }
 
 function seekBy(deltaSeconds: number) {
-  seekTo(currentTime.value + deltaSeconds)
+  seekTo(currentTime.value + deltaSeconds, true)
 }
 
 function changePlaybackRate(value: unknown) {
@@ -258,9 +264,29 @@ function changePlaybackRate(value: unknown) {
 }
 
 function changeVolume(value: unknown) {
-  const next = Number(value)
-  volume.value = Number.isFinite(next) ? Math.min(1, Math.max(0, next)) : 0.9
-  if (audioEl.value) audioEl.value.volume = volume.value
+  const next = normalizeVolume(value)
+  volume.value = next
+  if (next > 0) {
+    lastAudibleVolume.value = next
+    isMuted.value = false
+  } else {
+    isMuted.value = true
+  }
+  if (audioEl.value) {
+    audioEl.value.volume = next
+    audioEl.value.muted = isMuted.value
+  }
+}
+
+function toggleMute() {
+  const state = toggleMuteState(isMuted.value, volume.value, lastAudibleVolume.value)
+  isMuted.value = state.muted
+  volume.value = state.volume
+  lastAudibleVolume.value = state.lastAudibleVolume
+  if (audioEl.value) {
+    audioEl.value.volume = state.volume
+    audioEl.value.muted = state.muted
+  }
 }
 
 function setSleepTimer(value: string) {
@@ -282,6 +308,23 @@ function onLoadedMetadata() {
   currentTime.value = el.currentTime
   el.playbackRate = playbackRate.value
   el.volume = volume.value
+  el.muted = isMuted.value
+}
+
+function onAudioLoadStart() {
+  if (!ownsCurrentAudio()) return
+  isBuffering.value = true
+}
+
+function onAudioPlaying() {
+  if (!ownsCurrentAudio()) return
+  isPlaying.value = true
+  isBuffering.value = false
+}
+
+function onAudioCanPlay() {
+  if (!ownsCurrentAudio()) return
+  isBuffering.value = false
 }
 
 function onTimeUpdate() {
@@ -302,6 +345,7 @@ function onAudioError() {
   if (!ownsCurrentAudio()) return
   isPlaying.value = false
   isBuffering.value = false
+  audioLoading.value = false
   audioError.value = 'Không thể phát audio lúc này. Hãy thử tải lại audio.'
 }
 
@@ -426,32 +470,47 @@ onBeforeUnmount(() => {
             <audio
               v-if="audioURL"
               ref="audioEl"
+              :key="`${audioChapterID}:${audioURL}`"
               class="native-audio"
               :src="audioURL"
               preload="metadata"
+              @loadstart="onAudioLoadStart"
               @loadedmetadata="onLoadedMetadata"
               @timeupdate="onTimeUpdate"
               @play="isPlaying = ownsCurrentAudio()"
-              @playing="isBuffering = false"
+              @playing="onAudioPlaying"
               @pause="isPlaying = false; onPauseOrSeek()"
               @seeking="isBuffering = ownsCurrentAudio()"
               @seeked="isBuffering = false; onPauseOrSeek()"
               @waiting="isBuffering = ownsCurrentAudio()"
-              @canplay="isBuffering = false"
+              @stalled="isBuffering = ownsCurrentAudio()"
+              @canplay="onAudioCanPlay"
               @error="onAudioError"
               @ended="onEnded"
             />
 
-            <div v-if="audioURL" class="player-shell" :aria-busy="isBuffering">
+            <div v-if="audioURL" class="player-shell" :aria-busy="isBuffering" :class="{ buffering: isBuffering }">
               <div class="player-primary">
-                <button class="skip-button" type="button" aria-label="Lùi 15 giây" @click="seekBy(-15)">−15s</button>
-                <button class="play-button" type="button" :aria-label="isPlaying ? 'Tạm dừng' : 'Phát audio'" @click="togglePlayback">
-                  {{ isPlaying ? '❚❚' : '▶' }}
+                <button class="skip-button" type="button" aria-label="Lùi 15 giây" title="Lùi 15 giây" @click="seekBy(-15)">
+                  <span aria-hidden="true">↶</span><span>15s</span>
                 </button>
-                <button class="skip-button" type="button" aria-label="Tua tới 15 giây" @click="seekBy(15)">+15s</button>
+                <button
+                  class="play-button"
+                  type="button"
+                  :aria-label="isPlaying ? 'Tạm dừng' : 'Phát audio'"
+                  :aria-busy="isBuffering"
+                  @click="togglePlayback"
+                >
+                  <span v-if="isBuffering" class="spinner player-spinner" aria-hidden="true"></span>
+                  <svg v-else-if="isPlaying" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
+                  <svg v-else aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><polygon points="7 4 19 12 7 20 7 4"></polygon></svg>
+                </button>
+                <button class="skip-button" type="button" aria-label="Tua tới 15 giây" title="Tua tới 15 giây" @click="seekBy(15)">
+                  <span>15s</span><span aria-hidden="true">↷</span>
+                </button>
                 <div class="now-playing">
                   <strong>{{ activeChapter.Title }}</strong>
-                  <span>{{ isBuffering ? 'Đang tải audio…' : isPlaying ? 'Đang phát' : 'Sẵn sàng nghe' }}</span>
+                  <span><span v-if="isBuffering" class="spinner inline-spinner" aria-hidden="true"></span>{{ isBuffering ? 'Đang tải audio…' : isPlaying ? 'Đang phát' : 'Sẵn sàng nghe' }}</span>
                 </div>
               </div>
 
@@ -479,13 +538,25 @@ onBeforeUnmount(() => {
                   </select>
                 </label>
                 <label class="volume-control">
-                  <span>Âm lượng</span>
+                  <span class="volume-label">Âm lượng</span>
+                  <button
+                    class="mute-button"
+                    type="button"
+                    :aria-pressed="isMuted"
+                    :aria-label="isMuted ? 'Bật âm lượng' : 'Tắt âm lượng'"
+                    :title="isMuted ? 'Bật âm lượng' : 'Tắt âm lượng'"
+                    @click="toggleMute"
+                  >
+                    <svg v-if="isMuted" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 9 4.5 4.5"></path><path d="m13.5 9-4.5 4.5"></path><path d="M4 9v6h4l5 4V5L8 9H4z"></path><path d="m19 9-4 6"></path><path d="m15 9 4 6"></path></svg>
+                    <svg v-else aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><path d="M17 9.5a4 4 0 0 1 0 5"></path><path d="M19.5 7a7 7 0 0 1 0 10"></path></svg>
+                  </button>
                   <input
                     type="range"
                     min="0"
                     max="1"
                     step="0.05"
                     :value="volume"
+                    :aria-valuetext="`${Math.round(volume * 100)}%`"
                     aria-label="Âm lượng"
                     @input="changeVolume(($event.target as HTMLInputElement).value)"
                   >
@@ -521,7 +592,7 @@ onBeforeUnmount(() => {
             <strong>Audio tạm thời chưa sẵn sàng.</strong>
             <p>{{ audioError }}</p>
             <div class="error-actions">
-              <button type="button" @click="retryAudio">Thử tải lại audio</button>
+              <button type="button" @click="retryAudio">Thử lại</button>
               <span class="muted">Bạn vẫn có thể đọc nội dung chương này.</span>
             </div>
           </div>
@@ -577,18 +648,23 @@ onBeforeUnmount(() => {
 .chapter-current { font-weight: 800; color: var(--accent-strong); }
 .reader-body { min-width: 0; display: grid; gap: 18px; }
 .loading-line { min-height: 24px; }
-.audio-section { border: 1px solid var(--accent-border); border-radius: var(--radius-lg); padding: 20px; display: grid; gap: 16px; background: radial-gradient(circle at 82% 12%, rgba(242, 181, 107, 0.14), transparent 16rem), var(--surface); box-shadow: var(--shadow-lg); }
+.audio-section { border: 1px solid var(--accent-border); border-radius: var(--radius-lg); padding: 20px; display: grid; gap: 16px; background: radial-gradient(circle at 82% 12%, rgba(217, 119, 6, 0.14), transparent 16rem), var(--surface); box-shadow: var(--shadow-lg); }
 .audio-heading-row h2 { margin: 3px 0 0; }
 .save-state { font-size: 13px; font-weight: 700; color: var(--muted); }
 .native-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .player-shell { display: grid; gap: 18px; }
+.player-shell.buffering { cursor: progress; }
 .player-primary { justify-content: flex-start; }
 .play-button, .skip-button, .fav-btn, .error-actions button { min-width: 44px; min-height: 44px; border-radius: var(--radius-full); border: 1px solid var(--accent); background: transparent; color: var(--accent-strong); cursor: pointer; }
 .play-button { width: 58px; height: 58px; font-size: 22px; background: var(--accent); color: var(--surface); }
+.play-button svg { width: 24px; height: 24px; }
+.play-button .player-spinner { width: 22px; height: 22px; margin: 0; border-width: 3px; border-color: rgba(16, 21, 29, .32); border-top-color: var(--surface); }
 .skip-button { padding: 0 12px; font-weight: 800; }
+.skip-button span { display: inline-flex; align-items: center; }
 .now-playing { min-width: 0; display: grid; gap: 3px; }
 .now-playing strong { overflow-wrap: anywhere; }
 .now-playing span, .player-progress-text { font-size: 13px; color: var(--muted); }
+.inline-spinner { width: .8rem; height: .8rem; margin-right: .35rem; border-width: 2px; vertical-align: -0.12rem; }
 .timeline-row { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; font-size: 13px; }
 .timeline { --playback-progress: 0%; width: 100%; min-height: 44px; appearance: none; cursor: pointer; accent-color: var(--accent); background: transparent; }
 .timeline::-webkit-slider-runnable-track { height: 6px; border-radius: var(--radius-full); background: linear-gradient(90deg, var(--accent) var(--playback-progress), rgba(255, 255, 255, 0.13) var(--playback-progress)); }
@@ -597,6 +673,11 @@ onBeforeUnmount(() => {
 .timeline::-moz-range-thumb { width: 14px; height: 14px; border: 2px solid var(--accent-strong); border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 4px var(--accent-soft); }
 .rate-control { display: flex; align-items: center; gap: 8px; font-weight: 700; }
 .rate-control select { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-full); padding: 0 2.75rem 0 14px; background-color: var(--surface); color: var(--ink); }
+.volume-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.volume-label { white-space: nowrap; }
+.mute-button { display: grid; width: 44px; min-width: 44px; height: 44px; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface); color: var(--muted); cursor: pointer; }
+.mute-button:hover, .mute-button[aria-pressed="true"] { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent-strong); }
+.mute-button svg { width: 18px; height: 18px; }
 .player-placeholder { min-height: 112px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--surface-soft); }
 .relisten-notice, .status-state { border-radius: var(--radius-md); padding: 14px 16px; }
 .relisten-notice { display: grid; gap: 4px; border: 1px solid var(--accent-border); border-left: 4px solid var(--amber); background: var(--accent-soft); color: var(--ink); }
@@ -665,7 +746,9 @@ onBeforeUnmount(() => {
   .chapter-nav-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding-bottom: 4px; gap: 8px; }
   .chapter-tab { flex: 0 0 min(75vw, 260px); scroll-snap-align: start; min-height: 56px; padding: 10px 12px; }
   .audio-section {
-    position: static;
+    position: sticky;
+    top: calc(60px + env(safe-area-inset-top));
+    z-index: 30;
     padding: 16px;
     border-radius: var(--radius-lg);
     background: rgba(16, 21, 29, 0.96);

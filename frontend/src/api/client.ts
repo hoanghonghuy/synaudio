@@ -550,10 +550,28 @@ export function runContentReview(chapterID: string, reviewType: 'CONTINUITY' | '
   return request<ChapterReview>(`/admin/chapters/${chapterID}/${paths[reviewType]}`, { method: 'POST', body: JSON.stringify({ revision_id: revisionID, text }) })
 }
 
+export function resolvePlayableAudioURL(rawURL: string): string {
+  if (!rawURL) return ''
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+    const parsed = new URL(rawURL, base)
+    if (parsed.hostname === 'minio' || (parsed.hostname === 'localhost' && parsed.port === '9000')) {
+      return `${parsed.pathname}${parsed.search}`
+    }
+  } catch {
+    // Keep raw URL if parsing fails
+  }
+  return rawURL
+}
+
 export function getChapterContent(chapterID: string): Promise<ChapterContent> { return request<ChapterContent>(`/chapters/${chapterID}/content`) }
-export function getAudioURL(chapterID: string): Promise<AudioURLResponse> { return request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`) }
-export function getAdminAudioPreviewURL(chapterID: string, assetID: string): Promise<AudioURLResponse> {
-  return request<AudioURLResponse>(`/admin/chapters/${chapterID}/audio/${assetID}/preview-url`)
+export async function getAudioURL(chapterID: string): Promise<AudioURLResponse> {
+  const res = await request<AudioURLResponse>(`/chapters/${chapterID}/audio-url`)
+  return { url: resolvePlayableAudioURL(res.url) }
+}
+export async function getAdminAudioPreviewURL(chapterID: string, assetID: string): Promise<AudioURLResponse> {
+  const res = await request<AudioURLResponse>(`/admin/chapters/${chapterID}/audio/${assetID}/preview-url`)
+  return { url: resolvePlayableAudioURL(res.url) }
 }
 
 export async function getLatestNarrationRevision(chapterID: string): Promise<NarrationRevision | null> {

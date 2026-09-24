@@ -47,3 +47,12 @@ export function previewAssetForChapter({ activeChapterID, activeAudio, latestRea
   if (!candidate || candidate.ChapterID !== activeChapterID || candidate.Status !== 'READY') return null
   return candidate
 }
+
+export function formatAudioPreviewError(error) {
+  const message = error && typeof error === 'object' && 'message' in error
+    ? String(error.message).trim()
+    : ''
+  return message
+    ? `Không thể phát audio preview. ${message}`
+    : 'Không thể phát audio preview. Hãy thử lại.'
+}

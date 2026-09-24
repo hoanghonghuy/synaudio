@@ -7,10 +7,13 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const menuOpen = ref(false)
-const isDiscoveryRoute = computed(() => route.path === '/' || route.path.startsWith('/stories/'))
+const isReaderRoute = computed(() => route.name === 'reader')
+const isDiscoveryRoute = computed(() => route.path === '/' || (route.path.startsWith('/stories/') && !isReaderRoute.value))
 const isLibraryRoute = computed(() => route.path === '/library')
 const isStudioRoute = computed(() => route.path === '/admin' || route.path.startsWith('/admin/'))
 const isAccountRoute = computed(() => route.path.startsWith('/account/') || route.path.startsWith('/auth') || route.path === '/account-deletion-recovery')
+const currentStoryID = computed(() => typeof route.params.storyID === 'string' ? route.params.storyID : '')
+const readerPath = computed(() => currentStoryID.value ? `/stories/${currentStoryID.value}/read` : '/')
 
 watch(
   () => route.path,
@@ -91,6 +94,14 @@ async function signOut() {
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
         </svg>
         <span class="bottom-nav-label">Thư viện</span>
+      </RouterLink>
+
+      <RouterLink v-if="currentStoryID" :to="readerPath" class="bottom-nav-item" :class="{ active: isReaderRoute }" :aria-current="isReaderRoute ? 'page' : undefined">
+        <svg class="bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+          <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+        </svg>
+        <span class="bottom-nav-label">Đọc</span>
       </RouterLink>
 
       <RouterLink v-if="auth.isAdmin" to="/admin" class="bottom-nav-item" :class="{ active: isStudioRoute }" :aria-current="isStudioRoute ? 'page' : undefined">

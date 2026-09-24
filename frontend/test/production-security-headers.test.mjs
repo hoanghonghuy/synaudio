@@ -49,3 +49,11 @@ test('nginx configures dynamic DNS resolver for container upstream resiliency', 
   assert.match(nginx, /resolver\s+127\.0\.0\.11\s+valid=\d+s/)
   assert.match(nginx, /proxy_pass\s+\$backend_upstream;/)
 })
+
+test('audio proxy preserves byte-range streaming to MinIO', () => {
+  const audioLocation = nginx.match(/location \/synaudio\/ \{([\s\S]*?)\n    \}/)?.[1] ?? ''
+  assert.match(audioLocation, /proxy_pass\s+\$storage_upstream;/)
+  assert.match(audioLocation, /proxy_set_header\s+Range\s+\$http_range;/)
+  assert.match(audioLocation, /proxy_set_header\s+If-Range\s+\$http_if_range;/)
+  assert.match(audioLocation, /proxy_buffering\s+off;/)
+})

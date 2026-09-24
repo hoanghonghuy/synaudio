@@ -28,3 +28,5 @@ export function previewAssetForChapter(input: {
   activeAudio: AudioAsset | null
   latestReadyAudio: AudioAsset | null
 }): AudioAsset | null
+
+export function formatAudioPreviewError(error: unknown): string
