@@ -491,15 +491,15 @@ onMounted(load)
 .production-header p:not(.eyebrow) { max-width: 760px; margin-bottom: 0; line-height: 1.6; }
 .back-link, .action-link { min-height: 44px; display: inline-flex; align-items: center; }
 .workspace-grid { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
-.chapter-panel, .pipeline-panel { border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
-.chapter-panel { padding: 16px; position: sticky; top: 20px; }
-.pipeline-panel { min-width: 0; padding: 22px; }
+.chapter-panel, .pipeline-panel { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow); }
+.chapter-panel { padding: 1.25rem; position: sticky; top: 20px; }
+.pipeline-panel { min-width: 0; padding: 1.5rem; }
 .panel-heading, .chapter-heading, .stage-title-row { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
 .chapter-heading { margin-bottom: 20px; align-items: flex-start; }
 .chapter-list { display: grid; gap: 8px; margin-top: 12px; }
-.chapter-card { min-height: 68px; width: 100%; display: grid; gap: 4px; text-align: left; padding: 12px 14px; border: 1px solid transparent; border-radius: 12px; background: transparent; overflow-wrap: anywhere; cursor: pointer; }
-.chapter-card:hover:not(:disabled), .chapter-card:focus-visible { border-color: currentColor; }
-.chapter-card.active { border-color: currentColor; background: color-mix(in srgb, currentColor 7%, transparent); }
+.chapter-card { min-height: 68px; width: 100%; display: grid; gap: 4px; text-align: left; padding: 12px 14px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; overflow-wrap: anywhere; cursor: pointer; transition: all 150ms ease; }
+.chapter-card:hover:not(:disabled), .chapter-card:focus-visible { border-color: var(--accent); background: var(--surface-soft); }
+.chapter-card.active { border-color: var(--accent); background: var(--accent-soft); }
 .chapter-card:disabled { opacity: .55; cursor: not-allowed; }
 .chapter-number, .chapter-card small { font-size: 12px; opacity: .72; }
 .count-badge, .chapter-state, .state-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-full); font-size: 12px; font-weight: 700; white-space: nowrap; background: var(--surface-soft); color: var(--muted); }

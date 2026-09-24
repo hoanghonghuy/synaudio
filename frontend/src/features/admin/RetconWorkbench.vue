@@ -210,14 +210,14 @@ onMounted(() => { void loadList() })
 <style scoped>
 .retcon-workbench { max-width: 1180px; margin: 0 auto; }
 .retcon-layout { display: grid; grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.6fr); gap: 1rem; align-items: start; }
-.retcon-list, .retcon-detail, .retcon-empty, .retcon-feedback { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.retcon-list, .retcon-detail, .retcon-empty, .retcon-feedback { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow); }
 .retcon-list { display: grid; gap: .5rem; padding: .65rem; max-height: 72vh; overflow: auto; }
 .retcon-list-item { min-height: 72px; width: 100%; text-align: left; padding: .8rem; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; cursor: pointer; transition: all 150ms ease; }
 .retcon-list-item:hover, .retcon-list-item.active { border-color: var(--accent); background: var(--accent-soft); }
 .retcon-list-item:focus-visible, .retcon-actions button:focus-visible, .retcon-feedback button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .retcon-list-title { display: block; font-weight: 700; overflow-wrap: anywhere; }
 .retcon-list-meta, .retcon-id { display: block; margin-top: .25rem; font-size: .85rem; opacity: .72; overflow-wrap: anywhere; word-break: break-word; }
-.retcon-detail { padding: 1rem; min-width: 0; }
+.retcon-detail { padding: 1.25rem; min-width: 0; }
 .retcon-detail-header { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; }
 .retcon-status { flex: none; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-soft); color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
 .retcon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }

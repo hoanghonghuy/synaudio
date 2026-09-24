@@ -13,9 +13,15 @@ Monorepo triển khai theo `docs/ai-audiobook-spec/spec_final.md`,
 ```text
 backend/     Go API + Worker (modular monolith)
 frontend/    Vue 3 + Vite + TypeScript
-docs/        Final specification + historical docs
+docs/        Final specification + historical docs + Design System
 docker-compose.yml
 ```
+
+## Design system
+
+Giao diện Synaudio được thiết kế theo phong cách **Thủy Mặc Á Đông (Ink Wash Painting)** kết hợp chuẩn **Mobile-First**. Toàn bộ quy chuẩn về bảng màu, typography, thước đo khoảng cách (spacing rhythm), bo góc (radii) và chuẩn chạm (touch targets) được quy định thống nhất tại:
+- Tài liệu quy chuẩn: [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md) (và [`frontend/DESIGN_SYSTEM.md`](frontend/DESIGN_SYSTEM.md))
+- Khai báo token: [`frontend/src/styles.css`](frontend/src/styles.css)
 
 ## Quick start
 

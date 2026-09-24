@@ -535,6 +535,7 @@ onMounted(loadWorkspace)
 
 <style scoped>
 .planning-studio { display: grid; gap: 1.5rem; }
+.planning-studio > section { padding: 1.5rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow); }
 .planning-summary { display: grid; gap: .75rem; margin: 0; }
 .planning-summary > div { display: grid; grid-template-columns: minmax(9rem, .35fr) 1fr; gap: 1rem; padding-block: .75rem; border-bottom: 1px solid var(--line); }
 .planning-summary dt { font-weight: 700; }
@@ -552,6 +553,7 @@ onMounted(loadWorkspace)
 .artifact-card { min-width: 0; display: grid; gap: .75rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow); }
 .planning-subsection { display: grid; gap: .75rem; margin-top: 1.5rem; }
 @media (max-width: 760px) {
+  .planning-studio > section { padding: 1.15rem; }
   .planning-form { grid-template-columns: 1fr; }
   .full-field { grid-column: auto; }
   .planning-summary > div { grid-template-columns: 1fr; gap: .25rem; }
