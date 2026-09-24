@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   createLatestChapterSelectionGuard,
   formatPlaybackTime,
+  formatTimelineTime,
   normalizeVolume,
   normalizePlaybackRate,
   toggleMuteState,
@@ -42,6 +43,12 @@ test('playback time is stable for empty and long-form durations', () => {
   assert.equal(formatPlaybackTime(-1), '0:00')
   assert.equal(formatPlaybackTime(65.8), '1:05')
   assert.equal(formatPlaybackTime(3661), '1:01:01')
+})
+
+test('timeline time uses a compact mm:ss label for mobile controls', () => {
+  assert.equal(formatTimelineTime(Number.NaN), '00:00')
+  assert.equal(formatTimelineTime(65.8), '01:05')
+  assert.equal(formatTimelineTime(3661), '1:01:01')
 })
 
 test('volume values stay safe for the media element', () => {

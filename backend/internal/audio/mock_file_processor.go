@@ -19,6 +19,7 @@ func (MockAudioProcessor) ProcessFiles(ctx context.Context, inputPaths []string,
 	}
 	defer out.Close()
 
+	allMock := true
 	for i, path := range inputPaths {
 		if err := ctx.Err(); err != nil {
 			return 0, err
@@ -30,9 +31,19 @@ func (MockAudioProcessor) ProcessFiles(ctx context.Context, inputPaths []string,
 		if len(data) == 0 {
 			return 0, fmt.Errorf("mock segment %d is empty", i)
 		}
+		if string(data) != "MOCK-AUDIO" {
+			allMock = false
+		}
 		if _, err := out.Write(data); err != nil {
 			return 0, fmt.Errorf("write mock segment %d: %w", i, err)
 		}
+	}
+	if allMock {
+		// When input segments are mock data ("MOCK-AUDIO"), write a valid, playable MP3
+		// so browser media decoders can decode and play the audio smoothly.
+		_ = out.Truncate(0)
+		_, _ = out.Seek(0, 0)
+		_, _ = out.Write(getMockPlayableMP3())
 	}
 	if err := out.Close(); err != nil {
 		return 0, fmt.Errorf("close mock output: %w", err)

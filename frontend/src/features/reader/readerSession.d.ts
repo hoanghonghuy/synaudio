@@ -10,3 +10,4 @@ export function toggleMuteState(
   lastAudibleVolume?: number,
 ): { muted: boolean; volume: number; lastAudibleVolume: number }
 export function formatPlaybackTime(seconds: number): string
+export function formatTimelineTime(seconds: number): string

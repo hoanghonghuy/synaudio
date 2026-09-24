@@ -102,14 +102,24 @@ async function submit() {
           <input id="auth-email" v-model="email" type="email" autocomplete="email" required />
         </label>
         <label for="auth-password">
-          <span class="field-label-row"><span>Mật khẩu</span><button class="field-toggle" type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Ẩn' : 'Hiện' }}</button></span>
-          <input
-            id="auth-password"
-            v-model="password"
-            :type="showPassword ? 'text' : 'password'"
-            :autocomplete="isRegister ? 'new-password' : 'current-password'"
-            required
-          />
+          <span class="field-label-row"><span>Mật khẩu</span></span>
+          <div class="password-wrap">
+            <input
+              id="auth-password"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              :autocomplete="isRegister ? 'new-password' : 'current-password'"
+              required
+            />
+            <button
+              class="password-toggle-btn"
+              type="button"
+              :aria-label="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
+              @click="showPassword = !showPassword"
+            >
+              {{ showPassword ? 'Ẩn' : 'Hiện' }}
+            </button>
+          </div>
         </label>
 
         <p v-if="error" class="status-state error" role="alert">{{ error }}</p>

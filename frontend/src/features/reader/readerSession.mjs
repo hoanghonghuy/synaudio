@@ -52,3 +52,12 @@ export function formatPlaybackTime(seconds) {
   if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
   return `${minutes}:${String(remainder).padStart(2, '0')}`
 }
+
+export function formatTimelineTime(seconds) {
+  const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor(safeSeconds / 60) % 60
+  const remainder = safeSeconds % 60
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+}

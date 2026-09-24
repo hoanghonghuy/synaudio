@@ -11,7 +11,7 @@ import { useListenerStore } from '../../stores/listener'
 import type { Chapter, ChapterContent } from '../../api/types'
 import {
   createLatestChapterSelectionGuard,
-  formatPlaybackTime,
+  formatTimelineTime,
   normalizeVolume,
   normalizePlaybackRate,
   toggleMuteState,
@@ -55,6 +55,7 @@ let sleepTimerID: number | undefined
 let activeSelectionMayCommit: () => boolean = () => false
 
 const playbackPercent = computed(() => duration.value > 0 ? Math.min(100, (currentTime.value / duration.value) * 100) : 0)
+const remainingTime = computed(() => Math.max(0, duration.value - currentTime.value))
 const progressLabel = computed(() => {
   if (progressState.value === 'saving') return 'Đang lưu tiến độ…'
   if (progressState.value === 'saved') return 'Đã lưu tiến độ'
@@ -183,13 +184,24 @@ async function retryAudio() {
     audioChapterID.value = requestChapterID
     audioURL.value = result.url
     await nextTick()
-    if (mayCommit() && activeChapter.value?.ID === requestChapterID && audioChapterID.value === requestChapterID) audioEl.value?.load()
+    if (mayCommit() && activeChapter.value?.ID === requestChapterID && audioChapterID.value === requestChapterID) reloadAudioElement()
   } catch (e) {
     if (mayCommit() && activeChapter.value?.ID === requestChapterID) {
       audioError.value = e instanceof Error ? e.message : 'Không thể tải audio chương này.'
     }
   } finally {
     if (mayCommit() && activeChapter.value?.ID === requestChapterID) audioLoading.value = false
+  }
+}
+
+function reloadAudioElement() {
+  try {
+    audioEl.value?.load()
+    return true
+  } catch {
+    audioLoading.value = false
+    audioError.value = 'Không thể tải audio lúc này. Hãy thử lại audio hoặc kiểm tra kết nối mạng.'
+    return false
   }
 }
 
@@ -237,9 +249,12 @@ async function togglePlayback() {
     } else {
       el.pause()
     }
-  } catch {
+  } catch (reason: unknown) {
     isBuffering.value = false
-    audioError.value = 'Không thể bắt đầu phát audio. Hãy thử lại hoặc kiểm tra kết nối mạng.'
+    const errorName = reason && typeof reason === 'object' && 'name' in reason ? String(reason.name) : ''
+    audioError.value = errorName === 'NotAllowedError'
+      ? 'Trình duyệt đang chặn phát tự động. Hãy chạm lại nút Phát audio để bắt đầu.'
+      : 'Không thể bắt đầu phát audio. Hãy thử lại audio hoặc kiểm tra kết nối mạng.'
     isPlaying.value = false
   }
 }
@@ -304,6 +319,8 @@ function setSleepTimer(value: string) {
 function onLoadedMetadata() {
   const el = audioEl.value
   if (!el || !ownsCurrentAudio()) return
+  audioLoading.value = false
+  audioError.value = ''
   duration.value = Number.isFinite(el.duration) ? el.duration : 0
   currentTime.value = el.currentTime
   el.playbackRate = playbackRate.value
@@ -313,6 +330,7 @@ function onLoadedMetadata() {
 
 function onAudioLoadStart() {
   if (!ownsCurrentAudio()) return
+  audioLoading.value = true
   isBuffering.value = true
 }
 
@@ -324,6 +342,7 @@ function onAudioPlaying() {
 
 function onAudioCanPlay() {
   if (!ownsCurrentAudio()) return
+  audioLoading.value = false
   isBuffering.value = false
 }
 
@@ -346,7 +365,7 @@ function onAudioError() {
   isPlaying.value = false
   isBuffering.value = false
   audioLoading.value = false
-  audioError.value = 'Không thể phát audio lúc này. Hãy thử tải lại audio.'
+  audioError.value = 'Không thể phát audio lúc này. Hãy thử lại audio.'
 }
 
 async function onEnded() {
@@ -420,12 +439,12 @@ onBeforeUnmount(() => {
     <p v-else-if="chapters.length === 0" class="note">Chưa có chương nào được xuất bản.</p>
 
     <template v-else>
-      <button class="chapter-drawer-toggle" type="button" :aria-expanded="chapterDrawerOpen" @click="chapterDrawerOpen = !chapterDrawerOpen">
+      <button class="chapter-drawer-toggle" type="button" aria-controls="chapter-nav" :aria-expanded="chapterDrawerOpen" @click="chapterDrawerOpen = !chapterDrawerOpen">
         <span><span class="drawer-toggle-dot" aria-hidden="true"></span> Danh sách chương</span>
         <span>{{ chapters.length }} chương · {{ chapterDrawerOpen ? 'Đóng' : 'Mở' }}</span>
       </button>
       <div class="reader-layout">
-        <nav class="chapter-nav" :class="{ 'drawer-open': chapterDrawerOpen }" aria-labelledby="chapter-nav-heading">
+        <nav id="chapter-nav" class="chapter-nav" :class="{ 'drawer-open': chapterDrawerOpen }" aria-labelledby="chapter-nav-heading">
           <div class="chapter-nav-heading">
             <div>
               <p class="eyebrow">Playlist</p>
@@ -460,11 +479,16 @@ onBeforeUnmount(() => {
 
           <section class="audio-section" aria-labelledby="audio-heading">
             <div class="audio-heading-row">
-              <div>
-                <p class="eyebrow">Now playing · chapter {{ activeChapter.ChapterNumber }}</p>
-                <h2 id="audio-heading">Nghe chương này</h2>
+              <div class="audio-heading-copy">
+                <p class="eyebrow">Đang nghe · Chương {{ activeChapter.ChapterNumber }}</p>
+                <h2 id="audio-heading">{{ activeChapter.Title }}</h2>
               </div>
-              <span v-if="progressLabel" class="save-state" role="status" aria-live="polite">{{ progressLabel }}</span>
+              <div class="audio-heading-meta">
+                <span class="audio-status" role="status" aria-live="polite">
+                  {{ audioLoading || isBuffering ? 'Đang tải audio…' : isPlaying ? 'Đang phát' : 'Sẵn sàng nghe' }}
+                </span>
+                <span v-if="progressLabel" class="save-state" role="status" aria-live="polite">{{ progressLabel }}</span>
+              </div>
             </div>
 
             <audio
@@ -492,7 +516,7 @@ onBeforeUnmount(() => {
             <div v-if="audioURL" class="player-shell" :aria-busy="isBuffering" :class="{ buffering: isBuffering }">
               <div class="player-primary">
                 <button class="skip-button" type="button" aria-label="Lùi 15 giây" title="Lùi 15 giây" @click="seekBy(-15)">
-                  <span aria-hidden="true">↶</span><span>15s</span>
+                  <span aria-hidden="true">↶</span><span>−15s</span>
                 </button>
                 <button
                   class="play-button"
@@ -506,16 +530,12 @@ onBeforeUnmount(() => {
                   <svg v-else aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><polygon points="7 4 19 12 7 20 7 4"></polygon></svg>
                 </button>
                 <button class="skip-button" type="button" aria-label="Tua tới 15 giây" title="Tua tới 15 giây" @click="seekBy(15)">
-                  <span>15s</span><span aria-hidden="true">↷</span>
+                  <span>+15s</span><span aria-hidden="true">↷</span>
                 </button>
-                <div class="now-playing">
-                  <strong>{{ activeChapter.Title }}</strong>
-                  <span><span v-if="isBuffering" class="spinner inline-spinner" aria-hidden="true"></span>{{ isBuffering ? 'Đang tải audio…' : isPlaying ? 'Đang phát' : 'Sẵn sàng nghe' }}</span>
-                </div>
               </div>
 
               <div class="timeline-row">
-                <span>{{ formatPlaybackTime(currentTime) }}</span>
+                <span class="timeline-elapsed" aria-label="Đã phát">{{ formatTimelineTime(currentTime) }}</span>
                 <input
                   class="timeline"
                   type="range"
@@ -527,17 +547,17 @@ onBeforeUnmount(() => {
                   :aria-label="`Tiến độ audio ${Math.round(playbackPercent)}%`"
                   @input="seekTo(Number(($event.target as HTMLInputElement).value))"
                 >
-                <span>{{ formatPlaybackTime(duration) }}</span>
+                <span class="timeline-remaining" aria-label="Thời gian còn lại trên tổng thời lượng">−{{ formatTimelineTime(remainingTime) }} / {{ formatTimelineTime(duration) }}</span>
               </div>
 
               <div class="player-secondary">
-                <label class="rate-control">
+                <label class="control-pill rate-control">
                   <span>Tốc độ</span>
                   <select :value="playbackRate" aria-label="Tốc độ phát" @change="changePlaybackRate(($event.target as HTMLSelectElement).value)">
                     <option v-for="rate in playbackRates" :key="rate" :value="rate">{{ rate }}×</option>
                   </select>
                 </label>
-                <label class="volume-control">
+                <label class="control-pill volume-control">
                   <span class="volume-label">Âm lượng</span>
                   <button
                     class="mute-button"
@@ -561,7 +581,7 @@ onBeforeUnmount(() => {
                     @input="changeVolume(($event.target as HTMLInputElement).value)"
                   >
                 </label>
-                <label class="sleep-control">
+                <label class="control-pill sleep-control">
                   <span>Hẹn giờ</span>
                   <select :value="sleepTimer" aria-label="Hẹn giờ tắt" @change="setSleepTimer(($event.target as HTMLSelectElement).value)">
                     <option value="off">Tắt</option>
@@ -570,7 +590,7 @@ onBeforeUnmount(() => {
                     <option value="60">60 phút</option>
                   </select>
                 </label>
-                <span class="player-progress-text">{{ Math.round(playbackPercent) }}% chương</span>
+                <span class="player-progress-text control-pill">{{ Math.round(playbackPercent) }}% chương</span>
               </div>
             </div>
 
@@ -592,7 +612,7 @@ onBeforeUnmount(() => {
             <strong>Audio tạm thời chưa sẵn sàng.</strong>
             <p>{{ audioError }}</p>
             <div class="error-actions">
-              <button type="button" @click="retryAudio">Thử lại</button>
+              <button class="audio-retry-btn" type="button" :disabled="audioLoading" :aria-busy="audioLoading" @click="retryAudio">Thử lại audio</button>
               <span class="muted">Bạn vẫn có thể đọc nội dung chương này.</span>
             </div>
           </div>
@@ -649,7 +669,11 @@ onBeforeUnmount(() => {
 .reader-body { min-width: 0; display: grid; gap: 18px; }
 .loading-line { min-height: 24px; }
 .audio-section { border: 1px solid var(--accent-border); border-radius: var(--radius-lg); padding: 20px; display: grid; gap: 16px; background: radial-gradient(circle at 82% 12%, rgba(217, 119, 6, 0.14), transparent 16rem), var(--surface); box-shadow: var(--shadow-lg); }
-.audio-heading-row h2 { margin: 3px 0 0; }
+.audio-heading-copy, .audio-heading-meta { min-width: 0; }
+.audio-heading-copy { flex: 1 1 auto; }
+.audio-heading-row h2 { margin: 3px 0 0; overflow-wrap: anywhere; }
+.audio-heading-meta { display: grid; justify-items: end; gap: 4px; flex: 0 0 auto; text-align: right; }
+.audio-status { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .save-state { font-size: 13px; font-weight: 700; color: var(--muted); }
 .native-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .player-shell { display: grid; gap: 18px; }
@@ -661,11 +685,9 @@ onBeforeUnmount(() => {
 .play-button .player-spinner { width: 22px; height: 22px; margin: 0; border-width: 3px; border-color: rgba(16, 21, 29, .32); border-top-color: var(--surface); }
 .skip-button { padding: 0 12px; font-weight: 800; }
 .skip-button span { display: inline-flex; align-items: center; }
-.now-playing { min-width: 0; display: grid; gap: 3px; }
-.now-playing strong { overflow-wrap: anywhere; }
-.now-playing span, .player-progress-text { font-size: 13px; color: var(--muted); }
-.inline-spinner { width: .8rem; height: .8rem; margin-right: .35rem; border-width: 2px; vertical-align: -0.12rem; }
+.player-progress-text { font-size: 13px; color: var(--muted); }
 .timeline-row { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; font-size: 13px; }
+.timeline-remaining { white-space: nowrap; }
 .timeline { --playback-progress: 0%; width: 100%; min-height: 44px; appearance: none; cursor: pointer; accent-color: var(--accent); background: transparent; }
 .timeline::-webkit-slider-runnable-track { height: 6px; border-radius: var(--radius-full); background: linear-gradient(90deg, var(--accent) var(--playback-progress), rgba(255, 255, 255, 0.13) var(--playback-progress)); }
 .timeline::-moz-range-track { height: 6px; border-radius: var(--radius-full); background: linear-gradient(90deg, var(--accent) var(--playback-progress), rgba(255, 255, 255, 0.13) var(--playback-progress)); }
@@ -678,6 +700,10 @@ onBeforeUnmount(() => {
 .mute-button { display: grid; width: 44px; min-width: 44px; height: 44px; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface); color: var(--muted); cursor: pointer; }
 .mute-button:hover, .mute-button[aria-pressed="true"] { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent-strong); }
 .mute-button svg { width: 18px; height: 18px; }
+.control-pill { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius-full); background: rgba(255, 255, 255, 0.035); color: var(--muted); white-space: nowrap; }
+.control-pill select { min-height: 32px; width: auto; padding: 0 2rem 0 0; border: 0; background-color: transparent; color: var(--ink); font-size: 12px; }
+.control-pill input[type="range"] { width: 64px; min-height: 28px; padding: 0; }
+.audio-retry-btn { border-color: var(--accent); background: var(--accent); color: #12161d; box-shadow: var(--shadow-seal); }
 .player-placeholder { min-height: 112px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--surface-soft); }
 .relisten-notice, .status-state { border-radius: var(--radius-md); padding: 14px 16px; }
 .relisten-notice { display: grid; gap: 4px; border: 1px solid var(--accent-border); border-left: 4px solid var(--amber); background: var(--accent-soft); color: var(--ink); }
@@ -742,40 +768,53 @@ onBeforeUnmount(() => {
   .reader-head { align-items: stretch; flex-direction: column; margin: 12px 0 16px; }
   .reader-head .fav-btn { align-self: flex-start; }
   .reader-layout { grid-template-columns: 1fr; gap: 16px; }
-  .chapter-nav { padding: 12px; }
-  .chapter-nav-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding-bottom: 4px; gap: 8px; }
-  .chapter-tab { flex: 0 0 min(75vw, 260px); scroll-snap-align: start; min-height: 56px; padding: 10px 12px; }
+  .chapter-nav { display: block; max-height: 0; overflow: hidden; padding: 0 12px; border-color: transparent; opacity: 0; pointer-events: none; transform: translateY(-4px); transition: max-height 180ms ease, opacity 160ms ease, padding 180ms ease, transform 180ms ease; }
+  .chapter-nav:not(.drawer-open) { display: block; }
+  .chapter-nav.drawer-open { max-height: min(52vh, 30rem); padding: 12px; border-color: var(--line); opacity: 1; pointer-events: auto; transform: translateY(0); }
+  .chapter-nav-list, .chapter-nav.drawer-open .chapter-nav-list { display: grid; max-height: calc(min(52vh, 30rem) - 6rem); overflow: auto; padding-bottom: 2px; gap: 8px; }
+  .chapter-tab { min-height: 56px; padding: 10px 12px; }
   .audio-section {
     position: sticky;
     top: calc(60px + env(safe-area-inset-top));
     z-index: 30;
-    padding: 16px;
+    padding: 10px 12px;
+    gap: 10px;
     border-radius: var(--radius-lg);
     background: rgba(16, 21, 29, 0.96);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     box-shadow: 0 8px 24px rgba(35, 28, 22, 0.08);
   }
-  .audio-heading-row { margin-bottom: 4px; }
-  .player-primary { display: grid; grid-template-columns: auto auto auto; justify-content: center; gap: 16px; }
-  .now-playing { grid-column: 1 / -1; text-align: center; }
-  .timeline-row { grid-template-columns: max-content minmax(0, 1fr) max-content; }
-  .player-secondary { align-items: center; justify-content: space-between; }
-  .prose { font-size: 1.08rem; line-height: 1.82; padding: 12px 0; }
+  .audio-heading-row { align-items: center; gap: 8px; margin-bottom: 0; }
+  .audio-heading-copy .eyebrow { margin-bottom: 2px; font-size: 10px; }
+  .audio-heading-row h2 { max-width: 31ch; font-size: .98rem; line-height: 1.2; }
+  .audio-heading-meta { gap: 2px; }
+  .audio-status, .save-state { font-size: 10px; }
+  .player-primary { justify-content: center; gap: 12px; }
+  .play-button { width: 52px; height: 52px; min-width: 52px; min-height: 52px; }
+  .skip-button { min-width: 52px; min-height: 42px; padding: 0 8px; font-size: .72rem; }
+  .timeline-row { grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 8px; font-size: 11px; }
+  .timeline { min-height: 36px; }
+  .player-secondary { display: flex; align-items: center; justify-content: flex-start; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .player-secondary::-webkit-scrollbar { display: none; }
+  .control-pill { min-height: 36px; flex: 0 0 auto; gap: 5px; padding: 0 7px; font-size: 11px; }
+  .control-pill select { min-height: 28px; padding-right: 1.7rem; font-size: 11px; }
+  .volume-label { display: none; }
+  .control-pill input[type="range"] { width: 48px; min-height: 24px; }
+  .mute-button { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
+  .mute-button svg { width: 16px; height: 16px; }
+  .player-progress-text { font-size: 10px; }
+  .prose { font-size: 1.08rem; line-height: 1.86; padding: 14px 0; }
   .reader-footer-nav { flex-direction: column; align-items: stretch; }
   .reader-nav-btn { width: 100%; justify-content: center; text-align: center; }
 }
 
 @media (max-width: 430px) {
   .reader-head { margin-top: 10px; }
-  .audio-section { margin-inline: -8px; border-radius: var(--radius-md); padding: 14px; }
-  .timeline-row { grid-template-columns: 1fr 1fr; gap: 4px; }
-  .timeline { grid-column: 1 / -1; grid-row: 1; }
-  .timeline-row span:last-child { text-align: right; }
-  .player-secondary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
-  .volume-control { justify-content: flex-end; }
-  .sleep-control { justify-content: flex-start; }
-  .player-progress-text { grid-column: 1 / -1; }
-  .rate-control { justify-content: flex-start; }
+  .audio-section { margin-inline: -8px; border-radius: var(--radius-md); padding: 10px; }
+  .audio-heading-row h2 { max-width: 23ch; }
+  .timeline-row { grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 5px; }
+  .player-secondary { align-items: center; }
+  .control-pill input[type="range"] { display: none; }
 }
 </style>
