@@ -43,7 +43,7 @@ const chapterDrawerOpen = ref(false)
 const progressState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const chapterSelection = createLatestChapterSelectionGuard()
 const progressWriteIntervalMs = 15_000
-const playbackRates = [0.75, 1, 1.25, 1.5, 1.75, 2]
+const playbackRates = [0.75, 1, 1.25, 1.5, 2]
 let lastProgressWriteAt = 0
 let progressWrite: Promise<void> = Promise.resolve()
 let progressStateTimer: number | undefined
@@ -464,6 +464,7 @@ onBeforeUnmount(() => {
                   :max="Math.max(duration, 0)"
                   step="1"
                   :value="currentTime"
+                  :style="{ '--playback-progress': `${playbackPercent}%` }"
                   :aria-label="`Tiến độ audio ${Math.round(playbackPercent)}%`"
                   @input="seekTo(Number(($event.target as HTMLInputElement).value))"
                 >
@@ -478,7 +479,7 @@ onBeforeUnmount(() => {
                   </select>
                 </label>
                 <label class="volume-control">
-                  <span aria-hidden="true">◖</span>
+                  <span>Âm lượng</span>
                   <input
                     type="range"
                     min="0"
@@ -589,9 +590,13 @@ onBeforeUnmount(() => {
 .now-playing strong { overflow-wrap: anywhere; }
 .now-playing span, .player-progress-text { font-size: 13px; color: var(--muted); }
 .timeline-row { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; font-size: 13px; }
-.timeline { width: 100%; min-height: 44px; cursor: pointer; accent-color: var(--accent); }
+.timeline { --playback-progress: 0%; width: 100%; min-height: 44px; appearance: none; cursor: pointer; accent-color: var(--accent); background: transparent; }
+.timeline::-webkit-slider-runnable-track { height: 6px; border-radius: var(--radius-full); background: linear-gradient(90deg, var(--accent) var(--playback-progress), rgba(255, 255, 255, 0.13) var(--playback-progress)); }
+.timeline::-moz-range-track { height: 6px; border-radius: var(--radius-full); background: linear-gradient(90deg, var(--accent) var(--playback-progress), rgba(255, 255, 255, 0.13) var(--playback-progress)); }
+.timeline::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -6px; appearance: none; border: 2px solid var(--accent-strong); border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 4px var(--accent-soft); }
+.timeline::-moz-range-thumb { width: 14px; height: 14px; border: 2px solid var(--accent-strong); border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 4px var(--accent-soft); }
 .rate-control { display: flex; align-items: center; gap: 8px; font-weight: 700; }
-.rate-control select { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-full); padding: 0 14px; background: var(--surface); color: var(--ink); }
+.rate-control select { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-full); padding: 0 2.75rem 0 14px; background-color: var(--surface); color: var(--ink); }
 .player-placeholder { min-height: 112px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--surface-soft); }
 .relisten-notice, .status-state { border-radius: var(--radius-md); padding: 14px 16px; }
 .relisten-notice { display: grid; gap: 4px; border: 1px solid var(--accent-border); border-left: 4px solid var(--amber); background: var(--accent-soft); color: var(--ink); }
@@ -660,9 +665,7 @@ onBeforeUnmount(() => {
   .chapter-nav-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding-bottom: 4px; gap: 8px; }
   .chapter-tab { flex: 0 0 min(75vw, 260px); scroll-snap-align: start; min-height: 56px; padding: 10px 12px; }
   .audio-section {
-    position: sticky;
-    top: 56px;
-    z-index: 25;
+    position: static;
     padding: 16px;
     border-radius: var(--radius-lg);
     background: rgba(16, 21, 29, 0.96);
@@ -686,7 +689,10 @@ onBeforeUnmount(() => {
   .timeline-row { grid-template-columns: 1fr 1fr; gap: 4px; }
   .timeline { grid-column: 1 / -1; grid-row: 1; }
   .timeline-row span:last-child { text-align: right; }
-  .player-secondary { align-items: center; }
+  .player-secondary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
+  .volume-control { justify-content: flex-end; }
+  .sleep-control { justify-content: flex-start; }
+  .player-progress-text { grid-column: 1 / -1; }
   .rate-control { justify-content: flex-start; }
 }
 </style>

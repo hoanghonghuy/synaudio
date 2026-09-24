@@ -501,17 +501,25 @@ onMounted(load)
 .pipeline-panel { min-width: 0; padding: 1.5rem; }
 .panel-heading, .chapter-heading, .stage-title-row { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
 .chapter-heading { margin-bottom: 20px; align-items: flex-start; }
-.chapter-list { display: grid; gap: 8px; margin-top: 12px; }
+.chapter-list { display: grid; gap: 8px; margin-top: 12px; scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; overscroll-behavior-inline: contain; }
 .chapter-card { min-height: 68px; width: 100%; display: grid; gap: 4px; text-align: left; padding: 12px 14px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; overflow-wrap: anywhere; cursor: pointer; transition: all 150ms ease; }
 .chapter-card:hover:not(:disabled), .chapter-card:focus-visible { border-color: var(--accent); background: var(--surface-soft); }
 .chapter-card.active { border-color: var(--accent); background: var(--accent-soft); }
 .chapter-card:disabled { opacity: .55; cursor: not-allowed; }
 .chapter-number, .chapter-card small { font-size: 12px; opacity: .72; }
 .count-badge, .chapter-state, .state-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-full); font-size: 12px; font-weight: 700; white-space: nowrap; background: var(--surface-soft); color: var(--muted); }
+.state-badge.state-ready, .state-badge.state-active, .state-badge.state-published { border-color: rgba(111, 224, 176, .34); background: var(--ink-pine-soft); color: var(--success); }
+.state-badge.state-processing { border-color: rgba(109, 217, 237, .34); background: var(--cyan-soft); color: var(--cyan); }
+.state-badge.state-waiting { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent-strong); }
+.state-badge.state-blocked, .state-badge.state-failed { border-color: rgba(255, 127, 138, .34); background: var(--error-container); color: var(--danger); }
+.state-badge.state-loading { border-color: rgba(167, 151, 255, .34); background: var(--violet-soft); color: var(--violet); }
 .next-step { display: grid; grid-template-columns: minmax(130px, .35fr) 1fr; gap: 18px; padding: 18px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .next-step p { margin: 8px 0 0; overflow-wrap: anywhere; }
 .stage-list { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0; margin: 0; }
 .stage-card { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.stage-card.stage-ready, .stage-card.stage-active, .stage-card.stage-published { border-color: rgba(111, 224, 176, .28); }
+.stage-card.stage-processing { border-color: rgba(109, 217, 237, .28); }
+.stage-card.stage-blocked, .stage-card.stage-failed { border-color: rgba(255, 127, 138, .28); }
 .stage-index { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: var(--radius-full); font-weight: 800; background: var(--surface-soft); }
 .stage-copy { min-width: 0; }.stage-copy p { margin: 8px 0 0; line-height: 1.45; overflow-wrap: anywhere; }.blocker-copy { font-weight: 650; }
 .stage-loading, .state-loading, .stage-waiting, .state-waiting { opacity: .72; }.stage-blocked, .state-blocked, .stage-failed, .state-failed { border-style: dashed; }

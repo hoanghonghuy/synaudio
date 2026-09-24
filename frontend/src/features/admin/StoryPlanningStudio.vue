@@ -65,6 +65,7 @@ const error = ref('')
 const notice = ref('')
 const premise = ref('')
 const coverFile = ref<File | null>(null)
+const coverInput = ref<HTMLInputElement | null>(null)
 
 const metadata = reactive({ title: '', description: '' })
 const settings = reactive<StoryWorkflowSettings>({
@@ -259,6 +260,7 @@ async function uploadCover() {
   const file = coverFile.value
   await runMutation('Đã upload cover mới.', () => uploadStoryCover(storyID.value, file))
   coverFile.value = null
+  if (coverInput.value) coverInput.value.value = ''
 }
 
 async function saveWorkflowSettings() {
@@ -422,7 +424,11 @@ onMounted(loadWorkspace)
           <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Lưu metadata</button></div>
         </form>
         <div class="cover-form">
-          <input type="file" accept="image/jpeg,image/png,image/webp" @change="chooseCover">
+          <label class="file-picker" for="story-cover">
+            <span>Ảnh bìa</span>
+            <input id="story-cover" ref="coverInput" class="file-input" type="file" accept="image/jpeg,image/png,image/webp" @change="chooseCover">
+            <small>JPG, PNG hoặc WebP · chọn một ảnh để upload</small>
+          </label>
           <button type="button" :disabled="mutating || !planningTruthLoaded || !coverFile" @click="uploadCover">Upload cover</button>
         </div>
       </section>
@@ -545,6 +551,8 @@ onMounted(loadWorkspace)
 .planning-summary dt { font-weight: 700; }
 .planning-summary dd { margin: 0; overflow-wrap: anywhere; }
 .action-row, .cover-form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1rem; }
+.file-picker { display: grid; min-width: 0; flex: 1 1 18rem; gap: .4rem; color: var(--ink-medium); font-size: .8rem; font-weight: 750; }
+.file-picker small { color: var(--muted); font-size: .72rem; font-weight: 500; }
 .readiness-list { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
 .readiness-list li { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem 1rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
 .planning-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }

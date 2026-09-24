@@ -178,7 +178,7 @@ onMounted(() => { void loadList() })
               <p class="panel-kicker">Authoritative request</p>
               <h2>{{ selected.Reason }}</h2>
             </div>
-            <span class="retcon-status">{{ retconStatusLabel(selected.Status) }}</span>
+            <span :class="['retcon-status', `retcon-status-${selected.Status.toLowerCase()}`]">{{ retconStatusLabel(selected.Status) }}</span>
           </div>
 
           <dl class="retcon-fields">
@@ -222,6 +222,10 @@ onMounted(() => { void loadList() })
 .retcon-detail { padding: 1.25rem; min-width: 0; }
 .retcon-detail-header { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; }
 .retcon-status { flex: none; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-soft); color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.retcon-status-draft, .retcon-status-analyzing { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent-strong); }
+.retcon-status-approved, .retcon-status-ready_to_apply { border-color: rgba(111, 224, 176, .34); background: var(--ink-pine-soft); color: var(--success); }
+.retcon-status-applied { border-color: rgba(109, 217, 237, .34); background: var(--cyan-soft); color: var(--cyan); }
+.retcon-status-cancelled { border-color: rgba(255, 127, 138, .34); background: var(--error-container); color: var(--danger); }
 .retcon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
 .retcon-fields > div { min-width: 0; padding: .8rem; border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--surface-soft); }
 .retcon-fields dt { font-size: .78rem; font-weight: 700; text-transform: uppercase; opacity: .65; }

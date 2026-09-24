@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { reAuth } from '../../api/client'
 import { adminSecurityErrorMessage } from '../../api/http-error'
 import type { PrivilegedAssuranceReason } from '../../api/privileged-request'
@@ -19,6 +19,7 @@ const code = ref('')
 const recoveryCode = ref('')
 const submitting = ref(false)
 const error = ref('')
+const dialogEl = ref<HTMLElement | null>(null)
 
 const title = computed(() =>
   props.reason === 'RECENT_AUTH_REQUIRED'
@@ -34,13 +35,15 @@ const intro = computed(() =>
 
 watch(
   () => props.open,
-  (open) => {
+  async (open) => {
     if (!open) return
     mode.value = 'totp'
     code.value = ''
     recoveryCode.value = ''
     error.value = ''
     submitting.value = false
+    await nextTick()
+    dialogEl.value?.focus()
   },
 )
 
@@ -70,12 +73,15 @@ async function submit() {
 </script>
 
 <template>
-  <div v-if="open" class="reauth-overlay" role="presentation" @click.self="dismiss">
+  <div v-if="open" class="reauth-overlay" role="presentation" @click.self="dismiss" @keydown.esc="dismiss">
     <section
+      ref="dialogEl"
       class="reauth-dialog security-card"
       role="dialog"
       aria-modal="true"
       aria-labelledby="reauth-heading"
+      aria-describedby="reauth-intro"
+      tabindex="-1"
       @click.stop
     >
       <div class="section-heading">
@@ -86,7 +92,7 @@ async function submit() {
         <button class="secondary-button" type="button" :disabled="submitting" @click="dismiss">Đóng</button>
       </div>
 
-      <p class="muted">{{ intro }}</p>
+      <p id="reauth-intro" class="muted">{{ intro }}</p>
 
       <div class="reauth-mode-toggle" role="tablist" aria-label="Phương thức xác minh">
         <button
