@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { createStory, listAdminStories } from '../../api/client'
+import { resolveAdminSecurityState, type AdminSecurityResolution } from '../../api/http-error'
+import type { PrivilegedAssuranceReason } from '../../api/privileged-request'
 import type { Story } from '../../api/types'
 import { useAuthStore } from '../../stores/auth'
+import ReAuthChallenge from './ReAuthChallenge.vue'
 
 const auth = useAuthStore()
 const stories = ref<Story[]>([])
 const loading = ref(false)
 const error = ref('')
+const securityState = ref<AdminSecurityResolution | null>(null)
+
+const reAuthOpen = ref(false)
+const reAuthReason = ref<PrivilegedAssuranceReason | null>(null)
 
 const form = ref({
   title: '',
@@ -37,14 +44,34 @@ function visibilityLabel(visibility: Story['visibility']) {
   return visibility === 'PUBLIC' ? 'Công khai' : 'Riêng tư'
 }
 
+function openReAuth(reason: PrivilegedAssuranceReason | null = 'MFA_REQUIRED') {
+  reAuthReason.value = reason
+  reAuthOpen.value = true
+}
+
+async function handleReAuthCompleted(success: boolean) {
+  reAuthOpen.value = false
+  reAuthReason.value = null
+  if (success) {
+    await load()
+  }
+}
+
+function handleReAuthDismissed() {
+  reAuthOpen.value = false
+  reAuthReason.value = null
+}
+
 async function load() {
   loading.value = true
   error.value = ''
+  securityState.value = null
   try {
     const res = await listAdminStories()
     stories.value = res.stories
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Không thể tải danh sách truyện.'
+    securityState.value = resolveAdminSecurityState(e, auth.user)
+    error.value = securityState.value.message
   } finally {
     loading.value = false
   }
@@ -71,7 +98,11 @@ async function submit() {
     form.value.description = ''
     await load()
   } catch (e) {
-    formError.value = e instanceof Error ? e.message : 'Không thể tạo truyện.'
+    const res = resolveAdminSecurityState(e, auth.user)
+    formError.value = res.message
+    if (res.needsReAuth) {
+      openReAuth(res.assuranceReason)
+    }
   } finally {
     submitting.value = false
   }
@@ -91,6 +122,18 @@ onMounted(load)
       <RouterLink class="control-link" to="/account/security">Bảo mật tài khoản</RouterLink>
     </div>
 
+    <!-- Cảnh báo bắt buộc kích hoạt MFA cho Admin -->
+    <div v-if="auth.isAdmin && !auth.user?.mfa_enabled" class="admin-mfa-banner panel" role="alert">
+      <div class="admin-mfa-body">
+        <div class="admin-mfa-badge">Bảo Mật Bắt Buộc</div>
+        <h2>Kích hoạt xác thực hai yếu tố (MFA)</h2>
+        <p class="muted">
+          Tài khoản quản trị cần bật MFA để bảo vệ dữ liệu truyện và phân quyền hệ thống. Toàn bộ thao tác trong Studio sẽ được mở khóa ngay sau khi bạn thiết lập ứng dụng xác thực (TOTP).
+        </p>
+      </div>
+      <RouterLink class="primary-link" to="/account/security">Thiết lập MFA ngay</RouterLink>
+    </div>
+
     <div class="admin-workspace">
       <section class="admin-list-panel" aria-labelledby="story-list-heading">
         <div class="section-heading">
@@ -105,7 +148,24 @@ onMounted(load)
         <div v-else-if="error" class="status-state error" role="alert">
           <strong>Không thể tải danh sách truyện.</strong>
           <p>{{ error }}</p>
-          <button class="secondary-link" type="button" @click="load">Thử lại</button>
+          <div class="status-actions">
+            <RouterLink
+              v-if="securityState?.needsMfaSetup || (auth.isAdmin && !auth.user?.mfa_enabled)"
+              class="primary-link"
+              to="/account/security"
+            >
+              Thiết lập MFA ngay
+            </RouterLink>
+            <button
+              v-else-if="securityState?.needsReAuth"
+              class="primary-link"
+              type="button"
+              @click="openReAuth(securityState?.assuranceReason)"
+            >
+              Xác minh MFA
+            </button>
+            <button class="secondary-link" type="button" @click="load">Thử lại</button>
+          </div>
         </div>
         <p v-else-if="stories.length === 0" class="empty-state">
           <strong>Chưa có truyện nào.</strong>
@@ -209,5 +269,12 @@ onMounted(load)
         </button>
       </form>
     </div>
+
+    <ReAuthChallenge
+      :open="reAuthOpen"
+      :reason="reAuthReason"
+      @completed="handleReAuthCompleted"
+      @dismissed="handleReAuthDismissed"
+    />
   </section>
 </template>

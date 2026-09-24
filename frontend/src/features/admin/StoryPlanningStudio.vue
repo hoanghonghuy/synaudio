@@ -29,7 +29,8 @@ import {
   updateStoryWorkflowSettings,
   uploadStoryCover,
 } from '../../api/client'
-import { isExplicitNotFound } from '../../api/http-error'
+import { isExplicitNotFound, resolveAdminSecurityState } from '../../api/http-error'
+import { useAuthStore } from '../../stores/auth'
 import type {
   ActivationReadiness,
   EndingPlanVersion,
@@ -42,6 +43,7 @@ import type {
 import type { Chapter, CreativeDecision, Story } from '../../api/types'
 
 const route = useRoute()
+const auth = useAuthStore()
 const storyID = computed(() => String(route.params.storyID ?? ''))
 
 const story = ref<Story | null>(null)
@@ -218,7 +220,7 @@ async function loadWorkspace() {
     if (currentEnding) endingDraft.value = asJSON(currentEnding.Content)
     planningTruthLoaded.value = true
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Không thể tải Planning Studio.'
+    error.value = resolveAdminSecurityState(e, auth.user).message
   } finally {
     loading.value = false
   }
@@ -237,7 +239,7 @@ async function runMutation(message: string, action: () => Promise<unknown>) {
     notice.value = message
     await loadWorkspace()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Thao tác thất bại.'
+    error.value = resolveAdminSecurityState(e, auth.user).message
   } finally {
     mutating.value = false
   }

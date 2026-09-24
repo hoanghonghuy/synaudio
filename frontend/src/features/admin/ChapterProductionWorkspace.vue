@@ -52,8 +52,11 @@ import { createCanonApiBoundary } from './canonApiBoundary.mjs'
 import { createCanonWorkspaceController } from './canonWorkspaceController.mjs'
 import { presentCanonWorkspace, type CanonWorkspaceState } from './canonWorkspacePresentation.mjs'
 import CanonMemoryPanel from './CanonMemoryPanel.vue'
+import { resolveAdminSecurityState } from '../../api/http-error'
+import { useAuthStore } from '../../stores/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
 const storyID = computed(() => route.params.storyID as string)
 const chapters = ref<Chapter[]>([])
 const activeChapter = ref<Chapter | null>(null)
@@ -270,7 +273,7 @@ async function selectChapter(chapter: Chapter) {
     revisions.value = []; reviews.value = []; generationRun.value = null; generationJob.value = null
     latestNarration.value = null; activeAudio.value = null; latestReadyAudio.value = null; publishReadiness.value = null
     canonState.value = canonController.reset()
-    error.value = e instanceof Error ? e.message : 'Không thể tải trạng thái production của chương.'
+    error.value = resolveAdminSecurityState(e, auth.user).message
   } finally {
     if (mayCommit() && activeChapter.value?.ID === chapter.ID) selectionLoading.value = false
   }
@@ -397,7 +400,7 @@ async function load() {
     const [chapterResponse, workflowSettings] = await Promise.all([listAdminChapters(storyID.value), getStoryWorkflowSettings(storyID.value)])
     chapters.value = chapterResponse.chapters; preferredVoiceID.value = workflowSettings.preferred_voice_id
     if (chapters.value.length > 0) await selectChapter(chapters.value[0])
-  } catch (e) { error.value = e instanceof Error ? e.message : 'Không thể tải Chapter Production workspace.' }
+  } catch (e) { error.value = resolveAdminSecurityState(e, auth.user).message }
   finally { loading.value = false }
 }
 onMounted(load)

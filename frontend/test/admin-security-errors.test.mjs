@@ -10,6 +10,7 @@ import {
   isPrivilegedAssuranceRequired,
   isRecentAuthRequired,
   privilegedAssuranceCode,
+  resolveAdminSecurityState,
 } from '../src/api/http-error.ts'
 
 test('privileged assurance helpers identify backend security codes', () => {
@@ -54,4 +55,38 @@ test('admin security messages cover denial and stale-state cases', () => {
     adminSecurityErrorMessage(new ApiRequestError(404, 'user not found', 'USER_NOT_FOUND')),
     /Không tìm thấy/i,
   )
+})
+
+test('resolveAdminSecurityState distinguishes unconfigured MFA vs session re-auth', () => {
+  const mfaError = new ApiRequestError(403, 'mfa verification required', 'MFA_REQUIRED')
+  const recentAuthError = new ApiRequestError(403, 'recent authentication required', 'RECENT_AUTH_REQUIRED')
+  const genericError = new Error('Network error')
+
+  // Case 1: Admin user has NOT configured MFA yet
+  const unconfigured = resolveAdminSecurityState(mfaError, { mfa_enabled: false })
+  assert.equal(unconfigured.needsMfaSetup, true)
+  assert.equal(unconfigured.needsReAuth, false)
+  assert.equal(unconfigured.assuranceReason, 'MFA_REQUIRED')
+  assert.match(unconfigured.message, /chưa thiết lập/i)
+
+  // Case 2: Admin user HAS MFA enabled, but session needs MFA verification
+  const sessionMfa = resolveAdminSecurityState(mfaError, { mfa_enabled: true })
+  assert.equal(sessionMfa.needsMfaSetup, false)
+  assert.equal(sessionMfa.needsReAuth, true)
+  assert.equal(sessionMfa.assuranceReason, 'MFA_REQUIRED')
+  assert.match(sessionMfa.message, /chưa được xác minh MFA/i)
+
+  // Case 3: Recent authentication required
+  const recent = resolveAdminSecurityState(recentAuthError, { mfa_enabled: true })
+  assert.equal(recent.needsMfaSetup, false)
+  assert.equal(recent.needsReAuth, true)
+  assert.equal(recent.assuranceReason, 'RECENT_AUTH_REQUIRED')
+  assert.match(recent.message, /xác thực gần đây/i)
+
+  // Case 4: Non-privileged error
+  const nonPriv = resolveAdminSecurityState(genericError, { mfa_enabled: true })
+  assert.equal(nonPriv.needsMfaSetup, false)
+  assert.equal(nonPriv.needsReAuth, false)
+  assert.equal(nonPriv.assuranceReason, null)
+  assert.equal(nonPriv.message, 'Network error')
 })

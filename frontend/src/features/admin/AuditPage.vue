@@ -2,8 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { getAuditEvent, listAuditEvents, type AuditFilters } from '../../api/client'
+import { resolveAdminSecurityState } from '../../api/http-error'
 import type { AuditEvent } from '../../api/types'
+import { useAuthStore } from '../../stores/auth'
 
+const auth = useAuthStore()
 const events = ref<AuditEvent[]>([])
 const selected = ref<AuditEvent | null>(null)
 const loading = ref(false)
@@ -62,7 +65,7 @@ async function load() {
       selected.value = null
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Không thể tải audit trail.'
+    error.value = resolveAdminSecurityState(e, auth.user).message
   } finally {
     loading.value = false
   }
@@ -74,7 +77,7 @@ async function selectEvent(event: AuditEvent) {
   try {
     selected.value = await getAuditEvent(event.id)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Không thể tải chi tiết audit event.'
+    error.value = resolveAdminSecurityState(e, auth.user).message
   } finally {
     detailLoading.value = false
   }

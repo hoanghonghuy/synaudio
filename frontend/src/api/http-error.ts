@@ -62,12 +62,15 @@ export function privilegedAssuranceCode(error: unknown): 'MFA_REQUIRED' | 'RECEN
   return null
 }
 
-export function adminSecurityErrorMessage(error: unknown): string {
+export function adminSecurityErrorMessage(error: unknown, options?: { mfaEnabled?: boolean }): string {
   if (!(error instanceof ApiRequestError)) {
     return error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định.'
   }
   switch (error.code) {
     case 'MFA_REQUIRED':
+      if (options?.mfaEnabled === false) {
+        return 'Tài khoản quản trị chưa thiết lập bảo mật hai yếu tố (MFA). Vui lòng thiết lập MFA trong phần Bảo mật tài khoản để tiếp tục.'
+      }
       return 'Phiên hiện tại chưa được xác minh MFA. Xác minh lại bằng mã TOTP hoặc mã khôi phục của phiên này.'
     case 'RECENT_AUTH_REQUIRED':
       return 'Thao tác này yêu cầu xác thực gần đây. Xác minh lại bằng mã TOTP hoặc mã khôi phục của phiên hiện tại.'
@@ -87,3 +90,35 @@ export function adminSecurityErrorMessage(error: unknown): string {
       return error.message
   }
 }
+
+export interface AdminSecurityResolution {
+  message: string
+  needsMfaSetup: boolean
+  needsReAuth: boolean
+  assuranceReason: 'MFA_REQUIRED' | 'RECENT_AUTH_REQUIRED' | null
+}
+
+export function resolveAdminSecurityState(
+  error: unknown,
+  user?: { mfa_enabled?: boolean } | null,
+): AdminSecurityResolution {
+  const reason = privilegedAssuranceCode(error)
+  const isMfa = isMfaRequired(error)
+  const needsMfaSetup = isMfa && user?.mfa_enabled === false
+  const needsReAuth = !needsMfaSetup && reason !== null
+
+  let message: string
+  if (needsMfaSetup) {
+    message = 'Tài khoản quản trị chưa thiết lập bảo mật hai yếu tố (MFA). Vui lòng thiết lập MFA để sử dụng các tính năng quản trị.'
+  } else {
+    message = adminSecurityErrorMessage(error, { mfaEnabled: user?.mfa_enabled })
+  }
+
+  return {
+    message,
+    needsMfaSetup,
+    needsReAuth,
+    assuranceReason: reason,
+  }
+}
+
