@@ -74,88 +74,135 @@ onMounted(loadLibrary)
 
     <template v-else-if="library">
       <article v-if="library.continue_listening" class="library-hero panel">
-        <p class="eyebrow">Nghe tiếp</p>
-        <h2>{{ library.continue_listening.story_title }}</h2>
-        <p>
-          Chương {{ library.continue_listening.chapter_number }} ·
-          {{ library.continue_listening.chapter_title || 'Chưa đặt tên' }}
-        </p>
-        <p v-if="library.continue_listening.relisten_status !== 'NO_RELISTEN_NEEDED'" class="relisten-notice">
-          {{ progressLabel(library.continue_listening) }} — tiến độ cũ vẫn được giữ.
-        </p>
-        <RouterLink class="primary-link" :to="resumeTo(library.continue_listening)">
-          {{ progressLabel(library.continue_listening) }}
-        </RouterLink>
+        <div class="library-hero-art" aria-hidden="true">
+          <span class="hero-art-letter">{{ library.continue_listening.story_title.slice(0, 1).toUpperCase() }}</span>
+          <span class="hero-art-pulse">▶</span>
+        </div>
+        <div class="library-hero-info">
+          <p class="eyebrow">Đang nghe dở</p>
+          <h2 class="library-hero-title">{{ library.continue_listening.story_title }}</h2>
+          <p class="library-hero-chapter">
+            Chương {{ library.continue_listening.chapter_number }} ·
+            {{ library.continue_listening.chapter_title || 'Chưa đặt tên' }}
+          </p>
+          <p v-if="library.continue_listening.relisten_status !== 'NO_RELISTEN_NEEDED'" class="relisten-notice">
+            {{ progressLabel(library.continue_listening) }} — tiến độ cũ vẫn được giữ.
+          </p>
+          <div class="library-hero-actions">
+            <RouterLink class="primary-link hero-play-btn" :to="resumeTo(library.continue_listening)">
+              ▶ {{ progressLabel(library.continue_listening) }}
+            </RouterLink>
+            <RouterLink class="secondary-link" :to="`/stories/${library.continue_listening.story_id}`">
+              Chi tiết truyện
+            </RouterLink>
+          </div>
+        </div>
       </article>
-      <div v-else class="status-state">
+      <div v-else class="status-state continue-empty">
+        <div class="empty-icon" aria-hidden="true">🎧</div>
         <strong>Chưa có nội dung đang nghe dở.</strong>
-        <p>Mở một truyện và bắt đầu nghe để tiến độ xuất hiện ở đây.</p>
+        <p>Mở một tác phẩm trong kho truyện và bắt đầu nghe để tiến độ tự động xuất hiện ở đây.</p>
+        <RouterLink class="primary-link" to="/">Khám phá kho truyện</RouterLink>
       </div>
 
       <section class="library-section" aria-labelledby="favorites-heading">
         <div class="section-heading">
-          <h2 id="favorites-heading">Yêu thích</h2>
-          <span class="muted">{{ library.favorites.length }} truyện</span>
+          <div class="section-heading-text">
+            <h2 id="favorites-heading">Yêu thích</h2>
+            <span class="count-badge">{{ library.favorites.length }} truyện</span>
+          </div>
         </div>
-        <div v-if="library.favorites.length" class="card-grid">
-          <article v-for="story in library.favorites" :key="story.story_id" class="story-card">
-            <div>
-              <h3>{{ story.title }}</h3>
-              <p>{{ story.description || 'Chưa có mô tả.' }}</p>
-            </div>
-            <div class="card-actions">
-              <RouterLink class="secondary-link" :to="`/stories/${story.story_id}`">Chi tiết</RouterLink>
+        <ul v-if="library.favorites.length" class="story-grid favorites-grid">
+          <li v-for="story in library.favorites" :key="story.story_id" class="story-card">
+            <RouterLink :to="`/stories/${story.story_id}`" class="story-card-link" :aria-label="story.title">
+              <div class="story-card-cover" aria-hidden="true">
+                <span class="cover-letter">{{ story.title.slice(0, 1).toUpperCase() }}</span>
+                <div class="cover-play-badge">▶</div>
+              </div>
+              <div class="story-card-content">
+                <strong class="title">{{ story.title }}</strong>
+                <p v-if="story.description" class="desc">{{ story.description }}</p>
+                <div class="story-card-meta">
+                  <span class="story-card-action">Nghe ngay →</span>
+                </div>
+              </div>
+            </RouterLink>
+            <div class="card-footer-action">
               <button
-                class="secondary-link"
+                class="unfavorite-btn"
                 type="button"
                 :disabled="removingStoryID === story.story_id"
+                aria-label="Bỏ yêu thích"
                 @click="unfavorite(story.story_id)"
               >
-                Bỏ yêu thích
+                {{ removingStoryID === story.story_id ? 'Đang bỏ…' : '♥ Bỏ lưu' }}
               </button>
             </div>
-          </article>
-        </div>
-        <p v-else class="muted">Chưa có truyện yêu thích.</p>
+          </li>
+        </ul>
+        <p v-else class="empty-inline-note">Chưa có truyện nào trong danh sách yêu thích.</p>
       </section>
 
       <section class="library-section" aria-labelledby="recent-heading">
         <div class="section-heading">
-          <h2 id="recent-heading">Nghe gần đây</h2>
-          <span class="muted">{{ library.recent.length }} chương</span>
+          <div class="section-heading-text">
+            <h2 id="recent-heading">Nghe gần đây</h2>
+            <span class="count-badge">{{ library.recent.length }} chương</span>
+          </div>
         </div>
-        <div class="library-list">
-          <article v-for="item in library.recent" :key="item.chapter_id" class="library-row">
-            <div>
-              <strong>{{ item.story_title }}</strong>
-              <p>Chương {{ item.chapter_number }} · {{ item.chapter_title || 'Chưa đặt tên' }}</p>
-              <small v-if="item.relisten_status !== 'NO_RELISTEN_NEEDED'" class="relisten-label">
-                {{ progressLabel(item) }}
-              </small>
+        <div v-if="library.recent.length" class="library-track-list">
+          <article v-for="item in library.recent" :key="item.chapter_id" class="library-track-row">
+            <div class="track-row-art" aria-hidden="true">
+              {{ item.story_title.slice(0, 1).toUpperCase() }}
             </div>
-            <RouterLink class="secondary-link" :to="resumeTo(item)">Mở</RouterLink>
+            <div class="track-row-info">
+              <strong class="track-row-story">{{ item.story_title }}</strong>
+              <span class="track-row-chapter">
+                Chương {{ item.chapter_number }} · {{ item.chapter_title || 'Chưa đặt tên' }}
+              </span>
+              <span v-if="item.relisten_status !== 'NO_RELISTEN_NEEDED'" class="relisten-badge">
+                {{ progressLabel(item) }}
+              </span>
+            </div>
+            <div class="track-row-actions">
+              <RouterLink class="track-play-btn" :to="resumeTo(item)">
+                <span aria-hidden="true">▶</span> Mở
+              </RouterLink>
+            </div>
           </article>
         </div>
+        <p v-else class="empty-inline-note">Chưa có lịch sử nghe gần đây.</p>
       </section>
 
       <section class="library-section" aria-labelledby="completed-heading">
         <div class="section-heading">
-          <h2 id="completed-heading">Đã hoàn thành</h2>
-          <span class="muted">{{ library.completed.length }} chương</span>
+          <div class="section-heading-text">
+            <h2 id="completed-heading">Đã hoàn thành</h2>
+            <span class="count-badge">{{ library.completed.length }} chương</span>
+          </div>
         </div>
-        <div v-if="library.completed.length" class="library-list">
-          <article v-for="item in library.completed" :key="item.chapter_id" class="library-row">
-            <div>
-              <strong>{{ item.story_title }}</strong>
-              <p>Chương {{ item.chapter_number }} · {{ item.chapter_title || 'Chưa đặt tên' }}</p>
-              <small v-if="item.relisten_status !== 'NO_RELISTEN_NEEDED'" class="relisten-label">
-                {{ progressLabel(item) }}
-              </small>
+        <div v-if="library.completed.length" class="library-track-list">
+          <article v-for="item in library.completed" :key="item.chapter_id" class="library-track-row">
+            <div class="track-row-art completed-art" aria-hidden="true">
+              ✓
             </div>
-            <RouterLink class="secondary-link" :to="resumeTo(item)">Nghe lại</RouterLink>
+            <div class="track-row-info">
+              <strong class="track-row-story">{{ item.story_title }}</strong>
+              <span class="track-row-chapter">
+                Chương {{ item.chapter_number }} · {{ item.chapter_title || 'Chưa đặt tên' }}
+              </span>
+              <span v-if="item.relisten_status !== 'NO_RELISTEN_NEEDED'" class="relisten-badge">
+                {{ progressLabel(item) }}
+              </span>
+            </div>
+            <div class="track-row-actions">
+              <RouterLink class="track-play-btn secondary" :to="resumeTo(item)">
+                <span aria-hidden="true">↺</span> Nghe lại
+              </RouterLink>
+            </div>
           </article>
         </div>
-        <p v-else class="muted">Chưa có chương đã hoàn thành.</p>
+        <p v-else class="empty-inline-note">Chưa có chương nào đã hoàn thành.</p>
       </section>
     </template>
   </section>

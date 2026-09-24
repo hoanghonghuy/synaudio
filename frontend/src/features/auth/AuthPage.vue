@@ -46,7 +46,8 @@ async function submit() {
         await login(email.value, password.value)
         auth.setUser(await getCurrentUser())
         await auth.syncListener()
-    await router.push('/admin')
+        const target = (route.query.redirect as string) || (auth.isAdmin ? '/admin' : '/')
+        await router.push(target)
   } catch (e) {
     error.value = e instanceof Error ? e.message : isRegister.value ? 'Không thể tạo tài khoản.' : 'Email hoặc mật khẩu chưa đúng.'
   } finally {
@@ -60,7 +61,30 @@ async function submit() {
     <RouterLink class="back-link" to="/">← Về khám phá</RouterLink>
 
     <div class="auth-panel">
-      <p class="eyebrow">{{ isRegister ? 'Bắt đầu hành trình' : 'Chào mừng trở lại' }}</p>
+      <!-- Segmented Tab Toggle for Mobile -->
+      <div class="auth-mode-toggle" role="tablist" aria-label="Lựa chọn thao tác tài khoản">
+        <button
+          type="button"
+          role="tab"
+          class="auth-mode-btn"
+          :class="{ active: !isRegister }"
+          :aria-selected="!isRegister"
+          @click="setMode('login')"
+        >
+          Đăng nhập
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="auth-mode-btn"
+          :class="{ active: isRegister }"
+          :aria-selected="isRegister"
+          @click="setMode('register')"
+        >
+          Đăng ký
+        </button>
+      </div>
+
       <h1>{{ isRegister ? 'Tạo tài khoản' : 'Đăng nhập Synaudio' }}</h1>
       <p class="auth-intro">
         {{ isRegister ? 'Lưu tiến độ nghe và quay lại đúng nơi bạn đã dừng.' : 'Tiếp tục câu chuyện bạn đang nghe dở.' }}
@@ -85,21 +109,16 @@ async function submit() {
         <p v-if="error" class="status-state error" role="alert">{{ error }}</p>
         <p v-if="success" class="status-state success" role="status" aria-live="polite">{{ success }}</p>
         <p v-if="submitting" class="muted" role="status" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
           {{ isRegister ? 'Đang tạo tài khoản...' : 'Đang đăng nhập...' }}
         </p>
 
-        <button type="submit" :disabled="submitting">
-          {{ isRegister ? 'Đăng ký' : 'Đăng nhập' }}
+        <button type="submit" class="auth-submit-btn" :disabled="submitting">
+          {{ isRegister ? 'Tạo tài khoản' : 'Đăng nhập ngay' }}
         </button>
       </form>
 
       <div class="auth-links">
-        <button v-if="!isRegister" class="text-button" type="button" @click="setMode('register')">
-          Chưa có tài khoản? Đăng ký
-        </button>
-        <button v-else class="text-button" type="button" @click="setMode('login')">
-          Đã có tài khoản? Đăng nhập
-        </button>
         <RouterLink v-if="!isRegister" to="/auth/forgot-password">Quên mật khẩu?</RouterLink>
       </div>
     </div>

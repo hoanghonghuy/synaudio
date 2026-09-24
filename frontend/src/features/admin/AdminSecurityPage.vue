@@ -260,15 +260,15 @@ onMounted(loadUsers)
             </thead>
             <tbody>
               <tr v-for="user in users" :key="user.id" :class="{ selected: selected?.id === user.id }">
-                <td>
+                <td data-label="Email">
                   <strong>{{ user.email }}</strong>
                   <span v-if="user.display_name" class="slug">{{ user.display_name }}</span>
                 </td>
-                <td><span class="badge">{{ statusLabel(user.status) }}</span></td>
-                <td>
+                <td data-label="Trạng thái"><span class="badge">{{ statusLabel(user.status) }}</span></td>
+                <td data-label="Vai trò">
                   <span v-for="role in user.roles" :key="role" class="badge">{{ role }}</span>
                 </td>
-                <td>
+                <td data-label="Thao tác">
                   <button class="secondary-button" type="button" @click="selectUser(user)">Xem</button>
                 </td>
               </tr>

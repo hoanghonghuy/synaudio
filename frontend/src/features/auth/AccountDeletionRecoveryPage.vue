@@ -45,7 +45,7 @@ async function confirmRecovery() {
 
 <template>
   <section class="page auth-page">
-    <div class="auth-card">
+    <div class="auth-panel">
       <p class="eyebrow">Khôi phục tài khoản</p>
       <h1>Hủy yêu cầu xóa tài khoản</h1>
       <p class="muted">

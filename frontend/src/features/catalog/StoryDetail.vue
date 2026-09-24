@@ -69,39 +69,43 @@ onMounted(load)
     </div>
     <template v-else>
       <div class="detail-hero">
+        <div class="detail-art" aria-hidden="true">
+          <span class="detail-art-letter">{{ story.title.slice(0, 1).toUpperCase() }}</span>
+        </div>
         <div class="detail-copy">
-          <p class="eyebrow">Chi tiết truyện</p>
-          <h1>{{ story.title }}</h1>
           <div class="meta" aria-label="Trạng thái truyện">
-            <span class="badge">{{ storyStatusLabel(story.status) }}</span>
-            <span class="badge">Công khai</span>
+            <span class="badge badge-accent">{{ storyStatusLabel(story.status) }}</span>
+            <span class="badge">Sách nói</span>
           </div>
+          <h1>{{ story.title }}</h1>
           <p class="detail-description">
             {{ story.description || 'Một câu chuyện đang chờ bạn khám phá.' }}
           </p>
           <div class="detail-actions">
-            <RouterLink class="primary-link" :to="`/stories/${story.id}/read`">
-              Đọc & nghe <span aria-hidden="true">→</span>
+            <RouterLink class="primary-btn-cta" :to="`/stories/${story.id}/read`">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              Bắt đầu nghe & đọc
             </RouterLink>
-            <RouterLink class="secondary-link" to="/">Khám phá thêm</RouterLink>
+            <RouterLink class="secondary-btn-pill" to="/">
+              Khám phá thêm
+            </RouterLink>
           </div>
-        </div>
-        <div class="detail-art" aria-hidden="true">
-          <span>{{ story.title.slice(0, 1).toUpperCase() }}</span>
         </div>
       </div>
 
       <section class="chapter-preview" aria-labelledby="chapter-preview-heading">
         <div class="section-heading">
           <div>
-            <h2 id="chapter-preview-heading">Các chương đã xuất bản</h2>
-            <p class="muted">Chọn một chương để bắt đầu đọc và nghe.</p>
+            <h2 id="chapter-preview-heading">Danh sách chương</h2>
+            <p class="muted">Chọn một chương để bắt đầu thưởng thức.</p>
           </div>
-          <span v-if="chapters.length > 0" class="muted">{{ chapters.length }} chương</span>
+          <span v-if="chapters.length > 0" class="muted badge-subtle">{{ chapters.length }} chương</span>
         </div>
 
         <p v-if="chaptersLoading" class="status-state" role="status" aria-live="polite">
-          Đang tải danh sách chương...
+          <span class="spinner" aria-hidden="true"></span> Đang tải danh sách chương...
         </p>
         <div v-else-if="chaptersError" class="status-state error" role="alert">
           <strong>Không thể tải danh sách chương.</strong>
@@ -113,15 +117,19 @@ onMounted(load)
         </p>
         <ol v-else class="chapter-list">
           <li v-for="chapter in chapters" :key="chapter.ID" class="chapter-row">
-            <span class="chapter-number" aria-hidden="true">
-              {{ String(chapter.ChapterNumber).padStart(2, '0') }}
-            </span>
-            <div class="chapter-copy">
-              <h3>{{ chapter.Title }}</h3>
-              <span class="muted">Đã xuất bản</span>
-            </div>
-            <RouterLink class="chapter-link" :to="`/stories/${story.id}/read`">
-              Đọc & nghe <span aria-hidden="true">→</span>
+            <RouterLink class="chapter-row-link" :to="`/stories/${story.id}/read`">
+              <span class="chapter-number" aria-hidden="true">
+                {{ String(chapter.ChapterNumber).padStart(2, '0') }}
+              </span>
+              <div class="chapter-copy">
+                <h3>{{ chapter.Title }}</h3>
+                <span class="chapter-sub">Chương {{ chapter.ChapterNumber }} • Sẵn sàng nghe</span>
+              </div>
+              <div class="chapter-play-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+              </div>
             </RouterLink>
           </li>
         </ol>

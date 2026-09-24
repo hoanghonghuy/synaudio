@@ -20,7 +20,7 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: synaudio-minio
     command: server /data --console-address ":9001"
     environment:
@@ -38,7 +38,7 @@ services:
       retries: 10
 
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: synaudio-minio-init
     depends_on:
       minio:
@@ -86,8 +86,9 @@ services:
       - ACCESS_TOKEN_TTL=15m
       - REFRESH_SESSION_TTL=720h
       - RECENT_AUTH_WINDOW=10m
+      - TRUSTED_PROXY_CIDRS=0.0.0.0/0,::/0
     ports:
-      - "${SYNAUDIO_API_PORT:-8080}:8080"
+      - "${SYNAUDIO_API_PORT:-18080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -139,7 +140,7 @@ services:
       dockerfile: Dockerfile
     container_name: synaudio-frontend
     ports:
-      - "8080:8080"
+      - "${SYNAUDIO_WEB_PORT:-8088}:8080"
     depends_on:
       - backend-api
     restart: unless-stopped

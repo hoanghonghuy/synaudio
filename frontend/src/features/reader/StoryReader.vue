@@ -521,27 +521,38 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 760px) {
-  .reader-head { align-items: stretch; }
-  .reader-head, .audio-heading-row { flex-direction: column; }
+  .reader-head { align-items: stretch; flex-direction: column; margin: 12px 0 16px; }
   .reader-head .fav-btn { align-self: flex-start; }
-  .reader-layout { grid-template-columns: 1fr; }
-  .chapter-nav { padding: 14px; }
-  .chapter-nav-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding-bottom: 4px; }
-  .chapter-tab { flex: 0 0 min(78vw, 280px); scroll-snap-align: start; min-height: 64px; }
-  .audio-section { padding: 16px; }
-  .player-primary { display: grid; grid-template-columns: auto auto auto; justify-content: center; }
+  .reader-layout { grid-template-columns: 1fr; gap: 16px; }
+  .chapter-nav { padding: 12px; }
+  .chapter-nav-list { display: flex; max-height: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; padding-bottom: 4px; gap: 8px; }
+  .chapter-tab { flex: 0 0 min(75vw, 260px); scroll-snap-align: start; min-height: 56px; padding: 10px 12px; }
+  .audio-section {
+    position: sticky;
+    top: 56px;
+    z-index: 25;
+    padding: 16px;
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  }
+  .audio-heading-row { margin-bottom: 4px; }
+  .player-primary { display: grid; grid-template-columns: auto auto auto; justify-content: center; gap: 16px; }
   .now-playing { grid-column: 1 / -1; text-align: center; }
   .timeline-row { grid-template-columns: max-content minmax(0, 1fr) max-content; }
-  .player-secondary { align-items: flex-end; }
+  .player-secondary { align-items: center; justify-content: space-between; }
+  .prose { font-size: 1.08rem; line-height: 1.82; padding: 12px 0; }
 }
 
 @media (max-width: 430px) {
-  .reader-head { margin-top: 14px; }
-  .audio-section { margin-inline: -4px; border-radius: var(--radius-lg); }
-  .timeline-row { grid-template-columns: 1fr 1fr; }
+  .reader-head { margin-top: 10px; }
+  .audio-section { margin-inline: -8px; border-radius: var(--radius-md); padding: 14px; }
+  .timeline-row { grid-template-columns: 1fr 1fr; gap: 4px; }
   .timeline { grid-column: 1 / -1; grid-row: 1; }
   .timeline-row span:last-child { text-align: right; }
-  .player-secondary { align-items: stretch; flex-direction: column; }
-  .rate-control { justify-content: space-between; }
+  .player-secondary { align-items: center; }
+  .rate-control { justify-content: flex-start; }
 }
 </style>

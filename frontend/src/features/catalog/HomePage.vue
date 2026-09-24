@@ -31,6 +31,16 @@ async function load() {
   }
 }
 
+function selectGenre(slug: string) {
+  genre.value = genre.value === slug ? '' : slug
+  load()
+}
+
+function selectSort(sortVal: string) {
+  sort.value = sortVal
+  load()
+}
+
 onMounted(load)
 </script>
 
@@ -38,77 +48,135 @@ onMounted(load)
   <section class="page catalog">
     <div class="catalog-intro">
       <div class="hero-copy">
-        <p class="eyebrow">Thư viện sách nói tiếng Việt</p>
-        <h1>Một câu chuyện hay có thể thay đổi nhịp của một ngày.</h1>
+        <p class="eyebrow">
+          <svg class="eyebrow-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10"></circle>
+          </svg>
+          Sách nói AI Tiếng Việt
+        </p>
+        <h1>Mỗi câu chuyện là một hành trình lắng nghe.</h1>
         <p class="lede">
-          Khám phá những truyện nói được tạo ra để đọc chậm, nghe sâu và quay lại bất cứ
-          lúc nào.
+          Không gian truyện nói chất lượng cao, đồng hành cùng bạn mọi lúc mọi nơi trên mọi thiết bị.
         </p>
       </div>
-      <aside class="hero-note" aria-label="Giới thiệu Synaudio">
-        <strong>Đọc bằng mắt. Nghe bằng tâm trí.</strong>
-        <span>Một không gian yên tĩnh cho những câu chuyện mới.</span>
-      </aside>
     </div>
 
-    <form class="searchbar" role="search" @submit.prevent="load">
-      <label class="search-field search-field-wide" for="story-search">
-        <span>Tìm kiếm trong thư viện</span>
-        <input id="story-search" v-model="q" type="search" placeholder="Tìm theo tiêu đề hoặc mô tả…" />
-      </label>
-      <label class="search-field" for="story-genre">
-        <span>Thể loại</span>
-        <select id="story-genre" v-model="genre">
-          <option value="">Tất cả thể loại</option>
-          <option v-for="g in genres" :key="g.id" :value="g.slug">{{ g.name }}</option>
-        </select>
-      </label>
-      <label class="search-field" for="story-sort">
-        <span>Sắp xếp</span>
-        <select id="story-sort" v-model="sort">
-          <option value="">Mới cập nhật</option>
-          <option value="NEW">Mới nhất</option>
-          <option value="RECENTLY_UPDATED">Cập nhật gần đây</option>
-          <option value="TITLE">Theo tiêu đề</option>
-        </select>
-      </label>
-      <button type="submit" :disabled="loading">Tìm truyện</button>
-    </form>
+    <!-- Search & Filter Bar -->
+    <div class="search-section">
+      <form class="searchbar" role="search" @submit.prevent="load">
+        <div class="search-input-wrap">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            id="story-search"
+            v-model="q"
+            type="search"
+            placeholder="Tìm truyện, tác giả, nội dung…"
+            autocomplete="off"
+          />
+          <button v-if="q" type="button" class="search-clear-btn" aria-label="Xóa từ khóa" @click="q = ''; load()">×</button>
+        </div>
+        <button type="submit" class="search-submit-btn" :disabled="loading">Tìm</button>
+      </form>
+
+      <!-- Horizontal Scrollable Genre Chips -->
+      <div class="filter-chips-row" role="region" aria-label="Lọc theo thể loại">
+        <button
+          type="button"
+          class="chip-pill"
+          :class="{ active: genre === '' }"
+          @click="selectGenre('')"
+        >
+          Tất cả
+        </button>
+        <button
+          v-for="g in genres"
+          :key="g.id"
+          type="button"
+          class="chip-pill"
+          :class="{ active: genre === g.slug }"
+          @click="selectGenre(g.slug)"
+        >
+          {{ g.name }}
+        </button>
+      </div>
+
+      <!-- Quick Sort Row -->
+      <div class="sort-chips-row" role="region" aria-label="Sắp xếp">
+        <span class="sort-label">Sắp xếp:</span>
+        <button
+          type="button"
+          class="sort-chip"
+          :class="{ active: sort === '' }"
+          @click="selectSort('')"
+        >
+          Mặc định
+        </button>
+        <button
+          type="button"
+          class="sort-chip"
+          :class="{ active: sort === 'NEW' }"
+          @click="selectSort('NEW')"
+        >
+          Mới nhất
+        </button>
+        <button
+          type="button"
+          class="sort-chip"
+          :class="{ active: sort === 'TITLE' }"
+          @click="selectSort('TITLE')"
+        >
+          Tên A-Z
+        </button>
+      </div>
+    </div>
 
     <div class="section-heading">
-      <h2>Đang được khám phá</h2>
-      <span class="muted">{{ stories.length }} truyện{{ isSearching ? ' phù hợp' : '' }}</span>
+      <h2>Danh sách truyện</h2>
+      <span class="muted">{{ stories.length }} tác phẩm{{ isSearching ? ' phù hợp' : '' }}</span>
     </div>
 
-    <p v-if="loading" class="status-state" role="status" aria-live="polite">Đang tìm những câu chuyện phù hợp...</p>
+    <p v-if="loading" class="status-state" role="status" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      Đang tìm những câu chuyện phù hợp...
+    </p>
     <div v-else-if="error" class="status-state error" role="alert">
       <strong>Không thể tải thư viện.</strong>
       <p>{{ error }}</p>
       <button class="secondary-link" type="button" @click="load">Thử lại</button>
     </div>
     <div v-else-if="stories.length === 0" class="empty-state">
+      <div class="empty-icon" aria-hidden="true">📖</div>
       <strong>Chưa có truyện phù hợp.</strong>
-      <p>Hãy thử một từ khóa hoặc bộ lọc khác.</p>
+      <p>Hãy thử một từ khóa hoặc thể loại khác.</p>
     </div>
 
     <ul v-else class="story-grid catalog-results" :class="{ 'search-mode': isSearching }">
       <li v-for="s in stories" :key="s.id" class="story-card">
-        <div class="story-card-cover" aria-hidden="true">
-          <span>{{ s.title.slice(0, 1).toUpperCase() }}</span>
-        </div>
-        <div class="story-card-content">
-          <div class="story-card-kicker">{{ s.status }}</div>
-          <h2>
-            <RouterLink :to="`/stories/${s.id}`">{{ s.title }}</RouterLink>
-          </h2>
-          <p class="desc">{{ s.description || 'Một câu chuyện đang chờ bạn khám phá.' }}</p>
-          <div class="meta">
-            <span class="badge">{{ s.status }}</span>
+        <RouterLink :to="`/stories/${s.id}`" class="story-card-link" :aria-label="s.title">
+          <div class="story-card-cover" aria-hidden="true">
+            <span class="cover-letter">{{ s.title.slice(0, 1).toUpperCase() }}</span>
+            <div class="cover-play-badge">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </div>
           </div>
-          <RouterLink class="read-link" :to="`/stories/${s.id}`">
-            Xem truyện <span aria-hidden="true">→</span>
-          </RouterLink>
-        </div>
+          <div class="story-card-content">
+            <div class="story-card-meta">
+              <span class="badge badge-subtle">{{ s.status }}</span>
+            </div>
+            <h3 class="story-title">{{ s.title }}</h3>
+            <p class="desc">{{ s.description || 'Một câu chuyện đang chờ bạn khám phá.' }}</p>
+            <div class="story-card-action">
+              <span class="read-link">
+                Khám phá ngay <span aria-hidden="true">→</span>
+              </span>
+            </div>
+          </div>
+        </RouterLink>
       </li>
     </ul>
   </section>

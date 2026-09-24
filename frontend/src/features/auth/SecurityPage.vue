@@ -160,7 +160,9 @@ onMounted(async () => {
 
 <template>
   <section class="page security-page">
-    <RouterLink class="back-link" to="/admin">← Về Studio</RouterLink>
+    <RouterLink class="back-link" :to="auth.user?.roles.includes('ADMIN') ? '/admin' : '/'">
+      {{ auth.user?.roles.includes('ADMIN') ? '← Về Studio' : '← Về Trang chủ' }}
+    </RouterLink>
 
     <div class="security-layout">
       <header class="security-heading">

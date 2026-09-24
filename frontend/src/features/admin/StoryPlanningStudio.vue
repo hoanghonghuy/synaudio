@@ -507,7 +507,7 @@ onMounted(loadWorkspace)
             <div class="full-field"><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo Character</button></div>
           </form>
           <div class="story-table-wrap"><table class="story-table"><thead><tr><th>Character</th><th>Importance</th><th>Current profile</th></tr></thead><tbody>
-            <tr v-for="character in characters" :key="character.ID"><th scope="row">{{ character.CanonicalName }}</th><td>{{ character.Importance }}</td><td>{{ character.CurrentProfileVersionID || '—' }}</td></tr>
+            <tr v-for="character in characters" :key="character.ID"><th scope="row" data-label="Nhân vật">{{ character.CanonicalName }}</th><td data-label="Tầm quan trọng">{{ character.Importance }}</td><td data-label="Profile hiện tại">{{ character.CurrentProfileVersionID || '—' }}</td></tr>
             <tr v-if="characters.length === 0"><td colspan="3">Chưa có Character.</td></tr>
           </tbody></table></div>
         </div>
@@ -520,7 +520,7 @@ onMounted(loadWorkspace)
           <form class="artifact-card" @submit.prevent="addPlanRevision"><h3>Tạo Plan revision</h3><label>Chapter<select v-model="planDraft.chapter_id" required><option value="" disabled>Chọn chapter</option><option v-for="chapter in chapters" :key="chapter.ID" :value="chapter.ID">#{{ chapter.ChapterNumber }} — {{ chapter.Title }}</option></select></label><label>Plan JSON<textarea v-model="planDraft.plan" rows="6" spellcheck="false"></textarea></label><button type="submit" :disabled="mutating || !planningTruthLoaded">Tạo revision</button></form>
         </div>
         <div class="story-table-wrap"><table class="story-table"><thead><tr><th>Chapter</th><th>Status</th><th>Arc</th><th>Current plan</th></tr></thead><tbody>
-          <tr v-for="chapter in chapters" :key="chapter.ID"><th scope="row">#{{ chapter.ChapterNumber }} — {{ chapter.Title }}</th><td><span class="badge">{{ chapter.Status }}</span></td><td>{{ chapter.ArcID || '—' }}</td><td>{{ chapter.CurrentPlanRevisionID || '—' }}</td></tr>
+          <tr v-for="chapter in chapters" :key="chapter.ID"><th scope="row" data-label="Chương">#{{ chapter.ChapterNumber }} — {{ chapter.Title }}</th><td data-label="Trạng thái"><span class="badge">{{ chapter.Status }}</span></td><td data-label="Mạch truyện">{{ chapter.ArcID || '—' }}</td><td data-label="Bản kế hoạch">{{ chapter.CurrentPlanRevisionID || '—' }}</td></tr>
           <tr v-if="chapters.length === 0"><td colspan="4">Chưa có Chapter.</td></tr>
         </tbody></table></div>
       </section>

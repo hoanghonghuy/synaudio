@@ -222,18 +222,18 @@ onMounted(load)
             </thead>
             <tbody>
               <tr v-for="event in events" :key="event.id">
-                <td>{{ formatTime(event.created_at) }}</td>
-                <td><strong>{{ event.action }}</strong></td>
-                <td>
+                <td data-label="Thời gian">{{ formatTime(event.created_at) }}</td>
+                <td data-label="Hành động"><strong>{{ event.action }}</strong></td>
+                <td data-label="Tác tử">
                   <span class="badge">{{ event.actor_type }}</span>
                   <span v-if="event.actor_user_id" class="slug">{{ event.actor_user_id }}</span>
                 </td>
-                <td>
+                <td data-label="Tài nguyên">
                   <span>{{ event.resource_type || '—' }}</span>
                   <span v-if="event.resource_id" class="slug">{{ event.resource_id }}</span>
                 </td>
-                <td><span class="badge">{{ event.result }}</span></td>
-                <td><button class="secondary-button" type="button" @click="selectEvent(event)">Xem</button></td>
+                <td data-label="Kết quả"><span class="badge">{{ event.result }}</span></td>
+                <td data-label="Thao tác"><button class="secondary-button" type="button" @click="selectEvent(event)">Xem</button></td>
               </tr>
             </tbody>
           </table>
