@@ -445,9 +445,16 @@ button:not([class]):hover:not(:disabled) { border-color: var(--accent-border); b
 .review-result-list { display: grid; gap: var(--space-sm); margin: 0; padding: 0; list-style: none; }
 .review-result-list li { display: grid; gap: var(--space-sm); padding: var(--space-md); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .review-checks, .review-decision { display: grid; gap: var(--space-md); padding-top: var(--space-lg); border-top: 1px solid var(--line); }
-.review-editor-label { color: var(--ink-medium); font-size: 0.8rem; font-weight: 800; }
-.revision-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); color: var(--muted); font-size: 0.78rem; }
+.revision-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md); margin: var(--space-xs) 0 var(--space-sm); padding: 0.5rem 0.85rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.025); color: var(--muted); font-size: 0.8rem; }
+.revision-meta .meta-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+.revision-meta .meta-item strong { color: var(--ink); font-weight: 600; }
+.chapter-status-pill { display: inline-flex; align-items: center; font-size: 0.72rem; font-weight: 700; }
+.badge-approved, .status-published, .status-ready { border-color: rgba(16, 185, 129, 0.35) !important; background: rgba(16, 185, 129, 0.1) !important; color: #34d399 !important; }
+.badge-candidate, .status-in_production, .status-planned { border-color: rgba(245, 158, 11, 0.35) !important; background: rgba(245, 158, 11, 0.1) !important; color: #fbbf24 !important; }
+.badge-rejected { border-color: rgba(239, 68, 68, 0.35) !important; background: rgba(239, 68, 68, 0.1) !important; color: #f87171 !important; }
+.badge-superseded, .status-draft { border-color: var(--line) !important; background: rgba(255, 255, 255, 0.03) !important; color: var(--muted) !important; }
 .reject-form { display: grid; gap: var(--space-sm); }
+
 .review-actions button:not(.secondary-button):not(.danger-button), .check-actions button:not(.secondary-button):not(.danger-button) { padding: 0 1rem; border: 1px solid var(--accent-border); background: var(--accent); color: var(--bg); box-shadow: var(--shadow-seal); }
 .review-actions button:not(.secondary-button):not(.danger-button):hover:not(:disabled), .check-actions button:not(.secondary-button):not(.danger-button):hover:not(:disabled) { background: var(--accent-strong); }
 .planning-studio { display: grid; gap: var(--space-lg); }

@@ -14,8 +14,16 @@ import {
 import type { Chapter, ChapterReview, ContentRevision } from '../../api/types'
 import { useAuthStore } from '../../stores/auth'
 import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
+import {
+  formatChapterStatus,
+  formatChapterTitle,
+  formatCreatorLabel,
+  formatRevisionStatus,
+  formatSourceType,
+} from './reviewPresentation.mjs'
 
 const route = useRoute()
+
 const auth = useAuthStore()
 const storyID = computed(() => route.params.storyID as string)
 
@@ -39,17 +47,8 @@ const activeReviews = computed(() =>
 const canAct = computed(() => Boolean(activeChapter.value && activeRevision.value && auth.user?.id))
 const reviewTypes = ['CONTINUITY', 'QUALITY', 'SAFETY'] as const
 
-function statusLabel(status: string) {
-  const labels: Record<string, string> = {
-    CANDIDATE: 'Chờ duyệt',
-    APPROVED: 'Đã duyệt',
-    REJECTED: 'Đã từ chối',
-    SUPERSEDED: 'Đã thay thế',
-  }
-  return labels[status] ?? status
-}
-
 function reviewTypeLabel(type: string) {
+
   const labels: Record<string, string> = {
     CONTINUITY: 'Tính liền mạch',
     QUALITY: 'Chất lượng viết',
@@ -251,8 +250,8 @@ onMounted(load)
             @click="selectChapter(chapter)"
           >
             <span>Chương {{ chapter.ChapterNumber }}</span>
-            <strong>{{ chapter.Title }}</strong>
-            <small>{{ chapter.Status }}</small>
+            <strong>{{ formatChapterTitle(chapter.Title, chapter.ChapterNumber) }}</strong>
+            <small class="chapter-status-pill" :class="`status-${chapter.Status.toLowerCase()}`">{{ formatChapterStatus(chapter.Status) }}</small>
           </button>
         </div>
       </aside>
@@ -267,7 +266,7 @@ onMounted(load)
           <div class="review-main-heading">
             <div>
               <p class="panel-kicker">Chương {{ activeChapter.ChapterNumber }}</p>
-              <h2 id="revision-heading">{{ activeChapter.Title }}</h2>
+              <h2 id="revision-heading">{{ formatChapterTitle(activeChapter.Title, activeChapter.ChapterNumber) }}</h2>
             </div>
             <span class="badge">{{ revisions.length }} revision</span>
           </div>
@@ -288,14 +287,22 @@ onMounted(load)
                 @click="selectRevision(revision)"
               >
                 <strong>v{{ revision.RevisionNo }}</strong>
-                <span>{{ statusLabel(revision.Status) }}</span>
+                <span>{{ formatRevisionStatus(revision.Status) }}</span>
               </button>
             </div>
 
             <div class="revision-meta">
-              <span>Nguồn: {{ activeRevision.SourceType }}</span>
-              <span>Người tạo: {{ activeRevision.CreatedBy || 'Hệ thống' }}</span>
-              <span class="badge">{{ statusLabel(activeRevision.Status) }}</span>
+              <span class="meta-item">
+                <span class="meta-label">Nguồn:</span>
+                <strong>{{ formatSourceType(activeRevision.SourceType) }}</strong>
+              </span>
+              <span class="meta-item">
+                <span class="meta-label">Người tạo:</span>
+                <strong>{{ formatCreatorLabel(activeRevision.CreatedBy, auth.user?.id) }}</strong>
+              </span>
+              <span class="badge" :class="`badge-${activeRevision.Status.toLowerCase()}`">
+                {{ formatRevisionStatus(activeRevision.Status) }}
+              </span>
             </div>
 
             <label class="review-editor-label" for="content-editor">Nội dung đang review</label>

@@ -11,11 +11,13 @@ import { useListenerStore } from '../../stores/listener'
 import type { Chapter, ChapterContent } from '../../api/types'
 import {
   createLatestChapterSelectionGuard,
+  formatChapterTitle,
   formatTimelineTime,
   normalizeVolume,
   normalizePlaybackRate,
   toggleMuteState,
 } from './readerSession.mjs'
+
 
 const route = useRoute()
 const storyID = computed(() => route.params.storyID as string)
@@ -466,8 +468,9 @@ onBeforeUnmount(() => {
               @click="selectChapter(c)"
             >
               <span class="chapter-number">Chương {{ c.ChapterNumber }}</span>
-              <strong>{{ c.Title }}</strong>
+              <strong>{{ formatChapterTitle(c.Title, c.ChapterNumber) }}</strong>
               <span v-if="activeChapter?.ID === c.ID" class="chapter-current">Đang nghe</span>
+
             </button>
           </div>
         </nav>
@@ -632,7 +635,7 @@ onBeforeUnmount(() => {
               class="reader-nav-btn prev"
               @click="selectChapter(prevChapter)"
             >
-              ← Chương {{ prevChapter.ChapterNumber }}: {{ prevChapter.Title }}
+              ← Chương {{ prevChapter.ChapterNumber }}: {{ formatChapterTitle(prevChapter.Title, prevChapter.ChapterNumber) }}
             </button>
             <div v-else class="nav-spacer"></div>
             <button
@@ -641,8 +644,9 @@ onBeforeUnmount(() => {
               class="reader-nav-btn next"
               @click="selectChapter(nextChapter)"
             >
-              Chương {{ nextChapter.ChapterNumber }}: {{ nextChapter.Title }} →
+              Chương {{ nextChapter.ChapterNumber }}: {{ formatChapterTitle(nextChapter.Title, nextChapter.ChapterNumber) }} →
             </button>
+
           </nav>
         </div>
       </div>

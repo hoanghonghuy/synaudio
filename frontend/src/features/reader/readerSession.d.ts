@@ -11,3 +11,5 @@ export function toggleMuteState(
 ): { muted: boolean; volume: number; lastAudibleVolume: number }
 export function formatPlaybackTime(seconds: number): string
 export function formatTimelineTime(seconds: number): string
+export function formatChapterTitle(rawTitle?: string | null, chapterNumber?: number): string
+

@@ -54,8 +54,10 @@ import { createCanonWorkspaceController } from './canonWorkspaceController.mjs'
 import { presentCanonWorkspace, type CanonWorkspaceState } from './canonWorkspacePresentation.mjs'
 import CanonMemoryPanel from './CanonMemoryPanel.vue'
 import AdminWorkspaceNav from './AdminWorkspaceNav.vue'
+import { formatChapterStatus, formatChapterTitle } from './reviewPresentation.mjs'
 import { resolveAdminSecurityState } from '../../api/http-error'
 import { useAuthStore } from '../../stores/auth'
+
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -447,13 +449,14 @@ onMounted(load)
         <div class="panel-heading"><div><p class="eyebrow">Story chapters</p><h2>Chapters</h2></div><span class="count-badge">{{ chapters.length }}</span></div>
         <div v-if="chapters.length" class="chapter-list">
           <button v-for="chapter in chapters" :key="chapter.ID" type="button" :class="['chapter-card', { active: activeChapter?.ID === chapter.ID }]" :disabled="!maySelectChapter" :aria-disabled="!maySelectChapter" :aria-current="activeChapter?.ID === chapter.ID ? 'true' : undefined" @click="selectChapter(chapter)">
-            <span class="chapter-number">Chương {{ chapter.ChapterNumber }}</span><strong>{{ chapter.Title }}</strong><small>{{ chapter.Status }}</small>
+            <span class="chapter-number">Chương {{ chapter.ChapterNumber }}</span><strong>{{ formatChapterTitle(chapter.Title, chapter.ChapterNumber) }}</strong><small>{{ formatChapterStatus(chapter.Status) }}</small>
           </button>
         </div>
         <p v-else class="empty-state">Chưa có chapter để production.</p>
       </aside>
       <main v-if="activeChapter" class="pipeline-panel" :aria-busy="selectionLoading">
-        <div class="chapter-heading"><div><p class="eyebrow">Chương {{ activeChapter.ChapterNumber }}</p><h2>{{ activeChapter.Title }}</h2></div><span class="chapter-state">{{ activeChapter.Status }}</span></div>
+        <div class="chapter-heading"><div><p class="eyebrow">Chương {{ activeChapter.ChapterNumber }}</p><h2>{{ formatChapterTitle(activeChapter.Title, activeChapter.ChapterNumber) }}</h2></div><span class="chapter-state">{{ formatChapterStatus(activeChapter.Status) }}</span></div>
+
         <p v-if="selectionLoading" class="page-status" role="status">Đang tải trạng thái authoritative của chương…</p>
         <section v-if="primaryStage" class="next-step" aria-labelledby="next-step-title">
           <div><p class="eyebrow">Next attention</p><h3 id="next-step-title">{{ primaryStage.label }}</h3></div>
