@@ -60,6 +60,24 @@ services:
       postgres:
         condition: service_healthy
 
+  tts-worker:
+    image: capcap-synstudio-worker
+    container_name: synaudio-tts-worker
+    restart: unless-stopped
+    volumes:
+      - synstudio-models:/app/models:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CAPCAP_RUNTIME_PROFILE=server
+      - CAPCAP_REMOTE_API_PORT=8080
+      - CAPCAP_REMOTE_API_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   backend-api:
     build:
       context: ./backend
@@ -75,12 +93,15 @@ services:
       - STORAGE_ACCESS_KEY=minio
       - STORAGE_SECRET_KEY=minio12345
       - SIGNED_AUDIO_URL_TTL=15m
-      - AI_MODE=${AI_MODE:-mock}
-      - TTS_MODE=mock
-      - TEXT_AI_PROVIDER=mock
-      - TTS_PROVIDER=mock
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AI_MODE=${AI_MODE:-openai}
+      - TTS_MODE=${TTS_MODE:-synstudio}
+      - TEXT_AI_PROVIDER=${TEXT_AI_PROVIDER:-openai}
+      - TTS_PROVIDER=${TTS_PROVIDER:-synstudio}
+      - SYNSTUDIO_TTS_URL=http://tts-worker:8080
+      - SYNSTUDIO_TTS_VOICE=${SYNSTUDIO_TTS_VOICE:-ngochuyen}
+      - AUDIO_PROCESSOR_MODE=ffmpeg
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://yuhh-9router.duckdns.org/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-d21f2272f14871ca-gizpjq-e919334a}
       - OPENAI_MODEL=${OPENAI_MODEL:-code}
       - APP_PUBLIC_URL=http://localhost
       - API_PUBLIC_URL=http://localhost
@@ -91,7 +112,7 @@ services:
       - RECENT_AUTH_WINDOW=10m
       - TRUSTED_PROXY_CIDRS=0.0.0.0/0,::/0
       - EMAIL_MODE=${EMAIL_MODE:-terminal}
-      - ADMIN_MFA_REQUIRED=${ADMIN_MFA_REQUIRED:-true}
+      - ADMIN_MFA_REQUIRED=${ADMIN_MFA_REQUIRED:-false}
     ports:
       - "${SYNAUDIO_API_PORT:-18080}:8080"
     depends_on:
@@ -101,6 +122,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      tts-worker:
+        condition: service_healthy
     restart: unless-stopped
 
   backend-worker:
@@ -119,12 +142,15 @@ services:
       - STORAGE_ACCESS_KEY=minio
       - STORAGE_SECRET_KEY=minio12345
       - SIGNED_AUDIO_URL_TTL=15m
-      - AI_MODE=${AI_MODE:-mock}
-      - TTS_MODE=mock
-      - TEXT_AI_PROVIDER=mock
-      - TTS_PROVIDER=mock
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AI_MODE=${AI_MODE:-openai}
+      - TTS_MODE=${TTS_MODE:-synstudio}
+      - TEXT_AI_PROVIDER=${TEXT_AI_PROVIDER:-openai}
+      - TTS_PROVIDER=${TTS_PROVIDER:-synstudio}
+      - SYNSTUDIO_TTS_URL=http://tts-worker:8080
+      - SYNSTUDIO_TTS_VOICE=${SYNSTUDIO_TTS_VOICE:-ngochuyen}
+      - AUDIO_PROCESSOR_MODE=ffmpeg
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://yuhh-9router.duckdns.org/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-d21f2272f14871ca-gizpjq-e919334a}
       - OPENAI_MODEL=${OPENAI_MODEL:-code}
       - APP_PUBLIC_URL=http://localhost
       - API_PUBLIC_URL=http://localhost
@@ -141,6 +167,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      tts-worker:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -157,3 +185,6 @@ services:
 volumes:
   synaudio_postgres_data:
   synaudio_minio_data:
+  synstudio-models:
+    external: true
+

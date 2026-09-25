@@ -30,7 +30,10 @@ type Config struct {
 	GeminiTextModel  string
 	GeminiTTSModel   string
 	GeminiTTSVoice   string
+	SynStudioTTSURL  string
+	SynStudioTTSVoice string
 	OpenAIBaseURL    string
+
 	OpenAIAPIKey     string
 	OpenAIModel      string
 	AppPublicURL     string
@@ -106,7 +109,10 @@ func Load() (Config, error) {
 		GeminiTextModel:          strings.TrimSpace(getenv("GEMINI_TEXT_MODEL", "gemini-3.7-flash")),
 		GeminiTTSModel:           strings.TrimSpace(getenv("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")),
 		GeminiTTSVoice:           strings.TrimSpace(getenv("GEMINI_TTS_VOICE", "Kore")),
+		SynStudioTTSURL:          strings.TrimRight(strings.TrimSpace(getenv("SYNSTUDIO_TTS_URL", "http://tts-worker:8080")), "/"),
+		SynStudioTTSVoice:        strings.TrimSpace(getenv("SYNSTUDIO_TTS_VOICE", "ngochuyen")),
 		OpenAIBaseURL:            strings.TrimRight(strings.TrimSpace(getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")), "/"),
+
 		OpenAIAPIKey:             strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
 		OpenAIModel:              strings.TrimSpace(getenv("OPENAI_MODEL", "gpt-4o")),
 		AppPublicURL:             strings.TrimSpace(os.Getenv("APP_PUBLIC_URL")),
@@ -158,6 +164,11 @@ func (c Config) validate() error {
 	if (c.AIMode == "openai" || c.AIMode == "openai-compatible") && c.OpenAIModel == "" {
 		return fmt.Errorf("OPENAI_MODEL is required when AI_MODE=%s", c.AIMode)
 	}
+
+	if c.TTSMode == "synstudio" && c.SynStudioTTSURL == "" {
+		return fmt.Errorf("SYNSTUDIO_TTS_URL is required when TTS_MODE=synstudio")
+	}
+
 
 	if c.AppEnv == EnvDevelopment {
 		if isRemoteDatabaseURL(c.DatabaseURL) && !c.AllowRemoteDatabaseInDev {
@@ -213,9 +224,10 @@ func isRemoteStorage(c Config) bool {
 func isLocalHost(host string) bool {
 	h := strings.ToLower(host)
 	switch h {
-	case "localhost", "127.0.0.1", "::1", "postgres", "minio", "db", "host.docker.internal":
+	case "localhost", "127.0.0.1", "::1", "postgres", "minio", "db", "host.docker.internal", "tts-worker", "synstudio-worker":
 		return true
 	}
+
 
 	ip := net.ParseIP(h)
 	if ip != nil {

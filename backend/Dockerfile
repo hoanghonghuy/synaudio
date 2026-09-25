@@ -16,10 +16,11 @@ FROM alpine:3.21.3
 
 WORKDIR /app
 
-RUN apk --no-cache add ca-certificates curl \
+RUN apk --no-cache add ca-certificates curl ffmpeg \
 	&& addgroup -S -g 65532 synaudio \
 	&& adduser -S -u 65532 -G synaudio synaudio \
 	&& chown -R synaudio:synaudio /app
+
 
 COPY --from=builder /app/bin/api /app/api
 COPY --from=builder /app/bin/worker /app/worker

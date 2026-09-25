@@ -112,6 +112,21 @@ func TestBuildTTSConstructsGeminiWithoutNetworkCall(t *testing.T) {
 	}
 }
 
+func TestBuildTTSConstructsSynStudioWithoutNetworkCall(t *testing.T) {
+	provider, err := BuildTTS(config.Config{
+		TTSMode:           "synstudio",
+		SynStudioTTSURL:   "http://tts-worker:8080",
+		SynStudioTTSVoice: "ngochuyen",
+	})
+	if err != nil {
+		t.Fatalf("build SynStudio TTS: %v", err)
+	}
+	if provider == nil {
+		t.Fatal("expected SynStudio TTS provider")
+	}
+}
+
+
 func TestGeminiTTSUsesConfiguredProviderVoiceNotLogicalVoiceID(t *testing.T) {
 	var request geminiRequest
 	client := &geminiClient{

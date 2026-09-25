@@ -58,7 +58,10 @@ func BuildTTS(cfg config.Config) (audio.TTSProvider, error) {
 	switch cfg.TTSMode {
 	case "mock":
 		return audio.NewMockTTS(), nil
+	case "synstudio":
+		return NewSynStudioTTS(cfg.SynStudioTTSURL, cfg.SynStudioTTSVoice)
 	case "gemini":
+
 		client, err := newGeminiClient(cfg.GeminiAPIKey, cfg.GeminiTTSModel)
 		if err != nil {
 			return nil, fmt.Errorf("configure gemini TTS provider: %w", err)
